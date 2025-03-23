@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stack Game</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="content">
+        <div id="game-screen" class="screen active">
+            <canvas id="gameCanvas"></canvas>
+            <button id="startGame">Старт</button>
+            <div class="scoreboard">
+                <span id="score">Score: 0</span>
+                <span id="record">Record: 0</span>
+            </div>
+        </div>
+
+        <div id="tasks-screen" class="screen">
+            <h2>Незабаром з’являться нові завдання</h2>
+        </div>
+
+        <div id="leaderboard-screen" class="screen">
+            <h2>Будуй башню, щоб заробляти TON. Якщо ти потрапив у топ, пиши @</h2>
+            <ol id="leaderboard-list"></ol>
+        </div>
+
+        <div id="friends-screen" class="screen">
+            <h2>Отримуй бонус за друзів (скоро все буде)</h2>
+            <p>Твоя реферальна лінка:</p>
+            <input type="text" id="refLink" value="https://t.me/game_bot?start=your_id" readonly>
+            <button onclick="copyRefLink()">Скопіювати</button>
+            <p>Заінвайчено рефералів: <span id="refCount">0</span></p>
+        </div>
+    </div>
+
+    <div class="nav">
+        <button onclick="showScreen('game-screen')">Гра</button>
+        <button onclick="showScreen('tasks-screen')">Завдання</button>
+        <button onclick="showScreen('leaderboard-screen')">Лідерборд</button>
+        <button onclick="showScreen('friends-screen')">Друзі</button>
+    </div>
+
+    <script type="module" src="script.js"></script>
+</body>
+</html>
