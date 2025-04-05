@@ -1,47 +1,107 @@
-<!DOCTYPE html>
-<html lang="uk">
+<!DOCTYPE html><html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stack Game</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simple Stack Game</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: linear-gradient(to bottom, #74ebd5, #ACB6E5);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      font-family: sans-serif;
+    }
+    canvas {
+      border-radius: 10px;
+      background: #111;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 18px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #45a049;
+    }
+  </style>
 </head>
 <body>
-    <div id="content">
-        <div id="game-screen" class="screen active">
-            <canvas id="gameCanvas"></canvas>
-            <button id="startGame">Старт</button>
-            <div class="scoreboard">
-                <span id="score">Score: 0</span>
-                <span id="record">Record: 0</span>
-            </div>
-        </div>
+  <canvas id="game" width="400" height="600"></canvas>
+  <button id="start">Старт</button>  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const startBtn = document.getElementById("start");
 
-        <div id="tasks-screen" class="screen">
-            <h2>Незабаром з’являться нові завдання</h2>
-        </div>
+    let stack = [];
+    let currentBlock;
+    let speed = 2;
+    let gameInterval;
 
-        <div id="leaderboard-screen" class="screen">
-            <h2>Будуй башню, щоб заробляти TON. Якщо ти потрапив у топ, пиши @</h2>
-            <ol id="leaderboard-list"></ol>
-        </div>
+    function drawBlock(block) {
+      ctx.fillStyle = block.color;
+      ctx.fillRect(block.x, block.y, block.width, block.height);
+    }
 
-        <div id="friends-screen" class="screen">
-            <h2>Отримуй бонус за друзів (скоро все буде)</h2>
-            <p>Твоя реферальна лінка:</p>
-            <input type="text" id="refLink" value="https://t.me/game_bot?start=your_id" readonly>
-            <button onclick="copyRefLink()">Скопіювати</button>
-            <p>Заінвайчено рефералів: <span id="refCount">0</span></p>
-        </div>
-    </div>
+    function createBlock(y) {
+      const width = stack.length > 0 ? stack[stack.length - 1].width : 300;
+      const x = 0;
+      return {
+        x: x,
+        y: y,
+        width: width,
+        height: 30,
+        dx: speed,
+        color: hsl(${Math.random() * 360}, 70%, 60%)
+      };
+    }
 
-    <div class="nav">
-        <button onclick="showScreen('game-screen')">Гра</button>
-        <button onclick="showScreen('tasks-screen')">Завдання</button>
-        <button onclick="showScreen('leaderboard-screen')">Лідерборд</button>
-        <button onclick="showScreen('friends-screen')">Друзі</button>
-    </div>
+    function update() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      currentBlock.x += currentBlock.dx;
 
-    <script type="module" src="script.js"></script>
-</body>
+      if (currentBlock.x + currentBlock.width > canvas.width || currentBlock.x < 0) {
+        currentBlock.dx *= -1;
+      }
+
+      drawBlock(currentBlock);
+      stack.forEach(drawBlock);
+    }
+
+    function dropBlock() {
+      const last = stack[stack.length - 1];
+      const delta = currentBlock.x - last.x;
+
+      if (Math.abs(delta) >= currentBlock.width) {
+        clearInterval(gameInterval);
+        alert("Гру завершено!");
+        return;
+      }
+
+      const newWidth = currentBlock.width - Math.abs(delta);
+      currentBlock.width = newWidth;
+      currentBlock.x = delta > 0 ? currentBlock.x : last.x;
+
+      stack.push(currentBlock);
+      currentBlock = createBlock(600 - (stack.length + 1) * 30);
+    }
+
+    function startGame() {
+      stack = [];
+      currentBlock = createBlock(540);
+      stack.push({ x: 50, y: 570, width: 300, height: 30, color: '#fff' });
+      gameInterval = setInterval(update, 1000 / 60);
+    }
+
+    canvas.addEventListener("click", dropBlock);
+    startBtn.addEventListener("click", startGame);
+  </script></body>
 </html>
