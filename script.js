@@ -1,126 +1,120 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-app.js";
-import { getDatabase, ref, push, onValue, set } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-database.js";
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.5.0/firebase-app.js';
+import { getDatabase, ref, set, get, child, onValue } from 'https://www.gstatic.com/firebasejs/11.5.0/firebase-database.js';
 
+// Налаштування Firebase
 const firebaseConfig = {
     apiKey: "AIzaSyC-lyjuHWsbLgYsygynLnt4dZxSKcpsdsk",
     authDomain: "stack-game-ton.firebaseapp.com",
+    databaseURL: "https://stack-game-ton-default-rtdb.firebaseio.com",
     projectId: "stack-game-ton",
     storageBucket: "stack-game-ton.appspot.com",
     messagingSenderId: "203011584430",
-    appId: "1:203011584430:web:bd52f827472d130e87583f",
-    measurementId: "G-115HRS8HQ3"
+    appId: "1:203011584430:web:bd52f827472d130e87583f"
 };
 
+// Ініціалізація Firebase
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-let record = localStorage.getItem("record") || 0;
-document.getElementById("record").textContent = Record: ${record};
+// Елементи DOM
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const startButton = document.getElementById('start-button');
+const scoreDisplay = document.getElementById('score');
+const highscoreDisplay = document.getElementById('highscore');
+const leaderboardList = document.getElementById('leaderboard');
 
-document.getElementById("startGame").addEventListener("click", startGame);
+// Налаштування гри
+const canvasWidth = 400;
+const canvasHeight = 400;
+canvas.width = canvasWidth;
+canvas.height = canvasHeight;
 
-function showScreen(screenId) {
-    document.querySelectorAll(".screen").forEach(screen => {
-        screen.classList.remove("active");
-    });
-    document.getElementById(screenId).classList.add("active");
-}
-
-function copyRefLink() {
-    let refLink = document.getElementById("refLink");
-    refLink.select();
-    document.execCommand("copy");
-    alert("Реферальне посилання скопійоване!");
-}
-
-// Гра Stack
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
-
-canvas.width = 300;
-canvas.height = 500;
-
-let tower = [];
-let currentBlock = { x: 75, y: 50, width: 150 };
-let speed = 2;
+let stack = [];
+let currentBlock = null;
+let gameInterval = null;
 let score = 0;
+let highscore = 0;
 
+// Завантаження рекорду з локального сховища
+if (localStorage.getItem('highscore')) {
+    highscore = parseInt(localStorage.getItem('highscore'));
+    highscoreDisplay.textContent = Рекорд: ${highscore};
+}
+
+// Функція для створення нового блоку
+function createBlock() {
+    const width = stack.length > 0 ? stack[stack.length - 1].width : canvasWidth;
+    const x = Math.random() * (canvasWidth - width);
+    return { x, y: 0, width, height: 20, speed: 2 };
+}
+
+// Функція для оновлення позиції блоку
+function updateBlock(block) {
+    block.y += block.speed;
+    if (block.y + block.height >= canvasHeight) {
+        block.y = canvasHeight - block.height;
+        stack.push(block);
+        score++;
+        scoreDisplay.textContent = Рахунок: ${score};
+        if (score > highscore) {
+            highscore = score;
+            highscoreDisplay.textContent = Рекорд: ${highscore};
+            localStorage.setItem('highscore', highscore);
+        }
+        currentBlock = createBlock();
+    }
+}
+
+// Функція для відображення блоку
 function drawBlock(block) {
-    ctx.fillStyle = "white";
-    ctx.fillRect(block.x, block.y, block.width, 20);
+    ctx.fillStyle = '#3498db';
+    ctx.fillRect(block.x, block.y, block.width, block.height);
 }
 
+// Функція для відображення стеку блоків
+function drawStack() {
+    stack.forEach(block => drawBlock(block));
+}
+
+// Функція для оновлення гри
 function updateGame() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    tower.forEach(drawBlock);
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+    updateBlock(currentBlock);
     drawBlock(currentBlock);
-
-    currentBlock.x += speed;
-    if (currentBlock.x > canvas.width - currentBlock.width || currentBlock.x < 0) {
-        speed = -speed;
-    }
-    
-    requestAnimationFrame(updateGame);
+    drawStack();
 }
 
-function placeBlock() {
-    tower.push({ ...currentBlock });
-    score++;
-
-    if (currentBlock.width < 20) {
-        endGame();
-    } else {
-        currentBlock = {
-            x: 75,
-            y: tower[tower.length - 1].y - 25,
-            width: currentBlock.width - 5
-        };
-    }
-}
-
-function startGame() {
-    tower = [];
-    score = 0;
-    currentBlock = { x: 75, y: 50, width: 150 };
-    updateGame();
-}
-
-canvas.addEventListener("click", placeBlock);
-
+// Функція для завершення гри
 function endGame() {
-    alert(Гра закінчена! Ваш рахунок: ${score});
-    
-    if (score > record) {
-        record = score;
-        localStorage.setItem("record", record);
-    }
-
-    const leaderboardRef = ref(db, "leaderboard");
-    push(leaderboardRef, { name: "Гравець", score: score });
-
-    updateLeaderboard();
+    clearInterval(gameInterval);
+    saveScoreToFirebase(score);
+    loadLeaderboard();
 }
 
-function updateLeaderboard() {
-    const leaderboardRef = ref(db, "leaderboard");
-
-    onValue(leaderboardRef, (snapshot) => {
-        let list = document.getElementById("leaderboard-list");
-        list.innerHTML = "";
-        let scores = [];
-
-        snapshot.forEach((data) => {
-            scores.push(data.val());
-        });
-
-        scores.sort((a, b) => b.score - a.score);
-        scores.slice(0, 30).forEach((player, index) => {
-            let li = document.createElement("li");
-            li.textContent = ${index + 1}. ${player.name}: ${player.score};
-            list.appendChild(li);
-        });
+// Функція для збереження рахунку в Firebase
+function saveScoreToFirebase(score) {
+    const userId = user_${Math.random().toString(36).substr(2, 9)};
+    set(ref(db, 'leaderboard/' + userId), {
+        score: score
     });
 }
 
-updateLeaderboard();
+// Функція для завантаження лідерборду з Firebase
+function loadLeaderboard() {
+    const leaderboardRef = ref(db, 'leaderboard');
+    onValue(leaderboardRef, (snapshot) => {
+        const scores = [];
+        snapshot.forEach((childSnapshot) => {
+            scores.push(childSnapshot.val().score);
+        });
+        scores.sort((a, b) => b - a);
+        displayLeaderboard(scores);
+    });
+}
+
+// Функція для відображення лідерборду
+function displayLeaderboard(scores) {
+    leaderboardList.innerHTML = '';
+    scores.slice(0, 10).forEach((score, index) => {
+        const li = document.createElement('li0
