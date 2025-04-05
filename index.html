@@ -1,107 +1,154 @@
-<!DOCTYPE html><html lang="en">
+<!DOCTYPE html>
+<html lang="uk">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Simple Stack Game</title>
+  <meta charset="UTF-8">
+  <title>Stack Game</title>
   <style>
-    * { box-sizing: border-box; }
     body {
       margin: 0;
-      background: linear-gradient(to bottom, #74ebd5, #ACB6E5);
+      background: linear-gradient(to bottom, #a8edea, #fed6e3);
       display: flex;
-      flex-direction: column;
-      align-items: center;
       justify-content: center;
+      align-items: center;
       height: 100vh;
+      overflow: hidden;
       font-family: sans-serif;
     }
-    canvas {
-      border-radius: 10px;
-      background: #111;
+
+    #game {
+      position: relative;
+      width: 300px;
+      height: 500px;
+      background-color: #111;
+      overflow: hidden;
+      border-radius: 12px;
     }
-    button {
-      margin-top: 20px;
+
+    .block {
+      position: absolute;
+      height: 30px;
+      background-color: hsl(200, 70%, 60%);
+      border-radius: 6px;
+    }
+
+    #startButton {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
       padding: 10px 20px;
-      font-size: 18px;
       background: #4CAF50;
       color: white;
       border: none;
-      border-radius: 5px;
+      border-radius: 10px;
+      font-size: 16px;
       cursor: pointer;
     }
-    button:hover {
-      background: #45a049;
+
+    #score {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-weight: bold;
     }
   </style>
 </head>
 <body>
-  <canvas id="game" width="400" height="600"></canvas>
-  <button id="start">Старт</button>  <script>
-    const canvas = document.getElementById("game");
-    const ctx = canvas.getContext("2d");
-    const startBtn = document.getElementById("start");
+  <div id="game">
+    <div id="score">0</div>
+    <button id="startButton">Старт</button>
+  </div>
 
-    let stack = [];
-    let currentBlock;
+  <script>
+    const game = document.getElementById('game');
+    const scoreEl = document.getElementById('score');
+    const startButton = document.getElementById('startButton');
+
+    let blocks = [];
+    let currentBlock = null;
+    let animation;
     let speed = 2;
-    let gameInterval;
-
-    function drawBlock(block) {
-      ctx.fillStyle = block.color;
-      ctx.fillRect(block.x, block.y, block.width, block.height);
-    }
+    let direction = 1;
+    let score = 0;
 
     function createBlock(y) {
-      const width = stack.length > 0 ? stack[stack.length - 1].width : 300;
-      const x = 0;
-      return {
-        x: x,
-        y: y,
-        width: width,
-        height: 30,
-        dx: speed,
-        color: hsl(${Math.random() * 360}, 70%, 60%)
-      };
-    }
-
-    function update() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      currentBlock.x += currentBlock.dx;
-
-      if (currentBlock.x + currentBlock.width > canvas.width || currentBlock.x < 0) {
-        currentBlock.dx *= -1;
-      }
-
-      drawBlock(currentBlock);
-      stack.forEach(drawBlock);
-    }
-
-    function dropBlock() {
-      const last = stack[stack.length - 1];
-      const delta = currentBlock.x - last.x;
-
-      if (Math.abs(delta) >= currentBlock.width) {
-        clearInterval(gameInterval);
-        alert("Гру завершено!");
-        return;
-      }
-
-      const newWidth = currentBlock.width - Math.abs(delta);
-      currentBlock.width = newWidth;
-      currentBlock.x = delta > 0 ? currentBlock.x : last.x;
-
-      stack.push(currentBlock);
-      currentBlock = createBlock(600 - (stack.length + 1) * 30);
+      const block = document.createElement('div');
+      block.classList.add('block');
+      block.style.width = blocks.length ? blocks[blocks.length - 1].offsetWidth + 'px' : '300px';
+      block.style.left = '0px';
+      block.style.top = y + 'px';
+      block.style.backgroundColor = hsl(${200 + blocks.length * 20}, 70%, 60%);
+      game.appendChild(block);
+      return block;
     }
 
     function startGame() {
-      stack = [];
-      currentBlock = createBlock(540);
-      stack.push({ x: 50, y: 570, width: 300, height: 30, color: '#fff' });
-      gameInterval = setInterval(update, 1000 / 60);
+      blocks.forEach(b => b.remove());
+      blocks = [];
+      score = 0;
+      speed = 2;
+      scoreEl.textContent = '0';
+      startButton.style.display = 'none';
+      addBlock();
     }
 
-    canvas.addEventListener("click", dropBlock);
-    startBtn.addEventListener("click", startGame);
-  </script></body>
+    function addBlock() {
+      const y = 470 - blocks.length * 30;
+      currentBlock = createBlock(y);
+      moveBlock();
+      document.addEventListener('keydown', stopBlockOnce);
+      game.addEventListener('click', stopBlockOnce);
+    }
+
+    function moveBlock() {
+      let pos = 0;
+      animation = setInterval(() => {
+        if (!currentBlock) return;
+        pos += speed * direction;
+        if (pos > game.clientWidth - currentBlock.offsetWidth || pos < 0) direction *= -1;
+        currentBlock.style.left = pos + 'px';
+      }, 10);
+    }
+
+    function stopBlockOnce() {
+      clearInterval(animation);
+      document.removeEventListener('keydown', stopBlockOnce);
+      game.removeEventListener('click', stopBlockOnce);
+
+      const prev = blocks[blocks.length - 1];
+      const currLeft = parseInt(currentBlock.style.left);
+      const prevLeft = prev ? parseInt(prev.style.left) : 0;
+      const diff = currLeft - prevLeft;
+
+      if (Math.abs(diff) > (prev ? prev.offsetWidth : 300)) {
+        endGame();
+        return;
+      }
+
+      if (prev) {
+        const newWidth = prev.offsetWidth - Math.abs(diff);
+        currentBlock.style.width = newWidth + 'px';
+        currentBlock.style.left = Math.max(currLeft, prevLeft) + 'px';
+      }
+
+      blocks.push(currentBlock);
+      score++;
+      scoreEl.textContent = score;
+
+      if (currentBlock.offsetWidth <= 10) {
+        endGame();
+        return;
+      }
+
+      addBlock();
+    }
+
+    function endGame() {
+      startButton.style.display = 'block';
+    }
+
+    startButton.addEventListener('click', startGame);
+  </script>
+</body>
 </html>
