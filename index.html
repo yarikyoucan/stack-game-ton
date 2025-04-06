@@ -63,37 +63,39 @@
     }
   };
 </script>
-<!-- Game Page -->
-<div id="gamePage" class="page active">
-  <h1>Stackton Game</h1>
-  <div id="gameCanvas">[ Game goes here ]</div>
+<!-- Контейнер для всіх сторінок -->
+<div id="pagesContainer">
+  <!-- Game -->
+  <div id="gamePage" class="page active">
+    <!-- Тут залишається твоя гра -->
+  </div>
+
+  <!-- Friends -->
+  <div id="friendsPage" class="page">
+    <h1>Friends</h1>
+    <p>Invite friends (soon)</p>
+  </div>
+
+  <!-- Leaderboard -->
+  <div id="leaderboardPage" class="page">
+    <h1>Leaderboard</h1>
+    <p>Top players of the day</p>
+  </div>
+
+  <!-- Wallet -->
+  <div id="walletPage" class="page">
+    <h1>Wallet</h1>
+    <p>Your TON balance will appear here</p>
+  </div>
+
+  <!-- Tasks -->
+  <div id="tasksPage" class="page">
+    <h1>Tasks</h1>
+    <p>Challenges coming soon</p>
+  </div>
 </div>
 
-<!-- Friends Page -->
-<div id="friendsPage" class="page">
-  <h1>Friends</h1>
-  <p>Invite your friends and earn bonuses (soon)</p>
-</div>
-
-<!-- Leaderboard Page -->
-<div id="leaderboardPage" class="page">
-  <h1>Leaderboard</h1>
-  <p>Top 30 players of the day</p>
-</div>
-
-<!-- Wallet Page -->
-<div id="walletPage" class="page">
-  <h1>Wallet</h1>
-  <p>Your TON balance will appear here</p>
-</div>
-
-<!-- Tasks Page -->
-<div id="tasksPage" class="page">
-  <h1>Tasks</h1>
-  <p>New challenges are coming soon!</p>
-</div>
-
-<!-- Bottom Navigation -->
+<!-- Нижнє меню -->
 <div id="navbar">
   <button onclick="showPage('gamePage')">Game</button>
   <button onclick="showPage('friendsPage')">Friends</button>
@@ -101,3 +103,4 @@
   <button onclick="showPage('walletPage')">Wallet</button>
   <button onclick="showPage('tasksPage')">Tasks</button>
 </div>
+
