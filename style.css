@@ -104,25 +104,38 @@ html, body {
 #container.ended .game-over p {
   transition-delay: 0.3s;
 }
+.page {
+  display: none;
+  padding-bottom: 70px;
+  height: 100vh;
+  overflow-y: auto;
+  text-align: center;
+  padding-top: 50px;
+}
+
+.active {
+  display: block;
+}
+
 #navbar {
   position: fixed;
   bottom: 0;
   width: 100%;
+  height: 60px;
   background: white;
   display: flex;
   justify-content: space-around;
-  padding: 10px 0;
+  align-items: center;
   border-top: 1px solid #ccc;
-  z-index: 1000;
+  z-index: 999;
 }
 
 #navbar button {
+  flex: 1;
+  height: 100%;
   background: none;
   border: none;
-  font-size: 16px;
+  font-size: 14px;
   color: #333;
 }
 
-.page {
-  padding-bottom: 60px; /* Щоб не закривало нижнє меню */
-}
