@@ -296,11 +296,16 @@ class Game {
     }
 }
 let game = new Game();
-function showPage(pageId) {
+<script>
+  const buttons = document.querySelectorAll('.nav-btn');
   const pages = document.querySelectorAll('.page');
-  pages.forEach(page => {
-    page.classList.remove('active');
+
+  buttons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.getAttribute('data-target');
+      pages.forEach(page => page.classList.remove('active'));
+      document.getElementById(targetId).classList.add('active');
+    });
   });
-  document.getElementById(pageId).classList.add('active');
-}
+</script>
 
