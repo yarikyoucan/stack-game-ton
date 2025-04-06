@@ -297,8 +297,10 @@ class Game {
 }
 let game = new Game();
 function showPage(pageId) {
-  const pages = ['gamePage', 'friendsPage', 'leaderboardPage', 'walletPage', 'tasksPage'];
-  pages.forEach(id => {
-    document.getElementById(id).style.display = (id === pageId) ? 'block' : 'none';
+  const pages = document.querySelectorAll('.page');
+  pages.forEach(page => {
+    page.classList.remove('active');
   });
+  document.getElementById(pageId).classList.add('active');
 }
+
