@@ -63,44 +63,33 @@
     }
   };
 </script>
-<!-- Контейнер для всіх сторінок -->
-<div id="pagesContainer">
-  <!-- Game -->
-  <div id="gamePage" class="page active">
-    <!-- Тут залишається твоя гра -->
-  </div>
+<!-- Сторінки -->
+<div id="gamePage" class="page active">
+  <h1>Game</h1>
+  <div id="gameCanvas">[Тут буде гра]</div>
+</div>
 
-  <!-- Friends -->
-  <div id="friendsPage" class="page">
-    <h1>Friends</h1>
-    <p>Invite friends (soon)</p>
-  </div>
+<div id="friendsPage" class="page">
+  <h1>Friends</h1>
+</div>
 
-  <!-- Leaderboard -->
-  <div id="leaderboardPage" class="page">
-    <h1>Leaderboard</h1>
-    <p>Top players of the day</p>
-  </div>
+<div id="leaderboardPage" class="page">
+  <h1>Leaderboard</h1>
+</div>
 
-  <!-- Wallet -->
-  <div id="walletPage" class="page">
-    <h1>Wallet</h1>
-    <p>Your TON balance will appear here</p>
-  </div>
+<div id="walletPage" class="page">
+  <h1>Wallet</h1>
+</div>
 
-  <!-- Tasks -->
-  <div id="tasksPage" class="page">
-    <h1>Tasks</h1>
-    <p>Challenges coming soon</p>
-  </div>
+<div id="tasksPage" class="page">
+  <h1>Tasks</h1>
 </div>
 
 <!-- Нижнє меню -->
 <div id="navbar">
-  <button onclick="showPage('gamePage')">Game</button>
-  <button onclick="showPage('friendsPage')">Friends</button>
-  <button onclick="showPage('leaderboardPage')">Leaderboard</button>
-  <button onclick="showPage('walletPage')">Wallet</button>
-  <button onclick="showPage('tasksPage')">Tasks</button>
+  <button class="nav-btn" data-target="gamePage">🎮</button>
+  <button class="nav-btn" data-target="friendsPage">👥</button>
+  <button class="nav-btn" data-target="leaderboardPage">🏆</button>
+  <button class="nav-btn" data-target="walletPage">💰</button>
+  <button class="nav-btn" data-target="tasksPage">📝</button>
 </div>
-
