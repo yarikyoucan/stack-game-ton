@@ -29,3 +29,37 @@
 
 </body>
 </html>
+<script type="module">
+  // Імпорт SDK Firebase
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-app.js";
+  import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/11.5.0/firebase-firestore.js";
+
+  // 🔐 Твоя конфігурація Firebase
+  const firebaseConfig = {
+    apiKey: "AIzaSyCb770qRhKLEXD8lShWZRul-r955zTmPiM",
+    authDomain: "stack-ec56d.firebaseapp.com",
+    projectId: "stack-ec56d",
+    storageBucket: "stack-ec56d.firebasestorage.app",
+    messagingSenderId: "830456870556",
+    appId: "1:830456870556:web:7271fb264453fdf577aef5",
+    measurementId: "G-TZRW1MP4H1"
+  };
+
+  // Ініціалізація Firebase
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // ⚡ Функція збереження рекорду
+  window.saveScoreToFirebase = async function(username, score) {
+    try {
+      await addDoc(collection(db, "leaderboard"), {
+        username: username,
+        score: score,
+        timestamp: Date.now()
+      });
+      console.log("✅ Рекорд збережено до Firebase!");
+    } catch (e) {
+      console.error("❌ Помилка при збереженні:", e);
+    }
+  };
+</script>
