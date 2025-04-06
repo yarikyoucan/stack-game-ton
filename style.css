@@ -104,3 +104,25 @@ html, body {
 #container.ended .game-over p {
   transition-delay: 0.3s;
 }
+#navbar {
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  background: white;
+  display: flex;
+  justify-content: space-around;
+  padding: 10px 0;
+  border-top: 1px solid #ccc;
+  z-index: 1000;
+}
+
+#navbar button {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: #333;
+}
+
+.page {
+  padding-bottom: 60px; /* Щоб не закривало нижнє меню */
+}
