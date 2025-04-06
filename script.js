@@ -296,16 +296,5 @@ class Game {
     }
 }
 let game = new Game();
-<script>
-  const buttons = document.querySelectorAll('.nav-btn');
-  const pages = document.querySelectorAll('.page');
 
-  buttons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const targetId = btn.getAttribute('data-target');
-      pages.forEach(page => page.classList.remove('active'));
-      document.getElementById(targetId).classList.add('active');
-    });
-  });
-</script>
 
