@@ -47,39 +47,43 @@
     appId: "1:830456075056:web:7217fb264453fdf577aef5",
     measurementId: "G-TZRW1MP4H1"
   };
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Гра з кнопками</title>
+  <script defer>
+    function showPage(pageId) {
+      document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
+      document.getElementById(pageId).classList.remove("hidden");
+    }
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col">
 
+  <!-- Основний вміст -->
+  <div class="flex-1 overflow-hidden">
+    <!-- Сторінки -->
+    <div id="game" class="page p-4">Це гра (тут буде джойстик або Stack)</div>
+    <div id="tasks" class="page hidden p-4">Тут завдання</div>
+    <div id="leaderboard" class="page hidden p-4">Лідерборд</div>
+    <div id="friends" class="page hidden p-4">Друзі / Реферали</div>
+  </div>
+
+  <!-- Нижнє меню -->
+  <div class="bg-white border-t flex justify-around items-center h-16 fixed bottom-0 w-full">
+    <button onclick="showPage('game')" class="text-2xl">🎮</button>
+    <button onclick="showPage('tasks')" class="text-2xl">✏️</button>
+    <button onclick="showPage('leaderboard')" class="text-2xl">🏆</button>
+    <button onclick="showPage('friends')" class="text-2xl">👥</button>
+  </div>
+
+</body>
+</html>
   // Initialize Firebase
   const app = initializeApp(firebaseConfig);
   const analytics = getAnalytics(app);
 </script>
 </script>
-<!-- Сторінки -->
-<div id="gamePage" class="page active">
-  <h1>Game</h1>
-  <div id="gameCanvas">[Тут буде гра]</div>
-</div>
-
-<div id="friendsPage" class="page">
-  <h1>Friends</h1>
-</div>
-
-<div id="leaderboardPage" class="page">
-  <h1>Leaderboard</h1>
-</div>
-
-<div id="walletPage" class="page">
-  <h1>Wallet</h1>
-</div>
-
-<div id="tasksPage" class="page">
-  <h1>Tasks</h1>
-</div>
-
-<!-- Нижнє меню -->
-<div id="navbar">
-  <button class="nav-btn" data-target="gamePage">🎮</button>
-  <button class="nav-btn" data-target="friendsPage">👥</button>
-  <button class="nav-btn" data-target="leaderboardPage">🏆</button>
-  <button class="nav-btn" data-target="walletPage">💰</button>
-  <button class="nav-btn" data-target="tasksPage">📝</button>
-</div>
