@@ -72,6 +72,7 @@
   </div>
 
 <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="uk">
 <head>
   <meta charset="UTF-8">
@@ -110,10 +111,16 @@
       right: 0;
     }
     .menu button {
+      flex: 1;
       background: none;
       border: none;
-      font-size: 20px;
+      font-size: 18px;
       cursor: pointer;
+      padding: 10px 0;
+    }
+    .menu button.active {
+      color: #007bff;
+      font-weight: bold;
     }
 
     /* Завдання */
@@ -176,19 +183,26 @@
 
   <!-- Меню -->
   <div class="menu">
-    <button onclick="showPage('game')">🎮</button>
-    <button onclick="showPage('tasks')">✏️</button>
-    <button onclick="showPage('tournaments')">🏆</button>
-    <button onclick="showPage('friends')">👥</button>
+    <button id="btn-game" onclick="showPage('game', this)" class="active">🎮</button>
+    <button id="btn-tasks" onclick="showPage('tasks', this)">✏️</button>
+    <button id="btn-tournaments" onclick="showPage('tournaments', this)">🏆</button>
+    <button id="btn-friends" onclick="showPage('friends', this)">👥</button>
   </div>
 
   <script>
     let balance = 0;
     let subscribed = false;
 
-    function showPage(id) {
+    function showPage(id, btn) {
+      // Ховаємо всі сторінки
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      // Показуємо потрібну
       document.getElementById(id).classList.add('active');
+
+      // Знімаємо виділення з кнопок
+      document.querySelectorAll('.menu button').forEach(b => b.classList.remove('active'));
+      // Виділяємо активну
+      btn.classList.add('active');
     }
 
     function subscribe() {
