@@ -1,82 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" >
+<html lang="uk">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Stack Game</title>
-  <link rel="stylesheet" href="./style.css">
-
-</head>
-<body>
-<meta name="viewport" content="width=device-width,user-scalable=no">
-
-<div id="container">
-	<div id="game"></div>
-	<div id="score">0</div>
-	<div id="instructions">Click (or press the spacebar) to place the block</div>
-	<div class="game-over">
-		<h2>Game Over</h2>
-		<p>You did great, you're the best.</p>
-		<p>Click or spacebar to start again</p>
-	</div>
-	<div class="game-ready">
-		<div id="start-button">Start</div>
-		<div></div>
-	</div>
-</div>
-<!-- partial -->
-<script src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r83/three.min.js'></script>
-<script src='https://cdnjs.cloudflare.com/ajax/libs/gsap/latest/TweenMax.min.js'></script><script  src="./script.js"></script>
-
-</body>
-</html>
-<script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-analytics.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
-
-  // Your web app's Firebase configuration
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-  const firebaseConfig = {
-    apiKey: "AIzaSyCb77OqRhKLEXD8lShWZRul-r955zTmPiM",
-    authDomain: "stack-ec56d.firebaseapp.com",
-    projectId: "stack-ec56d",
-    storageBucket: "stack-ec56d.firebasestorage.app",
-    messagingSenderId: "830456075056",
-    appId: "1:830456075056:web:7217fb264453fdf577aef5",
-    measurementId: "G-TZRW1MP4H1"
-  };
-<html lang="uk">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Гра з кнопками</title>
-  <script defer>
-    function showPage(pageId) {
-      document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
-      document.getElementById(pageId).classList.remove("hidden");
-    }
-  </script>
-  <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-100 h-screen flex flex-col">
-
-  <!-- Основний вміст -->
-  <div class="flex-1 overflow-hidden">
-    <!-- Сторінки -->
-    <div id="game" class="page p-4">Це гра (тут буде джойстик або Stack)</div>
-    <div id="tasks" class="page hidden p-4">Тут завдання</div>
-    <div id="leaderboard" class="page hidden p-4">Лідерборд</div>
-    <div id="friends" class="page hidden p-4">Друзі / Реферали</div>
-  </div>
-
-<!DOCTYPE html>
-<!DOCTYPE html>
-<html lang="uk">
-<head>
-  <meta charset="UTF-8">
-  <title>Stackton</title>
   <style>
     body {
       margin: 0;
@@ -86,43 +13,35 @@
       flex-direction: column;
       height: 100vh;
     }
-
     /* Контейнер для сторінок */
     .page {
       flex: 1;
       display: none;
-      padding: 20px;
-      text-align: center;
+      overflow: auto;
+      padding: 10px;
     }
     .page.active {
       display: block;
     }
-
-    /* Нижнє меню */
+    /* Меню знизу */
     .menu {
       display: flex;
       justify-content: space-around;
       border-top: 1px solid #ccc;
       background: #fff;
       padding: 10px 0;
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
     }
     .menu button {
       flex: 1;
       background: none;
       border: none;
-      font-size: 18px;
+      font-size: 22px;
       cursor: pointer;
-      padding: 10px 0;
     }
     .menu button.active {
-      color: #007bff;
+      color: green;
       font-weight: bold;
     }
-
     /* Завдання */
     .task {
       display: flex;
@@ -146,11 +65,37 @@
     .task button.done {
       background: #28a745;
     }
-
     /* Баланс */
     .balance {
       font-size: 20px;
       margin-bottom: 20px;
+      text-align: center;
+    }
+    /* Стиль для гри */
+    #container {
+      width: 100%;
+      height: 80vh;
+      position: relative;
+    }
+    #score {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.5);
+      color: #fff;
+      padding: 5px 10px;
+      border-radius: 6px;
+    }
+    .game-over, .ready {
+      position: absolute;
+      top: 40%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      background: rgba(255,255,255,0.9);
+      padding: 20px;
+      border-radius: 10px;
+      display: none;
     }
   </style>
 </head>
@@ -159,7 +104,18 @@
   <!-- Сторінки -->
   <div id="game" class="page active">
     <h2>🎮 Гра</h2>
-    <button style="padding:20px 40px;font-size:20px;">Start</button>
+    <div id="container">
+      <div id="score">0</div>
+      <div id="instructions">Клік або пробіл, щоб поставити блок</div>
+      <div class="game-over">
+        <h2>Гра закінчена</h2>
+        <p>Ти молодець 👍</p>
+        <p>Клікни або натисни пробіл, щоб почати знову</p>
+      </div>
+      <div class="ready">
+        <div id="start-button">▶ Старт</div>
+      </div>
+    </div>
   </div>
 
   <div id="tasks" class="page">
@@ -178,40 +134,41 @@
   <div id="friends" class="page">
     <div class="balance">Баланс ⭐ <span id="balance">0</span></div>
     <h2>👥 Друзі</h2>
-    <p>Список друзів з'явиться тут...</p>
+    <p>Список друзів з’явиться тут...</p>
   </div>
 
   <!-- Меню -->
   <div class="menu">
-    <button id="btn-game" onclick="showPage('game', this)" class="active">🎮</button>
-    <button id="btn-tasks" onclick="showPage('tasks', this)">✏️</button>
-    <button id="btn-tournaments" onclick="showPage('tournaments', this)">🏆</button>
-    <button id="btn-friends" onclick="showPage('friends', this)">👥</button>
+    <button onclick="showPage('game', this)" class="active">🎮</button>
+    <button onclick="showPage('tasks', this)">✏️</button>
+    <button onclick="showPage('tournaments', this)">🏆</button>
+    <button onclick="showPage('friends', this)">👥</button>
   </div>
+
+  <!-- Скрипти -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r83/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/latest/TweenMax.min.js"></script>
+  <script src="./script.js"></script> <!-- твоя логіка гри -->
 
   <script>
     let balance = 0;
     let subscribed = false;
 
     function showPage(id, btn) {
-      // Ховаємо всі сторінки
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-      // Показуємо потрібну
       document.getElementById(id).classList.add('active');
-
-      // Знімаємо виділення з кнопок
       document.querySelectorAll('.menu button').forEach(b => b.classList.remove('active'));
-      // Виділяємо активну
       btn.classList.add('active');
     }
 
     function subscribe() {
       if (!subscribed) {
         window.open("https://t.me/YOUR_CHANNEL_LINK", "_blank");
-        document.getElementById("subscribeBtn").innerText = "Виконано";
-        document.getElementById("subscribeBtn").classList.add("done");
+        let btn = document.getElementById("subscribeBtn");
+        btn.innerText = "Виконано";
+        btn.classList.add("done");
         subscribed = true;
-        addBalance(10); // бонус за підписку
+        addBalance(10);
       }
     }
 
