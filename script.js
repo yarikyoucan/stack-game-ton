@@ -1,4 +1,4 @@
-7"use strict";
+"use strict";
 console.clear();
 class Stage {
     constructor() {
@@ -146,27 +146,23 @@ class Block {
             if (!blocksToReturn.bonus)
                 blocksToReturn.chopped = choppedMesh;
         }
-      
-startGame() {
-        if (this.state != this.STATES.PLAYING) {
-            this.scoreContainer.innerHTML = '0';
-            this.updateState(this.STATES.PLAYING);
-            this.addBlock();
+        else {
+            this.state = this.STATES.MISSED;
+        }
+        this.dimension[this.workingDimension] = overlap;
+        return blocksToReturn;
+    }
+    tick() {
+        if (this.state == this.STATES.ACTIVE) {
+            let value = this.position[this.workingPlane];
+            if (value > this.MOVE_AMOUNT || value < -this.MOVE_AMOUNT)
+                this.reverseDirection();
+            this.position[this.workingPlane] += this.direction;
+            this.mesh.position[this.workingPlane] = this.position[this.workingPlane];
         }
     }
-    restartGame() {
-        this.updateState(this.STATES.RESETTING);
-        let oldBlocks = this.placedBlocks.children;
-        let removeSpeed = 0.2;
-        let delayAmount = 0.02;
-        for (let i = 0; i < oldBlocks.length; i++) {
-            TweenLite.to(oldBlocks[i].scale, removeSpeed, { x: 0, y: 0, z: 0, delay: (oldBlocks.length - i) * delayAmount, ease: Power1.easeIn, onComplete: () => this.placedBlocks.remove(oldBlocks[i]) });
-            TweenLite.to(oldBlocks[i].rotation, removeSpeed, { y: 0.5, delay: (oldBlocks.length - i) * delayAmount, ease: Power1.easeIn });
-        }
-        let cameraMoveSpeed = removeSpeed * 2 + (oldBlocks.length * delayAmount);
-        this.stage.setCamera(2, cameraMoveSpeed);
-        let countdown = { value: this.blocks.length - 1 };
-        TweenLite.to(countdown, cameraMoveSpeed, {class Game {
+}
+class Game {
     constructor() {
         this.STATES = {
             'LOADING': 'loading',
@@ -224,7 +220,27 @@ startGame() {
                 this.restartGame();
                 break;
         }
-    } value: 0, onUpdate: () => { this.scoreContainer.innerHTML = String(Math.round(countdown.value)); } });
+    }
+    startGame() {
+        if (this.state != this.STATES.PLAYING) {
+            this.scoreContainer.innerHTML = '0';
+            this.updateState(this.STATES.PLAYING);
+            this.addBlock();
+        }
+    }
+    restartGame() {
+        this.updateState(this.STATES.RESETTING);
+        let oldBlocks = this.placedBlocks.children;
+        let removeSpeed = 0.2;
+        let delayAmount = 0.02;
+        for (let i = 0; i < oldBlocks.length; i++) {
+            TweenLite.to(oldBlocks[i].scale, removeSpeed, { x: 0, y: 0, z: 0, delay: (oldBlocks.length - i) * delayAmount, ease: Power1.easeIn, onComplete: () => this.placedBlocks.remove(oldBlocks[i]) });
+            TweenLite.to(oldBlocks[i].rotation, removeSpeed, { y: 0.5, delay: (oldBlocks.length - i) * delayAmount, ease: Power1.easeIn });
+        }
+        let cameraMoveSpeed = removeSpeed * 2 + (oldBlocks.length * delayAmount);
+        this.stage.setCamera(2, cameraMoveSpeed);
+        let countdown = { value: this.blocks.length - 1 };
+        TweenLite.to(countdown, cameraMoveSpeed, { value: 0, onUpdate: () => { this.scoreContainer.innerHTML = String(Math.round(countdown.value)); } });
         this.blocks = this.blocks.slice(0, 1);
         setTimeout(() => {
             this.startGame();
@@ -233,7 +249,7 @@ startGame() {
     placeBlock() {
         let currentBlock = this.blocks[this.blocks.length - 1];
         let newBlocks = currentBlock.place();
-this.newBlocks.remove(currentBlock.mesh);
+        this.newBlocks.remove(currentBlock.mesh);
         if (newBlocks.placed)
             this.placedBlocks.add(newBlocks.placed);
         if (newBlocks.chopped) {
