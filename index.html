@@ -72,21 +72,137 @@
     <div id="friends" class="page hidden p-4">Друзі / Реферали</div>
   </div>
 
-  <!-- Нижнє меню -->
-  <div class="bg-white border-t flex justify-around items-center h-16 fixed bottom-0 w-full">
-    <button onclick="showPage('game')" class="text-2xl">🎮</button>
-    <button onclick="showPage('tasks')" class="text-2xl">✏️</button>
-    <button onclick="showPage('leaderboard')" class="text-2xl">🏆</button>
-    <button onclick="showPage('friends')" class="text-2xl">👥</button>
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Stackton</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* Контейнер для сторінок */
+    .page {
+      flex: 1;
+      display: none;
+      padding: 20px;
+      text-align: center;
+    }
+    .page.active {
+      display: block;
+    }
+
+    /* Нижнє меню */
+    .menu {
+      display: flex;
+      justify-content: space-around;
+      border-top: 1px solid #ccc;
+      background: #fff;
+      padding: 10px 0;
+    }
+    .menu button {
+      background: none;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    /* Завдання */
+    .task {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #fff;
+      padding: 15px;
+      margin: 10px auto;
+      border-radius: 10px;
+      width: 90%;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .task button {
+      background: #007bff;
+      color: #fff;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .task button.done {
+      background: #28a745;
+    }
+
+    /* Баланс */
+    .balance {
+      font-size: 20px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Сторінки -->
+  <div id="game" class="page active">
+    <h2>🎮 Гра</h2>
+    <!-- Твоя гра вставляється сюди -->
+    <button style="padding:20px 40px;font-size:20px;">Start</button>
   </div>
-<a href="game.html">🎮</a>
-<a href="tasks.html">✏️</a>
-<a href="leaderboard.html">🏆</a>
-<a href="friends.html">👥</a>
+
+  <div id="tasks" class="page">
+    <h2>📋 Завдання</h2>
+    <div class="task">
+      <span>Підпишись на канал</span>
+      <button id="subscribeBtn" onclick="subscribe()">Перейти</button>
+    </div>
+  </div>
+
+  <div id="tournaments" class="page">
+    <h2>🏆 Турніри</h2>
+    <p>Тут буде інформація пізніше...</p>
+  </div>
+
+  <div id="friends" class="page">
+    <div class="balance">Баланс ⭐ <span id="balance">0</span></div>
+    <h2>👥 Друзі</h2>
+    <p>Список друзів з'явиться тут...</p>
+  </div>
+
+  <!-- Меню -->
+  <div class="menu">
+    <button onclick="showPage('game')">🎮</button>
+    <button onclick="showPage('tasks')">✏️</button>
+    <button onclick="showPage('tournaments')">🏆</button>
+    <button onclick="showPage('friends')">👥</button>
+  </div>
+
+  <script>
+    let balance = 0;
+    let subscribed = false;
+
+    function showPage(id) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    }
+
+    function subscribe() {
+      if (!subscribed) {
+        window.open("https://t.me/YOUR_CHANNEL_LINK", "_blank");
+        document.getElementById("subscribeBtn").innerText = "Виконано";
+        document.getElementById("subscribeBtn").classList.add("done");
+        subscribed = true;
+        addBalance(10); // бонус за підписку
+      }
+    }
+
+    function addBalance(amount) {
+      balance += amount;
+      document.getElementById("balance").innerText = balance;
+    }
+  </script>
 </body>
 </html>
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-</script>
-</script>
