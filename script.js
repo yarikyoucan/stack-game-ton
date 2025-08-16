@@ -176,9 +176,16 @@ class Game {
         this.stage = new Stage();
         this.mainContainer = document.getElementById('container');
         this.scoreContainer = document.getElementById('score');
+        
+        // ✅ новий елемент для рекорду
+        this.bestContainer = document.getElementById('best');
+        this.bestScore = 0;
+
         this.startButton = document.getElementById('start-button');
         this.instructions = document.getElementById('instructions');
         this.scoreContainer.innerHTML = '0';
+        this.bestContainer.innerHTML = 'Best: 0'; // початково
+
         this.newBlocks = new THREE.Group();
         this.placedBlocks = new THREE.Group();
         this.choppedBlocks = new THREE.Group();
@@ -188,40 +195,39 @@ class Game {
         this.addBlock();
         this.tick();
         this.updateState(this.STATES.READY);
+
         document.addEventListener('keydown', e => {
-            if (e.keyCode == 32)
-                this.onAction();
+            if (e.keyCode == 32) this.onAction();
         });
         document.addEventListener('click', e => {
             this.onAction();
         });
-        document.addEventListener('touchstart', e => {
-            e.preventDefault();
-            // this.onAction();
-            // this triggers after click on android so you
-            // insta-lose, will figure it out later.
-        });
     }
-    updateState(newState) {
-        for (let key in this.STATES)
-            this.mainContainer.classList.remove(this.STATES[key]);
-        this.mainContainer.classList.add(newState);
-        this.state = newState;
-    }
-    onAction() {
-        switch (this.state) {
-            case this.STATES.READY:
-                this.startGame();
-                break;
-            case this.STATES.PLAYING:
-                this.placeBlock();
-                break;
-            case this.STATES.ENDED:
-                this.restartGame();
-                break;
+
+    // 🔥 тут тепер оновлюємо рекорд
+    addBlock() {
+        let lastBlock = this.blocks[this.blocks.length - 1];
+        if (lastBlock && lastBlock.state == lastBlock.STATES.MISSED) {
+            return this.endGame();
         }
+
+        let currentScore = this.blocks.length - 1;
+        this.scoreContainer.innerHTML = String(currentScore);
+
+        if (currentScore > this.bestScore) {
+            this.bestScore = currentScore;
+            this.bestContainer.innerHTML = 'Best: ' + this.bestScore;
+        }
+
+        let newKidOnTheBlock = new Block(lastBlock);
+        this.newBlocks.add(newKidOnTheBlock.mesh);
+        this.blocks.push(newKidOnTheBlock);
+        this.stage.setCamera(this.blocks.length * 2);
+        if (this.blocks.length >= 5)
+            this.instructions.classList.add('hide');
     }
-    startGame() {
+}
+startGame() {
         if (this.state != this.STATES.PLAYING) {
             this.scoreContainer.innerHTML = '0';
             this.updateState(this.STATES.PLAYING);
@@ -249,7 +255,7 @@ class Game {
     placeBlock() {
         let currentBlock = this.blocks[this.blocks.length - 1];
         let newBlocks = currentBlock.place();
-        this.newBlocks.remove(currentBlock.mesh);
+this.newBlocks.remove(currentBlock.mesh);
         if (newBlocks.placed)
             this.placedBlocks.add(newBlocks.placed);
         if (newBlocks.chopped) {
@@ -296,5 +302,3 @@ class Game {
     }
 }
 let game = new Game();
-
-
