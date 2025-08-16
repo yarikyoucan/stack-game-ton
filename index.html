@@ -72,11 +72,13 @@
       text-align: center;
     }
     /* Стиль для гри */
-#container {
-  width: 100%;
-  height: 80vh;
-  position: relative;
-  overflow: hidden; /* щоб все зайве обрізалось */
+#container canvas {
+  position: absolute !important;
+  top: 0;
+  left: 0;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 1;
 }
 
 /* Рахунок */
