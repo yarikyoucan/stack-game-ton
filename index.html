@@ -13,7 +13,6 @@
       flex-direction: column;
       height: 100vh;
     }
-    /* Контейнер для сторінок */
     .page {
       flex: 1;
       display: none;
@@ -23,7 +22,6 @@
     .page.active {
       display: block;
     }
-    /* Меню знизу */
     .menu {
       display: flex;
       justify-content: space-around;
@@ -42,7 +40,6 @@
       color: green;
       font-weight: bold;
     }
-    /* Завдання */
     .task {
       display: flex;
       justify-content: space-between;
@@ -65,13 +62,11 @@
     .task button.done {
       background: #28a745;
     }
-    /* Баланс */
     .balance {
       font-size: 20px;
       margin-bottom: 20px;
       text-align: center;
     }
-    /* Стиль для гри */
     #container canvas {
       position: absolute !important;
       top: 0;
@@ -80,7 +75,6 @@
       height: 100% !important;
       z-index: 1;
     }
-    /* Рахунок */
     #scoreboard {
       position: absolute;
       top: 10px;
@@ -95,7 +89,6 @@
       padding: 5px 10px;
       border-radius: 6px;
     }
-    /* Інструкція */
     #instructions {
       position: absolute;
       top: 50px;
@@ -107,7 +100,6 @@
       border-radius: 6px;
       z-index: 2;
     }
-    /* Екрани */
     .game-over, .ready {
       position: absolute;
       top: 50%;
@@ -124,7 +116,6 @@
 </head>
 <body>
 
-  <!-- Сторінки -->
   <div id="game" class="page active">
     <div id="container">
       <div id="scoreboard">
@@ -166,7 +157,6 @@
     <p>Список друзів знизу 👇</p>
   </div>
 
-  <!-- Меню -->
   <div class="menu">
     <button onclick="showPage('game', this)" class="active">🎮</button>
     <button onclick="showPage('tasks', this)">✏️</button>
@@ -174,19 +164,18 @@
     <button onclick="showPage('friends', this)">👥</button>
   </div>
 
-  <!-- Скрипти -->
+  <!-- Three.js + GSAP + Adsgram -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r83/three.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/latest/TweenMax.min.js"></script>
-  <script src="./script.js"></script> <!-- твоя логіка гри -->
+  <script src="https://adsgram.ai/js/v1.js"></script>
+  <script src="./script.js"></script>
 
-  <!-- Логіка меню, завдань і LocalStorage -->
   <script>
     let balance = 0;
     let subscribed = false;
     let task50Completed = false;
     let highscore = 0;
 
-    // === Завантаження даних з localStorage ===
     window.onload = function () {
       if (localStorage.getItem("balance")) {
         balance = parseInt(localStorage.getItem("balance"));
@@ -210,7 +199,6 @@
       }
     };
 
-    // === Зберігання даних у localStorage ===
     function saveData() {
       localStorage.setItem("balance", balance);
       localStorage.setItem("subscribed", subscribed);
@@ -218,7 +206,6 @@
       localStorage.setItem("highscore", highscore);
     }
 
-    // Переключення сторінок
     function showPage(id, btn) {
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.getElementById(id).classList.add('active');
@@ -226,7 +213,6 @@
       btn.classList.add('active');
     }
 
-    // Завдання "Підписка"
     function subscribe() {
       if (!subscribed) {
         window.open("https://t.me/stackofficialgame", "_blank");
@@ -239,17 +225,14 @@
       }
     }
 
-    // Додавання балансу
     function addBalance(amount) {
       balance += amount;
       document.getElementById("balance").innerText = balance;
       saveData();
     }
 
-    // Завдання "Досягни рекорду 50"
     document.getElementById("checkTask50").addEventListener("click", () => {
       let btn = document.getElementById("checkTask50");
-
       if (highscore >= 50 && !task50Completed) {
         addBalance(10);
         btn.innerText = "Виконано";
@@ -261,7 +244,6 @@
       }
     });
 
-    // Функція оновлення рекорду (викликай у script.js коли гра закінчується)
     function updateHighscore(currentScore) {
       if (currentScore > highscore) {
         highscore = currentScore;
@@ -269,8 +251,14 @@
         document.getElementById("highscore").innerText = "🏆 " + highscore;
       }
     }
+
+    // === Реклама після Game Over ===
+    function showAd() {
+      const adController = window.Adsgram.init({ blockId: "1718255", debug: true });
+      adController.show()
+        .then(result => console.log("Реклама показана:", result))
+        .catch(err => console.warn("Реклама не показана:", err));
+    }
   </script>
 </body>
 </html>
-
-
