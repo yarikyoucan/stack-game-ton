@@ -135,17 +135,161 @@
 
     <div class="task" id="task50">
       <span>🎯 Набери 50 очків (+10⭐)</span>
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stack Game</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    /* Контейнер для сторінок */
+    .page {
+      flex: 1;
+      display: none;
+      overflow: auto;
+      padding: 10px;
+    }
+    .page.active {
+      display: block;
+    }
+    /* Меню знизу */
+    .menu {
+      display: flex;
+      justify-content: space-around;
+      border-top: 1px solid #ccc;
+      background: #fff;
+      padding: 10px 0;
+    }
+    .menu button {
+      flex: 1;
+      background: none;
+      border: none;
+      font-size: 22px;
+      cursor: pointer;
+    }
+    .menu button.active {
+      color: green;
+      font-weight: bold;
+    }
+    /* Завдання */
+    .task {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #fff;
+      padding: 15px;
+      margin: 10px auto;
+      border-radius: 10px;
+      width: 90%;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .task button {
+      background: #007bff;
+      color: #fff;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .task button.done {
+      background: #28a745;
+    }
+    /* Баланс */
+    .balance {
+      font-size: 20px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    /* Стиль для гри */
+    #container canvas {
+      position: absolute !important;
+      top: 0;
+      left: 0;
+      width: 100% !important;
+      height: 100% !important;
+      z-index: 1;
+    }
+    /* Рахунок */
+    #score {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.5);
+      color: #fff;
+      padding: 5px 10px;
+      border-radius: 6px;
+      z-index: 2;
+    }
+    /* Інструкція */
+    #instructions {
+      position: absolute;
+      top: 50px;
+      left: 10px;
+      color: #000;
+      font-size: 16px;
+      background: rgba(255,255,255,0.7);
+      padding: 4px 8px;
+      border-radius: 6px;
+      z-index: 2;
+    }
+    /* Екрани */
+    .game-over, .ready {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      background: rgba(255,255,255,0.95);
+      padding: 20px;
+      border-radius: 10px;
+      display: none;
+      z-index: 3;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Сторінки -->
+  <div id="game" class="page active">
+    <div id="container">
+      <div id="score">0</div>
+      <div id="instructions">Клік або пробіл, щоб поставити блок, після завершення гри клацни по екрану, щоб зіграти ще</div>
+      <div class="game-over">
+        <h2>Гра закінчена</h2>
+        <p>Ти молодець 👍</p>
+        <p>Клікни або натисни пробіл, щоб почати знову</p>
+      </div>
+      <div class="ready">
+        <div id="start-button">▶ Старт</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tasks" class="page">
+    <h2>📋 Завдання</h2>
+    <div class="task">
+      <span>Підпишись на канал +1⭐</span>
+      <button id="subscribeBtn" onclick="subscribe()">Перейти</button>
+    </div>
+    <div class="task" id="task50">
+      <span>🎯 Набери 50 очків (+10⭐)</span>
       <button id="checkTask50">Перевірити</button>
     </div>
   </div>
 
-  <!-- Сторінка турнірів -->
   <div id="tournaments" class="page">
     <h2>🏆 Турніри</h2>
     <p>Список топів👇(рекорд)</p>
   </div>
 
-  <!-- Сторінка друзів -->
   <div id="friends" class="page">
     <div class="balance">Баланс ⭐ <span id="balance">0</span></div>
     <h2>👥 Друзі</h2>
@@ -165,11 +309,40 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/latest/TweenMax.min.js"></script>
   <script src="./script.js"></script> <!-- твоя логіка гри -->
 
+  <!-- Логіка меню, завдань і LocalStorage -->
   <script>
     let balance = 0;
     let subscribed = false;
     let task50Completed = false;
 
+    // === Завантаження даних з localStorage ===
+    window.onload = function () {
+      if (localStorage.getItem("balance")) {
+        balance = parseInt(localStorage.getItem("balance"));
+        document.getElementById("balance").innerText = balance;
+      }
+      if (localStorage.getItem("subscribed") === "true") {
+        subscribed = true;
+        let btn = document.getElementById("subscribeBtn");
+        btn.innerText = "Виконано";
+        btn.classList.add("done");
+      }
+      if (localStorage.getItem("task50Completed") === "true") {
+        task50Completed = true;
+        let btn = document.getElementById("checkTask50");
+        btn.innerText = "Виконано";
+        btn.classList.add("done");
+      }
+    };
+
+    // === Зберігання даних у localStorage ===
+    function saveData() {
+      localStorage.setItem("balance", balance);
+      localStorage.setItem("subscribed", subscribed);
+      localStorage.setItem("task50Completed", task50Completed);
+    }
+
+    // Переключення сторінок
     function showPage(id, btn) {
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.getElementById(id).classList.add('active');
@@ -177,6 +350,7 @@
       btn.classList.add('active');
     }
 
+    // Завдання "Підписка"
     function subscribe() {
       if (!subscribed) {
         window.open("https://t.me/stackofficialgame", "_blank");
@@ -185,25 +359,28 @@
         btn.classList.add("done");
         subscribed = true;
         addBalance(1);
+        saveData(); // зберігаємо після виконання
       }
     }
 
+    // Додавання балансу
     function addBalance(amount) {
       balance += amount;
       document.getElementById("balance").innerText = balance;
+      saveData(); // зберігаємо після зміни балансу
     }
 
+    // Завдання "Набери 50 очків"
     document.getElementById("checkTask50").addEventListener("click", () => {
       let score = parseInt(document.getElementById("score").innerText);
       let btn = document.getElementById("checkTask50");
-      let balanceBox = document.getElementById("balance");
 
       if (score >= 50 && !task50Completed) {
-        let currentBalance = parseInt(balanceBox.innerText) || 0;
-        balanceBox.innerText = currentBalance + 10;
+        addBalance(10);
         btn.innerText = "Виконано";
         btn.classList.add("done");
         task50Completed = true;
+        saveData();
       } else if (score < 50) {
         alert("❌ Твій результат замалий (потрібно 50+)");
       }
