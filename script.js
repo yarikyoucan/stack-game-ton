@@ -153,7 +153,8 @@ class Block {
         return blocksToReturn;
     }
     tick() {
-        if (this.state == this.STATES.ACTIVE) {let value = this.position[this.workingPlane];
+        if (this.state == this.STATES.ACTIVE) {
+            let value = this.position[this.workingPlane];
             if (value > this.MOVE_AMOUNT || value < -this.MOVE_AMOUNT)
                 this.reverseDirection();
             this.position[this.workingPlane] += this.direction;
@@ -295,3 +296,4 @@ class Game {
     }
 }
 let game = new Game();
+        
