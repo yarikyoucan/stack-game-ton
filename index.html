@@ -151,29 +151,6 @@
   <span>🎯 Набери 50 очків (+10⭐)</span>
   <button id="checkTask50">Перевірити</button>
 </div>
-
-<script>
-  let task50Completed = false;
-
-  document.getElementById("checkTask50").addEventListener("click", () => {
-    let score = parseInt(document.getElementById("score").innerText);
-    let btn = document.getElementById("checkTask50");
-    let balanceBox = document.getElementById("balance");
-
-    if (score >= 50 && !task50Completed) {
-      // додаємо 10⭐
-      let currentBalance = parseInt(balanceBox.innerText) || 0;
-      balanceBox.innerText = currentBalance + 10;
-
-      // змінюємо кнопку
-      btn.innerText = "Виконано";
-      btn.classList.add("done");
-      task50Completed = true;
-    } else if (score < 50) {
-      alert("❌ Твій результат замалий (потрібно 50+)");
-    }
-  });
-</script>
   <div id="tournaments" class="page">
     <h2>🏆 Турніри</h2>
     <p>Список топів👇(рекорд)</p>
@@ -226,4 +203,26 @@
     }
   </script>
 </body>
+  <script>
+  let task50Completed = false;
+
+  document.getElementById("checkTask50").addEventListener("click", () => {
+    let score = parseInt(document.getElementById("score").innerText);
+    let btn = document.getElementById("checkTask50");
+    let balanceBox = document.getElementById("balance");
+
+    if (score >= 50 && !task50Completed) {
+      // додаємо 10⭐
+      let currentBalance = parseInt(balanceBox.innerText) || 0;
+      balanceBox.innerText = currentBalance + 10;
+
+      // змінюємо кнопку
+      btn.innerText = "Виконано";
+      btn.classList.add("done");
+      task50Completed = true;
+    } else if (score < 50) {
+      alert("❌ Твій результат замалий (потрібно 50+)");
+    }
+  });
+  </script>
 </script>
