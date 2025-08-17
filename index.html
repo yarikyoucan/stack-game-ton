@@ -199,4 +199,37 @@
     }
   </script>
 </body>
-</html>
+<!-- Завдання -->
+<div id="task" style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+ background: rgba(0,0,0,0.7); color: white; padding: 15px 20px; border-radius: 10px;
+ font-size: 18px; text-align: center; z-index: 100;">
+  🎯 Завдання: Набери <b>50</b> очків (+10⭐)
+  <br>
+  <button id="checkTask" style="margin-top:10px; padding:8px 15px; font-size:16px; border:none;
+   border-radius:5px; background:#28a745; color:white; cursor:pointer;">
+    Перевірити
+  </button>
+  <div id="taskResult" style="margin-top:8px; font-size:16px; color:#00ff88;"></div>
+</div>
+
+<script>
+  let taskCompleted = false; // щоб бонус не нараховувався двічі
+
+  document.getElementById("checkTask").addEventListener("click", () => {
+    let score = parseInt(document.getElementById("score").innerText);
+    let resultBox = document.getElementById("taskResult");
+    let balanceBox = document.getElementById("balance");
+
+    if(score >= 50 && !taskCompleted){
+      // додаємо 10⭐ у баланс
+      let currentBalance = parseInt(balanceBox.innerText.replace(/\D/g,'')) || 0;
+      let newBalance = currentBalance + 10;
+      balanceBox.innerText = "Баланс: " + newBalance + "⭐";
+
+      resultBox.innerText = "✅ Завдання виконано! +10⭐";
+      taskCompleted = true; // щоб більше не зараховувало
+    } else if(score < 50) {
+      resultBox.innerText = "❌ Твій результат замалий (потрібно 50+)";
+    }
+  });
+</script>
