@@ -13,16 +13,15 @@
       flex-direction: column;
       height: 100vh;
     }
-    /* Контейнер для сторінок */
+    /* Сторінки */
     .page {
       flex: 1;
       display: none;
       overflow: auto;
       padding: 10px;
     }
-    .page.active {
-      display: block;
-    }
+    .page.active { display: block; }
+
     /* Меню знизу */
     .menu {
       display: flex;
@@ -38,11 +37,9 @@
       font-size: 22px;
       cursor: pointer;
     }
-    .menu button.active {
-      color: green;
-      font-weight: bold;
-    }
-    /* Завдання */
+    .menu button.active { color: green; font-weight: bold; }
+
+    /* Картки завдань */
     .task {
       display: flex;
       justify-content: space-between;
@@ -62,42 +59,43 @@
       border-radius: 6px;
       cursor: pointer;
     }
-    .task button.done {
-      background: #28a745;
-    }
+    .task button.done { background: #28a745; }
+
     /* Баланс */
     .balance {
       font-size: 20px;
       margin-bottom: 20px;
       text-align: center;
     }
-    /* Стиль для гри */
+
+    /* Поле гри */
+    #container { position: relative; height: 100%; }
     #container canvas {
       position: absolute !important;
-      top: 0;
-      left: 0;
+      inset: 0;
       width: 100% !important;
       height: 100% !important;
       z-index: 1;
+      display: block;
     }
+
     /* Рахунок + рекорд */
     #scoreboard {
       position: absolute;
-      top: 10px;
-      left: 10px;
-      display: flex;
-      gap: 15px;
+      top: 10px; left: 10px;
+      display: flex; gap: 12px;
       z-index: 2;
       background: rgba(0,0,0,0.5);
       color: #fff;
       padding: 5px 10px;
       border-radius: 6px;
+      font-weight: 600;
     }
+
     /* Інструкція */
     #instructions {
       position: absolute;
-      top: 50px;
-      left: 10px;
+      top: 50px; left: 10px;
       color: #000;
       font-size: 16px;
       background: rgba(255,255,255,0.7);
@@ -105,11 +103,11 @@
       border-radius: 6px;
       z-index: 2;
     }
-    /* Екрани */
+
+    /* Екрани станів */
     .game-over, .ready {
       position: absolute;
-      top: 50%;
-      left: 50%;
+      top: 50%; left: 50%;
       transform: translate(-50%, -50%);
       text-align: center;
       background: rgba(255,255,255,0.95);
@@ -122,7 +120,7 @@
 </head>
 <body>
 
-  <!-- Сторінка гри -->
+  <!-- 🎮 Гра -->
   <div id="game" class="page active">
     <div id="container">
       <div id="scoreboard">
@@ -141,26 +139,29 @@
     </div>
   </div>
 
-  <!-- Завдання -->
+  <!-- 📋 Завдання -->
   <div id="tasks" class="page">
     <h2>📋 Завдання</h2>
+
     <div class="task">
       <span>Підпишись на канал +1⭐</span>
       <button id="subscribeBtn" onclick="subscribe()">Перейти</button>
     </div>
+
+    <!-- ✅ Зміна: тепер перевіряємо РЕКОРД ≥ 50 -->
     <div class="task" id="task50">
-      <span>🎯 Набери 50 очків (+10⭐)</span>
+      <span>🎯 Рекорд ≥ 50 (+10⭐)</span>
       <button id="checkTask50">Перевірити</button>
     </div>
   </div>
 
-  <!-- Турніри -->
+  <!-- 🏆 Турніри -->
   <div id="tournaments" class="page">
     <h2>🏆 Турніри</h2>
     <p>Список топів👇(рекорд)</p>
   </div>
 
-  <!-- Друзі -->
+  <!-- 👥 Друзі -->
   <div id="friends" class="page">
     <div class="balance">Баланс ⭐ <span id="balance">0</span></div>
     <h2>👥 Друзі</h2>
@@ -175,44 +176,46 @@
     <button onclick="showPage('friends', this)">👥</button>
   </div>
 
-  <!-- Скрипти -->
+  <!-- Підключення гри -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r83/three.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/latest/TweenMax.min.js"></script>
   <script src="./script.js"></script>
 
+  <!-- Локальна логіка сторінок/завдань/рекорду -->
   <script>
     let balance = 0;
     let subscribed = false;
     let task50Completed = false;
     let highscore = 0;
-    let currentPage = "game"; // поточна сторінка
+    let currentPage = "game";
 
     // === Завантаження даних з localStorage ===
     window.onload = function () {
-      if (localStorage.getItem("balance")) {
-        balance = parseInt(localStorage.getItem("balance"));
-        document.getElementById("balance").innerText = balance;
+      // баланс
+      const storedBalance = localStorage.getItem("balance");
+      if (storedBalance !== null) {
+        balance = parseInt(storedBalance) || 0;
+        const balEl = document.getElementById("balance");
+        if (balEl) balEl.innerText = balance;
       }
+      // підписка
       if (localStorage.getItem("subscribed") === "true") {
         subscribed = true;
-        let btn = document.getElementById("subscribeBtn");
-        if (btn) {
-          btn.innerText = "Виконано";
-          btn.classList.add("done");
-        }
+        const b = document.getElementById("subscribeBtn");
+        if (b) { b.innerText = "Виконано"; b.classList.add("done"); }
       }
+      // завдання рекорд ≥ 50
       if (localStorage.getItem("task50Completed") === "true") {
         task50Completed = true;
-        let btn = document.getElementById("checkTask50");
-        if (btn) {
-          btn.innerText = "Виконано";
-          btn.classList.add("done");
-        }
+        const tbtn = document.getElementById("checkTask50");
+        if (tbtn) { tbtn.innerText = "Виконано"; tbtn.classList.add("done"); }
       }
-      if (localStorage.getItem("highscore")) {
-        highscore = parseInt(localStorage.getItem("highscore"));
-        document.getElementById("highscore").innerText = "🏆 " + highscore;
+      // рекорд
+      const storedHS = localStorage.getItem("highscore");
+      if (storedHS !== null) {
+        highscore = parseInt(storedHS) || 0;
       }
+      document.getElementById("highscore").innerText = "🏆 " + highscore;
     };
 
     function saveData() {
@@ -223,7 +226,7 @@
     }
 
     function showPage(id, btn) {
-      currentPage = id; // оновлюємо поточну сторінку
+      currentPage = id;
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.getElementById(id).classList.add('active');
       document.querySelectorAll('.menu button').forEach(b => b.classList.remove('active'));
@@ -233,9 +236,8 @@
     function subscribe() {
       if (!subscribed) {
         window.open("https://t.me/stackofficialgame", "_blank");
-        let btn = document.getElementById("subscribeBtn");
-        btn.innerText = "Виконано";
-        btn.classList.add("done");
+        const btn = document.getElementById("subscribeBtn");
+        if (btn) { btn.innerText = "Виконано"; btn.classList.add("done"); }
         subscribed = true;
         addBalance(1);
         saveData();
@@ -244,39 +246,50 @@
 
     function addBalance(amount) {
       balance += amount;
-      document.getElementById("balance").innerText = balance;
+      const balEl = document.getElementById("balance");
+      if (balEl) balEl.innerText = balance;
       saveData();
     }
 
-    // Завдання 50 очків
+    // ✅ Завдання: Рекорд ≥ 50
     document.getElementById("checkTask50").addEventListener("click", () => {
-      let score = parseInt(document.getElementById("score").innerText);
-      let btn = document.getElementById("checkTask50");
-      if (score >= 50 && !task50Completed) {
+      // беремо останній збережений highscore (на випадок, якщо відобразився старий)
+      const hs = parseInt(localStorage.getItem("highscore") || highscore || 0);
+      const btn = document.getElementById("checkTask50");
+      if (hs >= 50 && !task50Completed) {
         addBalance(10);
         btn.innerText = "Виконано";
         btn.classList.add("done");
         task50Completed = true;
         saveData();
-      } else if (score < 50) {
-        alert("❌ Твій результат замалий (потрібно 50+)");
+      } else if (hs < 50) {
+        alert("❌ Потрібно мати рекорд щонайменше 50.");
       }
     });
 
-    // Оновлення рекорду
+    // === API для гри ===
+    // викликати у script.js після завершення спроби:
+    //    updateHighscore(finalScore);
     function updateHighscore(score) {
-      if (score > highscore) {
+      // оновлюємо видимий score (опційно)
+      const scoreEl = document.getElementById("score");
+      if (scoreEl) scoreEl.innerText = String(score);
+
+      // оновлюємо рекорд ТІЛЬКИ якщо score > highscore
+      if (typeof score === "number" && score > highscore) {
         highscore = score;
         document.getElementById("highscore").innerText = "🏆 " + highscore;
         saveData();
       }
     }
 
-    // Перевірка перед стартом гри
+    // у script.js перед стартом/обробкою кліку перевіряй:
+    //    if (canStartGame()) { ... }
     function canStartGame() {
       return currentPage === "game";
     }
+    window.canStartGame = canStartGame;
+    window.updateHighscore = updateHighscore;
   </script>
 </body>
 </html>
-      
