@@ -135,7 +135,7 @@ class Game {
         this.STATES = { 'LOADING': 'loading', 'PLAYING': 'playing', 'READY': 'ready', 'ENDED': 'ended', 'RESETTING': 'resetting' };
         this.blocks = [];
         this.state = this.STATES.LOADING;
-        this.isPaused = false; // <<< прапор паузи
+        this.isPaused = false; // прапор паузи
         this.stage = new Stage();
         this.mainContainer = document.getElementById('container');
         this.scoreContainer = document.getElementById('score');
@@ -156,7 +156,13 @@ class Game {
             if (!this.isPaused && e.keyCode == 32) this.onAction();
         });
         document.addEventListener('click', e => {
-            if (!this.isPaused) this.onAction();
+            if (
+                !this.isPaused &&
+                document.getElementById("game").classList.contains("active") &&
+                e.target.tagName.toLowerCase() === "canvas"
+            ) {
+                this.onAction();
+            }
         });
 
         document.addEventListener('touchstart', e => e.preventDefault());
@@ -248,7 +254,7 @@ class Game {
         updateHighscore(currentScore);
     }
     tick() {
-        if (!this.isPaused) {   // <<< перевірка паузи
+        if (!this.isPaused) {   // перевірка паузи
             this.blocks[this.blocks.length - 1].tick();
             this.stage.render();
         }
@@ -257,4 +263,3 @@ class Game {
 }
 
 let game = new Game();
-
