@@ -80,16 +80,18 @@
       height: 100% !important;
       z-index: 1;
     }
-    /* Рахунок */
-    #score {
+    /* Рахунок + рекорд */
+    #scoreboard {
       position: absolute;
       top: 10px;
       left: 10px;
+      display: flex;
+      gap: 15px;
+      z-index: 2;
       background: rgba(0,0,0,0.5);
       color: #fff;
       padding: 5px 10px;
       border-radius: 6px;
-      z-index: 2;
     }
     /* Інструкція */
     #instructions {
@@ -120,11 +122,14 @@
 </head>
 <body>
 
-  <!-- Сторінки -->
+  <!-- Сторінка гри -->
   <div id="game" class="page active">
     <div id="container">
-      <div id="score">0</div>
-      <div id="instructions">Клік або пробіл, щоб поставити блок, після завершення гри клацни по екрану, щоб зіграти ще</div>
+      <div id="scoreboard">
+        <div id="score">0</div>
+        <div id="highscore">🏆 0</div>
+      </div>
+      <div id="instructions">Клік або пробіл, щоб поставити блок</div>
       <div class="game-over">
         <h2>Гра закінчена</h2>
         <p>Ти молодець 👍</p>
@@ -136,6 +141,7 @@
     </div>
   </div>
 
+  <!-- Завдання -->
   <div id="tasks" class="page">
     <h2>📋 Завдання</h2>
     <div class="task">
@@ -148,11 +154,13 @@
     </div>
   </div>
 
+  <!-- Турніри -->
   <div id="tournaments" class="page">
     <h2>🏆 Турніри</h2>
     <p>Список топів👇(рекорд)</p>
   </div>
 
+  <!-- Друзі -->
   <div id="friends" class="page">
     <div class="balance">Баланс ⭐ <span id="balance">0</span></div>
     <h2>👥 Друзі</h2>
@@ -170,13 +178,14 @@
   <!-- Скрипти -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r83/three.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/latest/TweenMax.min.js"></script>
-  <script src="./script.js"></script> <!-- твоя логіка гри -->
+  <script src="./script.js"></script>
 
-  <!-- Логіка меню, завдань і LocalStorage -->
   <script>
     let balance = 0;
     let subscribed = false;
     let task50Completed = false;
+    let highscore = 0;
+    let currentPage = "game"; // поточна сторінка
 
     // === Завантаження даних з localStorage ===
     window.onload = function () {
@@ -187,33 +196,40 @@
       if (localStorage.getItem("subscribed") === "true") {
         subscribed = true;
         let btn = document.getElementById("subscribeBtn");
-        btn.innerText = "Виконано";
-        btn.classList.add("done");
+        if (btn) {
+          btn.innerText = "Виконано";
+          btn.classList.add("done");
+        }
       }
       if (localStorage.getItem("task50Completed") === "true") {
         task50Completed = true;
         let btn = document.getElementById("checkTask50");
-        btn.innerText = "Виконано";
-        btn.classList.add("done");
+        if (btn) {
+          btn.innerText = "Виконано";
+          btn.classList.add("done");
+        }
+      }
+      if (localStorage.getItem("highscore")) {
+        highscore = parseInt(localStorage.getItem("highscore"));
+        document.getElementById("highscore").innerText = "🏆 " + highscore;
       }
     };
 
-    // === Зберігання даних у localStorage ===
     function saveData() {
       localStorage.setItem("balance", balance);
       localStorage.setItem("subscribed", subscribed);
       localStorage.setItem("task50Completed", task50Completed);
+      localStorage.setItem("highscore", highscore);
     }
 
-    // Переключення сторінок
     function showPage(id, btn) {
+      currentPage = id; // оновлюємо поточну сторінку
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.getElementById(id).classList.add('active');
       document.querySelectorAll('.menu button').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
     }
 
-    // Завдання "Підписка"
     function subscribe() {
       if (!subscribed) {
         window.open("https://t.me/stackofficialgame", "_blank");
@@ -222,22 +238,20 @@
         btn.classList.add("done");
         subscribed = true;
         addBalance(1);
-        saveData(); // зберігаємо після виконання
+        saveData();
       }
     }
 
-    // Додавання балансу
     function addBalance(amount) {
       balance += amount;
       document.getElementById("balance").innerText = balance;
-      saveData(); // зберігаємо після зміни балансу
+      saveData();
     }
 
-    // Завдання "Набери 50 очків"
+    // Завдання 50 очків
     document.getElementById("checkTask50").addEventListener("click", () => {
       let score = parseInt(document.getElementById("score").innerText);
       let btn = document.getElementById("checkTask50");
-
       if (score >= 50 && !task50Completed) {
         addBalance(10);
         btn.innerText = "Виконано";
@@ -248,6 +262,21 @@
         alert("❌ Твій результат замалий (потрібно 50+)");
       }
     });
+
+    // Оновлення рекорду
+    function updateHighscore(score) {
+      if (score > highscore) {
+        highscore = score;
+        document.getElementById("highscore").innerText = "🏆 " + highscore;
+        saveData();
+      }
+    }
+
+    // Перевірка перед стартом гри
+    function canStartGame() {
+      return currentPage === "game";
+    }
   </script>
 </body>
 </html>
+      
