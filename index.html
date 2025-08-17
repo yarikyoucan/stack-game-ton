@@ -81,15 +81,19 @@
       z-index: 1;
     }
     /* Рахунок */
-    #score {
+    #scoreboard {
       position: absolute;
       top: 10px;
       left: 10px;
+      display: flex;
+      gap: 10px;
+      z-index: 2;
+    }
+    #score, #highscore {
       background: rgba(0,0,0,0.5);
       color: #fff;
       padding: 5px 10px;
       border-radius: 6px;
-      z-index: 2;
     }
     /* Інструкція */
     #instructions {
@@ -123,7 +127,10 @@
   <!-- Сторінки -->
   <div id="game" class="page active">
     <div id="container">
-      <div id="score">0</div>
+      <div id="scoreboard">
+        <div id="score">0</div>
+        <div id="highscore">🏆 0</div>
+      </div>
       <div id="instructions">Клік або пробіл, щоб поставити блок, після завершення гри клацни по екрану, щоб зіграти ще</div>
       <div class="game-over">
         <h2>Гра закінчена</h2>
@@ -143,7 +150,7 @@
       <button id="subscribeBtn" onclick="subscribe()">Перейти</button>
     </div>
     <div class="task" id="task50">
-      <span>🎯 Набери 50 очків (+10⭐)</span>
+      <span>🎯 Досягни рекорду 50 (+10⭐)</span>
       <button id="checkTask50">Перевірити</button>
     </div>
   </div>
@@ -177,6 +184,7 @@
     let balance = 0;
     let subscribed = false;
     let task50Completed = false;
+    let highscore = 0;
 
     // === Завантаження даних з localStorage ===
     window.onload = function () {
@@ -196,6 +204,10 @@
         btn.innerText = "Виконано";
         btn.classList.add("done");
       }
+      if (localStorage.getItem("highscore")) {
+        highscore = parseInt(localStorage.getItem("highscore"));
+        document.getElementById("highscore").innerText = "🏆 " + highscore;
+      }
     };
 
     // === Зберігання даних у localStorage ===
@@ -203,6 +215,7 @@
       localStorage.setItem("balance", balance);
       localStorage.setItem("subscribed", subscribed);
       localStorage.setItem("task50Completed", task50Completed);
+      localStorage.setItem("highscore", highscore);
     }
 
     // Переключення сторінок
@@ -222,7 +235,7 @@
         btn.classList.add("done");
         subscribed = true;
         addBalance(1);
-        saveData(); // зберігаємо після виконання
+        saveData();
       }
     }
 
@@ -230,24 +243,34 @@
     function addBalance(amount) {
       balance += amount;
       document.getElementById("balance").innerText = balance;
-      saveData(); // зберігаємо після зміни балансу
+      saveData();
     }
 
-    // Завдання "Набери 50 очків"
+    // Завдання "Досягни рекорду 50"
     document.getElementById("checkTask50").addEventListener("click", () => {
-      let score = parseInt(document.getElementById("score").innerText);
       let btn = document.getElementById("checkTask50");
 
-      if (score >= 50 && !task50Completed) {
+      if (highscore >= 50 && !task50Completed) {
         addBalance(10);
         btn.innerText = "Виконано";
         btn.classList.add("done");
         task50Completed = true;
         saveData();
-      } else if (score < 50) {
-        alert("❌ Твій результат замалий (потрібно 50+)");
+      } else if (highscore < 50) {
+        alert("❌ Твій рекорд замалий (потрібно 50+)");
       }
     });
+
+    // Функція оновлення рекорду (викликай у script.js коли гра закінчується)
+    function updateHighscore(currentScore) {
+      if (currentScore > highscore) {
+        highscore = currentScore;
+        localStorage.setItem("highscore", highscore);
+        document.getElementById("highscore").innerText = "🏆 " + highscore;
+      }
+    }
   </script>
 </body>
 </html>
+
+
