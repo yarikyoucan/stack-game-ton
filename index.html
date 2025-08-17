@@ -199,35 +199,33 @@
     }
   </script>
 </body>
-<!-- Завдання -->
-<div id="task" style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
- background: rgba(0,0,0,0.7); color: white; padding: 15px 20px; border-radius: 10px;
- font-size: 18px; text-align: center; z-index: 100;">
-  🎯 Завдання: Набери <b>50</b> очків (+10⭐)
+<!-- Завдання 50 очків -->
+<div id="task50" style="margin-top:15px; padding:10px; border:1px solid #ccc; border-radius:8px; background:#f9f9f9;">
+  🎯 Набери <b>50</b> очків (+10⭐)
   <br>
-  <button id="checkTask" style="margin-top:10px; padding:8px 15px; font-size:16px; border:none;
+  <button id="checkTask50" style="margin-top:8px; padding:6px 12px; font-size:14px; border:none;
    border-radius:5px; background:#28a745; color:white; cursor:pointer;">
     Перевірити
   </button>
-  <div id="taskResult" style="margin-top:8px; font-size:16px; color:#00ff88;"></div>
+  <div id="task50Result" style="margin-top:6px; font-size:14px; color:#00aa55;"></div>
 </div>
 
 <script>
-  let taskCompleted = false; // щоб бонус не нараховувався двічі
+  let task50Completed = false; // щоб бонус не нараховувався двічі
 
-  document.getElementById("checkTask").addEventListener("click", () => {
+  document.getElementById("checkTask50").addEventListener("click", () => {
     let score = parseInt(document.getElementById("score").innerText);
-    let resultBox = document.getElementById("taskResult");
-    let balanceBox = document.getElementById("balance");
+    let resultBox = document.getElementById("task50Result");
+    let balanceBox = document.getElementById("balance"); // баланс у "Друзі"
 
-    if(score >= 50 && !taskCompleted){
+    if(score >= 50 && !task50Completed){
       // додаємо 10⭐ у баланс
       let currentBalance = parseInt(balanceBox.innerText.replace(/\D/g,'')) || 0;
       let newBalance = currentBalance + 10;
       balanceBox.innerText = "Баланс: " + newBalance + "⭐";
 
       resultBox.innerText = "✅ Завдання виконано! +10⭐";
-      taskCompleted = true; // щоб більше не зараховувало
+      task50Completed = true; // більше не зараховує
     } else if(score < 50) {
       resultBox.innerText = "❌ Твій результат замалий (потрібно 50+)";
     }
