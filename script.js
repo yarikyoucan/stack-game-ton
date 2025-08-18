@@ -40,16 +40,12 @@ function initLeaderboard() {
     tbody.appendChild(tr);
   }
 }
-
-/* у майбутньому: оновити топ — передай масив {name, score} */
 function updateLeaderboard(players = []) {
   const tbody = document.querySelector("#leaderboard tbody");
   if (!tbody) return;
-  // сортуємо за спаданням score
   players = players
     .filter(p => p && typeof p.score !== "undefined")
     .sort((a,b) => (b.score||0) - (a.score||0));
-
   for (let i = 0; i < 50; i++) {
     const row = tbody.rows[i];
     if (!row) break;
@@ -98,9 +94,13 @@ window.onload = function () {
   if (watchBtn) watchBtn.addEventListener("click", onWatchAdTaskClick);
   startTaskCooldownTicker();
 
-  // Лідерборд: створюємо 50 порожніх рядків
+  // Лідерборд
   initLeaderboard();
-  // (коли з’являться дані) updateLeaderboard([{name:"Player1", score:120}, ...]);
+
+  // Друзі: виставити значення поля та підв’язати копіювання
+  const link = "https://t.me/Stacktongame_bot";
+  if ($("shareLink")) $("shareLink").value = link;
+  if ($("copyShareBtn")) $("copyShareBtn").addEventListener("click", () => copyToClipboard(link));
 
   initAds();
   window.game = new Game();
@@ -207,6 +207,31 @@ function updateTaskCooldownUI(){
     btn.disabled = false;
     btnWrap.style.display = "flex";
     cdBox.style.display = "none";
+  }
+}
+
+/* ========= ДРУЗІ: відкриття/копіювання ========= */
+function openBotLink(e) {
+  e.preventDefault();
+  const url = "https://t.me/Stacktongame_bot";
+  if (window.Telegram?.WebApp?.openTelegramLink) {
+    Telegram.WebApp.openTelegramLink(url);
+  } else {
+    window.open(url, "_blank");
+  }
+}
+async function copyToClipboard(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = text; document.body.appendChild(ta);
+      ta.select(); document.execCommand("copy"); document.body.removeChild(ta);
+    }
+    alert("Скопійовано ✅");
+  } catch {
+    alert("Не вдалося скопіювати 😕");
   }
 }
 
@@ -458,10 +483,10 @@ class Game {
     const currentScore = parseInt(this.scoreEl.innerText, 10);
     updateHighscore(currentScore);
 
-    // === АВТОПОКАЗ РЕКЛАМИ ПІСЛЯ GAME OVER (один раз за завершення) ===
+    // автопоказ реклами після Game Over (один раз за завершення)
     if (!this.adShown){
       this.adShown = true;
-      await showInterstitialOnce(); // тут без нарахувань — винагорода тільки у завданні
+      await showInterstitialOnce();
     }
   }
 
