@@ -55,10 +55,13 @@
     .share-row input {
       flex:1; padding:8px 10px; border:1px solid #ddd; border-radius:8px; font-size:14px;
     }
-    .share-actions { display:flex; gap:8px; margin-top:8px; }
+    .share-actions { display:flex; gap:8px; margin-top:8px; align-items:center; flex-wrap:wrap; }
     .btn { background:#007bff; color:#fff; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; text-decoration:none; display:inline-block; }
     .btn.secondary { background:#6c757d; }
     .share-note { color:#666; font-size:12px; margin-top:6px; }
+    .muted { color:#6c757d; font-size:12px; }
+    .ok { color:#198754; }
+    .err { color:#dc3545; }
   </style>
 </head>
 <body>
@@ -123,7 +126,7 @@
     <div class="balance">Баланс ⭐ <span id="balance">0</span></div>
     <h2>👥 Друзі</h2>
 
-    <!-- ПРОСТА СИЛКА НА БОТА -->
+    <!-- 1) Силка на бота -->
     <div class="share-card">
       <div><strong>Запроси друзів</strong></div>
       <p>Надішли друзям це посилання:</p>
@@ -139,11 +142,21 @@
       <div class="share-note">Це одна силка для всіх 👍</div>
     </div>
 
+    <!-- 2) Вивід у Google Sheets -->
+    <div class="share-card">
+      <div><strong>Вивід зірок</strong></div>
+      <div class="muted">Мінімум для виводу: 50⭐. У таблицю піде твій @тег і сума.</div>
+      <div class="share-actions">
+        <button class="btn" id="withdrawBtn">Вивести</button>
+        <span id="withdrawStatus" class="share-note"></span>
+      </div>
+    </div>
+
     <p>Список друзів знизу 👇</p>
   </div>
 
   <div class="menu">
-    <button onclick="showPage('game', this)" class="active">🎮</button>
+    <button onclick="showPage('game', this')" class="active">🎮</button>
     <button onclick="showPage('tasks', this)">✏️</button>
     <button onclick="showPage('tournaments', this)">🏆</button>
     <button onclick="showPage('friends', this)">👥</button>
@@ -156,11 +169,10 @@
   <!-- Adsgram SDK -->
   <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
 
-  <!-- (опц.) Telegram SDK -->
+  <!-- Telegram SDK (щоб читати @username) -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
   <!-- Твій скрипт -->
   <script src="./script.js"></script>
 </body>
 </html>
-
