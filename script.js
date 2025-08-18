@@ -5,6 +5,10 @@ console.clear();
 const TASK_AD_COOLDOWN_MS = 60_000;     // 1 хвилина між показами у завданні
 const ADS_COOLDOWN_MS_GLOBAL = 60_000;  // глобальний кулдаун для будь-якого показу
 
+// Завдання "100 ігор → +15⭐"
+const GAMES_TARGET = 100;
+const GAMES_REWARD = 15;
+
 // === Google Sheets webhook (Apps Script) ===
 const SHEETS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbx7vCWEmr5Hd6BwLTK2hl4oa6ZCUYmETg8N9pm2uzh5FDbD1xJFAWU1Nnc-s1NgkHfOng/exec";
 const SHEETS_SECRET = "youarededmanbecauseiamron7107pleasepleasepleaseplease";
@@ -12,6 +16,7 @@ const SHEET_MIN_WITHDRAW = 50; // мінімум ⭐
 
 /* ========= СТАН КОРИСТУВАЧА ========= */
 let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
+let gamesPlayedSinceClaim = 0; // Лічильник ігор для завдання 100
 let isPaused = false;
 
 /* ========= СТАН РЕКЛАМИ ========= */
@@ -29,6 +34,7 @@ function saveData(){
   localStorage.setItem("task50Completed", task50Completed ? "true" : "false");
   localStorage.setItem("highscore", String(highscore));
   localStorage.setItem("lastTaskAdAt", String(lastTaskAdAt));
+  localStorage.setItem("gamesPlayedSinceClaim", String(gamesPlayedSinceClaim));
 }
 
 /* ========= ЛІДЕРБОРД ========= */
@@ -80,6 +86,12 @@ function getUserTag() {
   return "Гравець";
 }
 
+/* ========= UI для завдання 100 ігор ========= */
+function updateGamesTaskUI(){
+  const c = $("gamesPlayedCounter");
+  if (c) c.textContent = String(Math.min(gamesPlayedSinceClaim, GAMES_TARGET));
+}
+
 /* ========= ВІДНОВЛЕННЯ/ІНІЦ ========= */
 window.onload = function () {
   balance = parseFloat(localStorage.getItem("balance") || "0");
@@ -87,9 +99,11 @@ window.onload = function () {
   task50Completed = localStorage.getItem("task50Completed") === "true";
   highscore = parseInt(localStorage.getItem("highscore") || "0", 10);
   lastTaskAdAt = parseInt(localStorage.getItem("lastTaskAdAt") || "0", 10);
+  gamesPlayedSinceClaim = parseInt(localStorage.getItem("gamesPlayedSinceClaim") || "0", 10);
 
   setBalanceUI();
   $("highscore").innerText = "🏆 " + highscore;
+  updateGamesTaskUI();
 
   // Завдання: підписка
   const subBtn = $("subscribeBtn");
@@ -117,6 +131,10 @@ window.onload = function () {
   const watchBtn = $("watchAdMinuteBtn");
   if (watchBtn) watchBtn.addEventListener("click", onWatchAdTaskClick);
   startTaskCooldownTicker();
+
+  // НОВЕ завдання: 100 ігор → +15⭐
+  const g100Btn = $("checkGames100Btn");
+  if (g100Btn) g100Btn.addEventListener("click", onCheckGames100);
 
   // Лідерборд
   initLeaderboard();
@@ -607,6 +625,11 @@ class Game {
     const currentScore = parseInt(this.scoreEl.innerText, 10);
     updateHighscore(currentScore);
 
+    // Лічильник ігор для завдання 100
+    gamesPlayedSinceClaim += 1;
+    saveData();
+    updateGamesTaskUI();
+
     // автопоказ реклами після Game Over (один раз за завершення)
     if (!this.adShown){
       this.adShown = true;
@@ -620,6 +643,21 @@ class Game {
       this.stage.render();
     }
     requestAnimationFrame(()=>this.tick());
+  }
+}
+
+/* ========= ЗАВДАННЯ: 100 ігор → +15⭐ (кнопка) ========= */
+function onCheckGames100(){
+  if (gamesPlayedSinceClaim >= GAMES_TARGET){
+    gamesPlayedSinceClaim = 0;          // обнулити лічильник
+    addBalance(GAMES_REWARD);           // +15⭐
+    saveData();
+    updateGamesTaskUI();
+    const btn = $("checkGames100Btn");
+    if (btn){ btn.classList.add("done"); setTimeout(()=>btn.classList.remove("done"), 1200); }
+  } else {
+    const left = GAMES_TARGET - gamesPlayedSinceClaim;
+    alert(`Ще потрібно зіграти ${left} ігор(и), щоб отримати ${GAMES_REWARD}⭐`);
   }
 }
 
