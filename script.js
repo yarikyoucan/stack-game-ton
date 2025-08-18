@@ -1,30 +1,32 @@
 "use strict";
 console.clear();
 
-/* ====== КОНСТАНТИ ====== */
-const TASK_AD_COOLDOWN_MS = 60_000; // 1 хвилина між показами у завданні
-const ADS_COOLDOWN_MS_GLOBAL = 60_000; // перестраховка, щоб не спамити SDK
+/* ========= КОНСТАНТИ ========= */
+const TASK_AD_COOLDOWN_MS = 60_000;     // 1 хвилина між показами у завданні
+const ADS_COOLDOWN_MS_GLOBAL = 60_000;  // глобальний кулдаун для будь-якого показу
 
-/* ====== СТАН КОРИСТУВАЧА ====== */
+/* ========= СТАН КОРИСТУВАЧА ========= */
 let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
 let isPaused = false;
 
-/* ====== СТАН РЕКЛАМИ ====== */
+/* ========= СТАН РЕКЛАМИ ========= */
 let AdController = null;
-let lastGlobalAdAt = 0;      // глобальний кулдаун (будь-який показ)
-let lastTaskAdAt = 0;        // останній успішний показ у завданні (+0.2⭐)
+let lastGlobalAdAt = 0;   // глобальний кулдаун (щоб не спамити показами)
+let lastTaskAdAt = 0;     // останній успішний показ у завданні (+0.2⭐)
 
-/* ====== ХЕЛПЕРИ ====== */
+/* ========= ХЕЛПЕРИ ========= */
 function $(id){ return document.getElementById(id); }
-function formatStars(val){
-  const n = Number(val);
-  return Number.isInteger(n) ? String(n) : n.toFixed(1);
-}
-function setBalanceUI(){
-  $("balance").innerText = formatStars(balance);
+function formatStars(val){ const n = Number(val); return Number.isInteger(n) ? String(n) : n.toFixed(1); }
+function setBalanceUI(){ $("balance").innerText = formatStars(balance); }
+function saveData(){
+  localStorage.setItem("balance", String(balance));
+  localStorage.setItem("subscribed", subscribed ? "true" : "false");
+  localStorage.setItem("task50Completed", task50Completed ? "true" : "false");
+  localStorage.setItem("highscore", String(highscore));
+  localStorage.setItem("lastTaskAdAt", String(lastTaskAdAt));
 }
 
-/* ====== ВІДНОВЛЕННЯ/ЗБЕРЕЖЕННЯ ====== */
+/* ========= ВІДНОВЛЕННЯ/ІНІЦ ========= */
 window.onload = function () {
   balance = parseFloat(localStorage.getItem("balance") || "0");
   subscribed = localStorage.getItem("subscribed") === "true";
@@ -35,12 +37,14 @@ window.onload = function () {
   setBalanceUI();
   $("highscore").innerText = "🏆 " + highscore;
 
+  // Завдання: підписка
   const subBtn = $("subscribeBtn");
   if (subBtn) {
     if (subscribed) { subBtn.innerText = "Виконано"; subBtn.classList.add("done"); }
     subBtn.addEventListener("click", subscribe);
   }
 
+  // Завдання: рекорд 50
   const t50 = $("checkTask50");
   if (t50) {
     if (task50Completed) { t50.innerText = "Виконано"; t50.classList.add("done"); }
@@ -55,40 +59,21 @@ window.onload = function () {
     });
   }
 
+  // Завдання: +0.2⭐ раз на 1 хв
   const watchBtn = $("watchAdMinuteBtn");
-  if (watchBtn) {
-    watchBtn.addEventListener("click", onWatchAdTaskClick);
-  }
+  if (watchBtn) watchBtn.addEventListener("click", onWatchAdTaskClick);
   startTaskCooldownTicker();
 
   initAds();
   window.game = new Game();
 };
 
-function saveData(){
-  localStorage.setItem("balance", String(balance));
-  localStorage.setItem("subscribed", subscribed ? "true" : "false");
-  localStorage.setItem("task50Completed", task50Completed ? "true" : "false");
-  localStorage.setItem("highscore", String(highscore));
-  localStorage.setItem("lastTaskAdAt", String(lastTaskAdAt));
-}
+/* ========= БАЛАНС/ПІДПИСКА ========= */
 function addBalance(n){
   balance = parseFloat((balance + n).toFixed(2));
   setBalanceUI();
   saveData();
 }
-
-/* ====== Навігація по вкладках ====== */
-function showPage(id, btn){
-  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
-  $(id).classList.add("active");
-  document.querySelectorAll(".menu button").forEach(b => b.classList.remove("active"));
-  btn.classList.add("active");
-  isPaused = (id !== "game");
-}
-window.showPage = showPage;
-
-/* ====== ПІДПИСКА ====== */
 function subscribe(){
   if (subscribed) return;
   const url = "https://t.me/stackofficialgame";
@@ -99,20 +84,28 @@ function subscribe(){
   saveData();
 }
 
-/* ====== Adsgram INIT (підставлено int-13961) ====== */
+/* ========= Навігація по вкладках ========= */
+function showPage(id, btn){
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  $(id).classList.add("active");
+  document.querySelectorAll(".menu button").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  isPaused = (id !== "game");
+}
+window.showPage = showPage;
+
+/* ========= Adsgram INIT ========= */
 function initAds(){
   if (!window.Adsgram) { console.warn("Adsgram SDK не завантажився"); return; }
   AdController = window.Adsgram.init({
-    blockId: "int-13961", // <-- твій blockId
-    debug: true           // у проді постав false
+    blockId: "int-13961", // <-- твій блок
+    debug: true           // у проді вимкни (false)
     // debugBannerType: "FullscreenMedia" // (опц.) тестовий показ у debug
   });
 }
-function inTelegramWebApp() {
-  return !!(window.Telegram && window.Telegram.WebApp);
-}
+function inTelegramWebApp() { return !!(window.Telegram && window.Telegram.WebApp); }
 
-/* ====== Загальний показ інтерстішала (без нарахувань) ====== */
+/* Загальний показ інтерстішала (без нарахувань) */
 async function showInterstitialOnce(){
   if (!AdController)            return { shown:false, reason:"no_controller" };
   if (!inTelegramWebApp())      return { shown:false, reason:"not_telegram" };
@@ -132,7 +125,7 @@ async function showInterstitialOnce(){
   }
 }
 
-/* ====== ЛОГІКА ЗАВДАННЯ: 1 показ → +0.2⭐, раз на 1 хв ====== */
+/* ========= ЗАВДАННЯ: 1 показ → +0.2⭐, раз на 1 хв ========= */
 async function onWatchAdTaskClick(){
   const now = Date.now();
   const remaining = TASK_AD_COOLDOWN_MS - (now - lastTaskAdAt);
@@ -149,7 +142,7 @@ async function onWatchAdTaskClick(){
   }
 }
 
-/* Кулдаун-стікер: кожну секунду оновлюємо кнопку та таймер */
+/* Кулдаун-стікер: щосекунди оновлюємо кнопку та таймер */
 let taskCooldownTimer = null;
 function startTaskCooldownTicker(){
   if (taskCooldownTimer) clearInterval(taskCooldownTimer);
@@ -179,7 +172,7 @@ function updateTaskCooldownUI(){
   }
 }
 
-/* ====== 3D СЦЕНА + ЛОГІКА STACK ====== */
+/* ========= 3D СЦЕНА + ЛОГІКА STACK ========= */
 class Stage {
   constructor(){
     this.container = document.getElementById("container");
@@ -346,7 +339,8 @@ class Game {
     });
 
     $("start-button").addEventListener("click", ()=>this.onAction());
-    this.adShown = false;
+
+    this.adShown = false; // прапор: показати рекламу один раз за одне завершення
   }
 
   showReady(){ $("ready").style.display = "block"; $("gameOver").style.display = "none"; this.state = this.STATES.READY; }
@@ -367,7 +361,7 @@ class Game {
     this.hideOverlays();
     this.state = this.STATES.PLAYING;
     this.addBlock();
-    this.adShown = false;
+    this.adShown = false; // скидаємо прапорець на нову гру
   }
 
   restartGame(){
@@ -426,11 +420,12 @@ class Game {
     const currentScore = parseInt(this.scoreEl.innerText, 10);
     updateHighscore(currentScore);
 
-    // (опційно) автопоказ після Game Over:
-    // if (!this.adShown){
-    //   this.adShown = true;
-    //   await showInterstitialOnce();
-    // }
+    // === АВТОПОКАЗ РЕКЛАМИ ПІСЛЯ GAME OVER (один раз за завершення) ===
+    if (!this.adShown){
+      this.adShown = true;
+      await showInterstitialOnce(); // тут без нарахувань — винагорода тільки у завданні
+      // після показу користувач може натиснути щоб почати знову
+    }
   }
 
   tick(){
@@ -442,7 +437,7 @@ class Game {
   }
 }
 
-/* ====== ХАЙСКОР ====== */
+/* ========= ХАЙСКОР ========= */
 function updateHighscore(currentScore){
   if (currentScore > highscore){
     highscore = currentScore;
