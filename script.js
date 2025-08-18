@@ -26,6 +26,40 @@ function saveData(){
   localStorage.setItem("lastTaskAdAt", String(lastTaskAdAt));
 }
 
+/* ========= ЛІДЕРБОРД ========= */
+function initLeaderboard() {
+  const tbody = document.querySelector("#leaderboard tbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  for (let i = 1; i <= 50; i++) {
+    const tr = document.createElement("tr");
+    const tdRank  = document.createElement("td"); tdRank.textContent = String(i);
+    const tdName  = document.createElement("td"); tdName.textContent = "—";
+    const tdScore = document.createElement("td"); tdScore.textContent = "—";
+    tr.append(tdRank, tdName, tdScore);
+    tbody.appendChild(tr);
+  }
+}
+
+/* у майбутньому: оновити топ — передай масив {name, score} */
+function updateLeaderboard(players = []) {
+  const tbody = document.querySelector("#leaderboard tbody");
+  if (!tbody) return;
+  // сортуємо за спаданням score
+  players = players
+    .filter(p => p && typeof p.score !== "undefined")
+    .sort((a,b) => (b.score||0) - (a.score||0));
+
+  for (let i = 0; i < 50; i++) {
+    const row = tbody.rows[i];
+    if (!row) break;
+    const name  = players[i]?.name  ?? "—";
+    const score = (typeof players[i]?.score === "number") ? String(players[i].score) : "—";
+    row.cells[1].textContent = name;
+    row.cells[2].textContent = score;
+  }
+}
+
 /* ========= ВІДНОВЛЕННЯ/ІНІЦ ========= */
 window.onload = function () {
   balance = parseFloat(localStorage.getItem("balance") || "0");
@@ -63,6 +97,10 @@ window.onload = function () {
   const watchBtn = $("watchAdMinuteBtn");
   if (watchBtn) watchBtn.addEventListener("click", onWatchAdTaskClick);
   startTaskCooldownTicker();
+
+  // Лідерборд: створюємо 50 порожніх рядків
+  initLeaderboard();
+  // (коли з’являться дані) updateLeaderboard([{name:"Player1", score:120}, ...]);
 
   initAds();
   window.game = new Game();
@@ -424,7 +462,6 @@ class Game {
     if (!this.adShown){
       this.adShown = true;
       await showInterstitialOnce(); // тут без нарахувань — винагорода тільки у завданні
-      // після показу користувач може натиснути щоб почати знову
     }
   }
 
