@@ -33,6 +33,18 @@
       padding:20px; border-radius:10px; display:none; z-index:3; min-width:260px;
       box-shadow:0 2px 5px rgba(0,0,0,0.1);
     }
+
+    /* ===== Лідерборд ===== */
+    #leaderboard-wrapper { width:90%; margin:12px auto; overflow-x:auto; }
+    #leaderboard {
+      width:100%; border-collapse:collapse; background:#fff;
+      border-radius:10px; overflow:hidden; box-shadow:0 2px 5px rgba(0,0,0,0.1);
+    }
+    #leaderboard th, #leaderboard td { padding:10px 12px; border-bottom:1px solid #eee; }
+    #leaderboard thead th { background:#f7f7f7; text-align:left; }
+    #leaderboard tbody tr:nth-child(even) { background:#fafafa; }
+    #leaderboard td:first-child { width:56px; text-align:right; font-weight:600; color:#555; }
+    #leaderboard td:last-child { text-align:right; font-variant-numeric:tabular-nums; }
   </style>
 </head>
 <body>
@@ -82,8 +94,15 @@
   </div>
 
   <div id="tournaments" class="page">
-    <h2>🏆 Турніри</h2>
-    <p>Список топів👇(рекорд)</p>
+    <h2>🏆 Лідерборд (ТОП-50)</h2>
+    <div id="leaderboard-wrapper">
+      <table id="leaderboard">
+        <thead>
+          <tr><th>№</th><th>Гравець</th><th>Рекорд</th></tr>
+        </thead>
+        <tbody><!-- заповнюється з script.js --></tbody>
+      </table>
+    </div>
   </div>
 
   <div id="friends" class="page">
@@ -113,4 +132,3 @@
   <script src="./script.js"></script>
 </body>
 </html>
-
