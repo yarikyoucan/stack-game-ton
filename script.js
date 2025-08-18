@@ -5,6 +5,11 @@ console.clear();
 const TASK_AD_COOLDOWN_MS = 60_000;     // 1 хвилина між показами у завданні
 const ADS_COOLDOWN_MS_GLOBAL = 60_000;  // глобальний кулдаун для будь-якого показу
 
+// === Google Sheets webhook (Apps Script) ===
+const SHEETS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbx7vCWEmr5Hd6BwLTK2hl4oa6ZCUYmETg8N9pm2uzh5FDbD1xJFAWU1Nnc-s1NgkHfOng/exec";
+const SHEETS_SECRET = "youarededmanbecauseiamron7107pleasepleasepleaseplease";
+const SHEET_MIN_WITHDRAW = 50; // мінімум ⭐
+
 /* ========= СТАН КОРИСТУВАЧА ========= */
 let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
 let isPaused = false;
@@ -56,6 +61,25 @@ function updateLeaderboard(players = []) {
   }
 }
 
+/* ========= TELEGRAM USER ========= */
+function getTelegramUser() {
+  const u = (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user) || null;
+  if (!u) return { id: "", username: "", first_name: "", last_name: "" };
+  return {
+    id: u.id || "",
+    username: u.username || "",
+    first_name: u.first_name || "",
+    last_name: u.last_name || ""
+  };
+}
+function getUserTag() {
+  const u = getTelegramUser();
+  if (u.username) return "@" + u.username;
+  if (u.first_name || u.last_name) return (u.first_name || "") + (u.last_name ? (" " + u.last_name) : "");
+  if (u.id) return "id" + u.id;
+  return "Гравець";
+}
+
 /* ========= ВІДНОВЛЕННЯ/ІНІЦ ========= */
 window.onload = function () {
   balance = parseFloat(localStorage.getItem("balance") || "0");
@@ -97,10 +121,14 @@ window.onload = function () {
   // Лідерборд
   initLeaderboard();
 
-  // Друзі: виставити значення поля та підв’язати копіювання
+  // Друзі: лінк на бота та копіювання
   const link = "https://t.me/Stacktongame_bot";
   if ($("shareLink")) $("shareLink").value = link;
   if ($("copyShareBtn")) $("copyShareBtn").addEventListener("click", () => copyToClipboard(link));
+
+  // Вивід у Google Sheets
+  const withdrawBtn = $("withdrawBtn");
+  if (withdrawBtn) withdrawBtn.addEventListener("click", withdrawToSheets);
 
   initAds();
   window.game = new Game();
@@ -138,7 +166,7 @@ function initAds(){
   AdController = window.Adsgram.init({
     blockId: "int-13961", // <-- твій блок
     debug: true           // у проді вимкни (false)
-    // debugBannerType: "FullscreenMedia" // (опц.) тестовий показ у debug
+    // debugBannerType: "FullscreenMedia"
   });
 }
 function inTelegramWebApp() { return !!(window.Telegram && window.Telegram.WebApp); }
@@ -152,7 +180,7 @@ async function showInterstitialOnce(){
     return { shown:false, reason:"global_cooldown" };
   }
   try {
-    const res = await AdController.show();   // { done, state, description, error }
+    const res = await AdController.show();
     console.log("Interstitial result:", res);
     lastGlobalAdAt = Date.now();
     if (res && res.done) return { shown:true };
@@ -172,7 +200,7 @@ async function onWatchAdTaskClick(){
   const res = await showInterstitialOnce();
   if (res.shown) {
     lastTaskAdAt = Date.now();
-    addBalance(0.2);   // +0.2⭐ за кожен успішний перегляд у ЗАВДАННІ
+    addBalance(0.2);
     saveData();
     updateTaskCooldownUI();
   } else {
@@ -232,6 +260,74 @@ async function copyToClipboard(text) {
     alert("Скопійовано ✅");
   } catch {
     alert("Не вдалося скопіювати 😕");
+  }
+}
+
+/* ========= ВИВІД У GOOGLE SHEETS ========= */
+let withdrawLock = false;
+async function withdrawToSheets(){
+  if (withdrawLock) return;
+  const statusEl = $("withdrawStatus");
+  statusEl.className = "share-note muted";
+  statusEl.textContent = "";
+
+  const amount = Number(balance.toFixed(2));
+  if (amount < SHEET_MIN_WITHDRAW) {
+    statusEl.className = "share-note err";
+    statusEl.textContent = `Мінімум для виводу: ${SHEET_MIN_WITHDRAW}⭐`;
+    return;
+  }
+  if (!SHEETS_WEBHOOK_URL || SHEETS_WEBHOOK_URL.startsWith("PASTE_")) {
+    statusEl.className = "share-note err";
+    statusEl.textContent = "Не налаштовано webhook URL.";
+    return;
+  }
+
+  const user = getTelegramUser();
+  const tag = getUserTag();
+
+  // Формуємо POST-форму (x-www-form-urlencoded), щоб не було preflight CORS
+  const payload = new URLSearchParams({
+    secret: SHEETS_SECRET,
+    tag: tag,
+    tg_id: String(user.id || ""),
+    amount: String(amount),
+    highscore: String(highscore || ""),
+    timestamp: new Date().toISOString()
+  });
+
+  const btn = $("withdrawBtn");
+  withdrawLock = true;
+  btn.disabled = true;
+  statusEl.className = "share-note muted";
+  statusEl.textContent = "Відправляю…";
+
+  try {
+    const res = await fetch(SHEETS_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+      body: payload
+    });
+
+    if (res.ok) {
+      // списуємо ВСЮ суму
+      balance = 0;
+      setBalanceUI();
+      saveData();
+
+      statusEl.className = "share-note ok";
+      statusEl.textContent = "Успіх! Запис додано, баланс обнулено.";
+    } else {
+      statusEl.className = "share-note err";
+      statusEl.textContent = "Помилка сервера при записі.";
+    }
+  } catch (e) {
+    console.error(e);
+    statusEl.className = "share-note err";
+    statusEl.textContent = "Не вдалося підключитися до вебхука.";
+  } finally {
+    withdrawLock = false;
+    btn.disabled = false;
   }
 }
 
