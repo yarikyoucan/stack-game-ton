@@ -17,7 +17,6 @@ let lastTaskAdAt = 0;        // останній успішний показ у 
 /* ====== ХЕЛПЕРИ ====== */
 function $(id){ return document.getElementById(id); }
 function formatStars(val){
-  // показуємо без зайвих нулів: 12 або 12.2
   const n = Number(val);
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
@@ -36,14 +35,12 @@ window.onload = function () {
   setBalanceUI();
   $("highscore").innerText = "🏆 " + highscore;
 
-  // Завдання: підписка
   const subBtn = $("subscribeBtn");
   if (subBtn) {
     if (subscribed) { subBtn.innerText = "Виконано"; subBtn.classList.add("done"); }
     subBtn.addEventListener("click", subscribe);
   }
 
-  // Завдання: рекорд 50
   const t50 = $("checkTask50");
   if (t50) {
     if (task50Completed) { t50.innerText = "Виконано"; t50.classList.add("done"); }
@@ -58,17 +55,16 @@ window.onload = function () {
     });
   }
 
-  // Завдання: 1 показ реклами → +0.2⭐ (раз на хвилину)
   const watchBtn = $("watchAdMinuteBtn");
   if (watchBtn) {
     watchBtn.addEventListener("click", onWatchAdTaskClick);
   }
-  // запускаємо тікер кулдауну для завдання
   startTaskCooldownTicker();
 
   initAds();
   window.game = new Game();
 };
+
 function saveData(){
   localStorage.setItem("balance", String(balance));
   localStorage.setItem("subscribed", subscribed ? "true" : "false");
@@ -77,7 +73,7 @@ function saveData(){
   localStorage.setItem("lastTaskAdAt", String(lastTaskAdAt));
 }
 function addBalance(n){
-  balance = parseFloat((balance + n).toFixed(2)); // акуратно з плаваючою крапкою
+  balance = parseFloat((balance + n).toFixed(2));
   setBalanceUI();
   saveData();
 }
@@ -103,12 +99,12 @@ function subscribe(){
   saveData();
 }
 
-/* ====== Adsgram INIT (вписати свій blockId) ====== */
+/* ====== Adsgram INIT (підставлено int-13961) ====== */
 function initAds(){
   if (!window.Adsgram) { console.warn("Adsgram SDK не завантажився"); return; }
   AdController = window.Adsgram.init({
-    blockId: "REPLACE_ME", // <-- ВПИШИ СВІЙ BLOCK ID (наприклад, int-13956)
-    debug: true            // у проді постав false
+    blockId: "int-13961", // <-- твій blockId
+    debug: true           // у проді постав false
     // debugBannerType: "FullscreenMedia" // (опц.) тестовий показ у debug
   });
 }
@@ -140,21 +136,16 @@ async function showInterstitialOnce(){
 async function onWatchAdTaskClick(){
   const now = Date.now();
   const remaining = TASK_AD_COOLDOWN_MS - (now - lastTaskAdAt);
-  if (remaining > 0) {
-    // заблокуємо кнопку/оновимо UI через тікер, тут просто захист
-    return;
-  }
+  if (remaining > 0) return;
 
   const res = await showInterstitialOnce();
   if (res.shown) {
     lastTaskAdAt = Date.now();
     addBalance(0.2);   // +0.2⭐ за кожен успішний перегляд у ЗАВДАННІ
     saveData();
-    // одразу оновимо UI кулдауну
     updateTaskCooldownUI();
   } else {
     console.log("Ad not shown (task):", res.reason);
-    // alert("Зараз реклама недоступна. Спробуй пізніше.");
   }
 }
 
@@ -163,29 +154,27 @@ let taskCooldownTimer = null;
 function startTaskCooldownTicker(){
   if (taskCooldownTimer) clearInterval(taskCooldownTimer);
   taskCooldownTimer = setInterval(updateTaskCooldownUI, 1000);
-  updateTaskCooldownUI(); // миттєве оновлення при завантаженні
+  updateTaskCooldownUI();
 }
 function updateTaskCooldownUI(){
+  const btnWrap = $("taskAdOncePerMinute");
   const btn = $("watchAdMinuteBtn");
   const cdBox = $("taskAdStatus");
   const cdText = $("adCooldownText");
+  if (!btnWrap || !btn || !cdBox || !cdText) return;
+
   const now = Date.now();
   const remaining = Math.max(0, TASK_AD_COOLDOWN_MS - (now - lastTaskAdAt));
 
-  if (!btn || !cdBox || !cdText) return;
-
   if (remaining > 0) {
-    // показуємо бокс “очікуй…”, кнопку ховаємо
     btn.disabled = true;
-    $("taskAdOncePerMinute").style.display = "none";
+    btnWrap.style.display = "none";
     cdBox.style.display = "flex";
-    // форматування у секундах
     const sec = Math.ceil(remaining / 1000);
     cdText.innerText = sec + "с";
   } else {
-    // можна дивитися знову
     btn.disabled = false;
-    $("taskAdOncePerMinute").style.display = "flex";
+    btnWrap.style.display = "flex";
     cdBox.style.display = "none";
   }
 }
@@ -357,7 +346,7 @@ class Game {
     });
 
     $("start-button").addEventListener("click", ()=>this.onAction());
-    this.adShown = false; // (залишимо прапор, якщо захочеш автопоказ після Game Over)
+    this.adShown = false;
   }
 
   showReady(){ $("ready").style.display = "block"; $("gameOver").style.display = "none"; this.state = this.STATES.READY; }
@@ -437,7 +426,7 @@ class Game {
     const currentScore = parseInt(this.scoreEl.innerText, 10);
     updateHighscore(currentScore);
 
-    // (опційно) якщо хочеш автопоказ після Game Over без бонусів:
+    // (опційно) автопоказ після Game Over:
     // if (!this.adShown){
     //   this.adShown = true;
     //   await showInterstitialOnce();
