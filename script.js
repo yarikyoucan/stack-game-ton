@@ -8,7 +8,7 @@ const ADS_COOLDOWN_MS_GLOBAL = 60_000;  // глобальний кулдаун �
 // === Google Sheets webhook (Apps Script) ===
 const SHEETS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbx7vCWEmr5Hd6BwLTK2hl4oa6ZCUYmETg8N9pm2uzh5FDbD1xJFAWU1Nnc-s1NgkHfOng/exec";
 const SHEETS_SECRET = "youarededmanbecauseiamron7107pleasepleasepleaseplease";
-const SHEET_MIN_WITHDRAW = 50; // мінімум ⭐
+const SHEET_MIN_WITHDRAW = 1; // мінімум ⭐
 
 /* ========= СТАН КОРИСТУВАЧА ========= */
 let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
