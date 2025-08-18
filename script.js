@@ -8,7 +8,7 @@ const ADS_COOLDOWN_MS_GLOBAL = 60_000;  // глобальний кулдаун �
 // === Google Sheets webhook (Apps Script) ===
 const SHEETS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbx7vCWEmr5Hd6BwLTK2hl4oa6ZCUYmETg8N9pm2uzh5FDbD1xJFAWU1Nnc-s1NgkHfOng/exec";
 const SHEETS_SECRET = "youarededmanbecauseiamron7107pleasepleasepleaseplease";
-const SHEET_MIN_WITHDRAW = 1; // мінімум ⭐
+const SHEET_MIN_WITHDRAW = 50; // мінімум ⭐
 
 /* ========= СТАН КОРИСТУВАЧА ========= */
 let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
@@ -131,7 +131,9 @@ window.onload = function () {
   if (withdrawBtn) withdrawBtn.addEventListener("click", withdrawToSheets);
 
   initAds();
-  window.game = new Game();
+
+  // FIX: уникаємо колізії з id="game"
+  window.stackGame = new Game();
 };
 
 /* ========= БАЛАНС/ПІДПИСКА ========= */
@@ -164,7 +166,7 @@ window.showPage = showPage;
 function initAds(){
   if (!window.Adsgram) { console.warn("Adsgram SDK не завантажився"); return; }
   AdController = window.Adsgram.init({
-    blockId: "int-13961", // <-- твій блок
+    blockId: "int-13961", // твій блок
     debug: true           // у проді вимкни (false)
     // debugBannerType: "FullscreenMedia"
   });
@@ -259,11 +261,11 @@ async function copyToClipboard(text) {
     }
     alert("Скопійовано ✅");
   } catch {
-    alert("Не вдалося скопіювати 😕");
+    alert("Не вдалося копіювати 😕");
   }
 }
 
-/* ========= ВИВІД У GOOGLE SHEETS ========= */
+/* ========= ВИВІД У GOOGLE SHEETS (з CORS-fallback) ========= */
 let withdrawLock = false;
 async function withdrawToSheets(){
   if (withdrawLock) return;
@@ -285,8 +287,6 @@ async function withdrawToSheets(){
 
   const user = getTelegramUser();
   const tag = getUserTag();
-
-  // Формуємо POST-форму (x-www-form-urlencoded), щоб не було preflight CORS
   const payload = new URLSearchParams({
     secret: SHEETS_SECRET,
     tag: tag,
@@ -303,6 +303,7 @@ async function withdrawToSheets(){
   statusEl.textContent = "Відправляю…";
 
   try {
+    // 1) Нормальний POST
     const res = await fetch(SHEETS_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
@@ -310,21 +311,48 @@ async function withdrawToSheets(){
     });
 
     if (res.ok) {
-      // списуємо ВСЮ суму
-      balance = 0;
-      setBalanceUI();
-      saveData();
-
+      balance = 0; setBalanceUI(); saveData();
       statusEl.className = "share-note ok";
       statusEl.textContent = "Успіх! Запис додано, баланс обнулено.";
     } else {
       statusEl.className = "share-note err";
       statusEl.textContent = "Помилка сервера при записі.";
     }
+
   } catch (e) {
-    console.error(e);
-    statusEl.className = "share-note err";
-    statusEl.textContent = "Не вдалося підключитися до вебхука.";
+    console.warn("CORS/мережа, пробуємо інші варіанти:", e);
+
+    // 2) sendBeacon — не конфліктує з CORS
+    const beaconData = new Blob([payload.toString()], {
+      type: "application/x-www-form-urlencoded;charset=UTF-8"
+    });
+    let delivered = false;
+    if (navigator.sendBeacon) {
+      delivered = navigator.sendBeacon(SHEETS_WEBHOOK_URL, beaconData);
+    }
+
+    if (delivered) {
+      balance = 0; setBalanceUI(); saveData();
+      statusEl.className = "share-note ok";
+      statusEl.textContent = "Відправлено (beacon). Перевір таблицю.";
+    } else {
+      // 3) no-cors — остання спроба
+      try {
+        await fetch(SHEETS_WEBHOOK_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+          body: payload
+        });
+        balance = 0; setBalanceUI(); saveData();
+        statusEl.className = "share-note ok";
+        statusEl.textContent = "Відправлено (no-cors). Перевір таблицю.";
+      } catch (e2) {
+        console.error(e2);
+        statusEl.className = "share-note err";
+        statusEl.textContent = "Не вдалося надіслати (мережа/CORS).";
+      }
+    }
   } finally {
     withdrawLock = false;
     btn.disabled = false;
