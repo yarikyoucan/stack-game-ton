@@ -45,6 +45,20 @@
     #leaderboard tbody tr:nth-child(even) { background:#fafafa; }
     #leaderboard td:first-child { width:56px; text-align:right; font-weight:600; color:#555; }
     #leaderboard td:last-child { text-align:right; font-variant-numeric:tabular-nums; }
+
+    /* ===== Share box (Друзі) ===== */
+    .share-card {
+      width:90%; margin:12px auto; background:#fff; border-radius:10px;
+      box-shadow:0 2px 5px rgba(0,0,0,0.1); padding:16px;
+    }
+    .share-row { display:flex; gap:8px; margin-top:8px; }
+    .share-row input {
+      flex:1; padding:8px 10px; border:1px solid #ddd; border-radius:8px; font-size:14px;
+    }
+    .share-actions { display:flex; gap:8px; margin-top:8px; }
+    .btn { background:#007bff; color:#fff; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; text-decoration:none; display:inline-block; }
+    .btn.secondary { background:#6c757d; }
+    .share-note { color:#666; font-size:12px; margin-top:6px; }
   </style>
 </head>
 <body>
@@ -100,7 +114,7 @@
         <thead>
           <tr><th>№</th><th>Гравець</th><th>Рекорд</th></tr>
         </thead>
-        <tbody><!-- заповнюється з script.js --></tbody>
+        <tbody><!-- генерується у script.js --></tbody>
       </table>
     </div>
   </div>
@@ -108,6 +122,23 @@
   <div id="friends" class="page">
     <div class="balance">Баланс ⭐ <span id="balance">0</span></div>
     <h2>👥 Друзі</h2>
+
+    <!-- ПРОСТА СИЛКА НА БОТА -->
+    <div class="share-card">
+      <div><strong>Запроси друзів</strong></div>
+      <p>Надішли друзям це посилання:</p>
+      <p style="margin:8px 0;">
+        <a href="https://t.me/Stacktongame_bot" class="btn" onclick="openBotLink(event)">
+          ➡ Відкрити бота @Stacktongame_bot
+        </a>
+      </p>
+      <div class="share-row">
+        <input id="shareLink" type="text" readonly value="https://t.me/Stacktongame_bot"/>
+        <button class="btn" id="copyShareBtn">Скопіювати</button>
+      </div>
+      <div class="share-note">Це одна силка для всіх 👍</div>
+    </div>
+
     <p>Список друзів знизу 👇</p>
   </div>
 
@@ -132,3 +163,4 @@
   <script src="./script.js"></script>
 </body>
 </html>
+
