@@ -4,98 +4,40 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Stack Game</title>
-
   <style>
-    body {
-      margin:0;
-      font-family:Arial, sans-serif;
-      background:#f4f4f4;
-      display:flex;
-      flex-direction:column;
-      height:100vh;
-      /* щоб fixed-меню не перекривало контент */
-      padding-bottom: 64px;
-    }
-
-    .page { flex:1; display:none; overflow:auto; padding:10px; }
-    .page.active { display:block; }
-
-    /* меню поверх canvas і завжди клікабельне */
-    .menu {
-      display:flex;
-      justify-content:space-around;
-      border-top:1px solid #ccc;
-      background:#fff;
-      padding:10px 0;
-      position: fixed;
-      left:0; right:0; bottom:0;
-      z-index: 9999;
-    }
-    .menu button { flex:1; background:none; border:none; font-size:22px; cursor:pointer; }
-    .menu button.active { color:green; font-weight:bold; }
-
-    .task {
-      display:flex; justify-content:space-between; align-items:center;
-      background:#fff; padding:15px; margin:10px auto; border-radius:10px; width:90%;
-      box-shadow:0 2px 5px rgba(0,0,0,0.1);
-    }
-    .task button { background:#007bff; color:#fff; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; }
-    .task button.done { background:#28a745; }
-    .task button:disabled { opacity:0.6; cursor:not-allowed; }
-
-    .balance { font-size:20px; margin-bottom:20px; text-align:center; }
-
-    #container { position:relative; width:100%; height:100%; overflow:hidden; background:#d0cbc7; }
-    #container canvas { position:absolute !important; top:0; left:0; width:100% !important; height:100% !important; z-index:1; }
-
-    #scoreboard { position:absolute; top:10px; left:10px; display:flex; gap:10px; z-index:2; }
-    #score, #highscore { background:rgba(0,0,0,0.5); color:#fff; padding:5px 10px; border-radius:6px; }
-
-    #instructions {
-      position:absolute; top:50px; left:10px; color:#000; font-size:16px;
-      background:rgba(255,255,255,0.7); padding:4px 8px; border-radius:6px; z-index:2;
-    }
-    .hide { display:none; }
-
-    .game-over, .ready {
-      position:absolute; top:50%; left:50%; transform:translate(-50%, -50%);
-      text-align:center; background:rgba(255,255,255,0.95);
-      padding:20px; border-radius:10px; display:none; z-index:3; min-width:260px;
-      box-shadow:0 2px 5px rgba(0,0,0,0.1);
-    }
-
-    /* ===== Лідерборд ===== */
-    #leaderboard-wrapper { width:90%; margin:12px auto; overflow-x:auto; }
-    #leaderboard {
-      width:100%; border-collapse:collapse; background:#fff;
-      border-radius:10px; overflow:hidden; box-shadow:0 2px 5px rgba(0,0,0,0.1);
-    }
-    #leaderboard th, #leaderboard td { padding:10px 12px; border-bottom:1px solid #eee; }
-    #leaderboard thead th { background:#f7f7f7; text-align:left; }
-    #leaderboard tbody tr:nth-child(even) { background:#fafafa; }
-    #leaderboard td:first-child { width:56px; text-align:right; font-weight:600; color:#555; }
-    #leaderboard td:last-child { text-align:right; font-variant-numeric:tabular-nums; }
-
-    /* ===== Share box (Друзі) ===== */
-    .share-card {
-      width:90%; margin:12px auto; background:#fff; border-radius:10px;
-      box-shadow:0 2px 5px rgba(0,0,0,0.1); padding:16px;
-    }
-    .share-row { display:flex; gap:8px; margin-top:8px; }
-    .share-row input {
-      flex:1; padding:8px 10px; border:1px solid #ddd; border-radius:8px; font-size:14px;
-    }
-    .share-actions { display:flex; gap:8px; margin-top:8px; align-items:center; flex-wrap:wrap; }
-    .btn { background:#007bff; color:#fff; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; text-decoration:none; display:inline-block; }
-    .btn.secondary { background:#6c757d; }
-    .share-note { color:#666; font-size:12px; margin-top:6px; }
-    .muted { color:#6c757d; font-size:12px; }
-    .ok { color:#198754; }
-    .err { color:#dc3545; }
+    body{margin:0;font-family:Arial,sans-serif;background:#f4f4f4;display:flex;flex-direction:column;height:100vh;padding-bottom:64px}
+    .page{flex:1;display:none;overflow:auto;padding:10px}.page.active{display:block}
+    .menu{display:flex;justify-content:space-around;border-top:1px solid #ccc;background:#fff;padding:10px 0;position:fixed;left:0;right:0;bottom:0;z-index:9999}
+    .menu button{flex:1;background:none;border:none;font-size:22px;cursor:pointer}.menu button.active{color:green;font-weight:bold}
+    .task{display:flex;justify-content:space-between;align-items:center;background:#fff;padding:15px;margin:10px auto;border-radius:10px;width:90%;box-shadow:0 2px 5px rgba(0,0,0,.1)}
+    .task button{background:#007bff;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}.task button.done{background:#28a745}.task button:disabled{opacity:.6;cursor:not-allowed}
+    .balance{font-size:20px;margin-bottom:20px;text-align:center}
+    #container{position:relative;width:100%;height:100%;overflow:hidden;background:#d0cbc7}
+    #container canvas{position:absolute!important;top:0;left:0;width:100%!important;height:100%!important;z-index:1}
+    #scoreboard{position:absolute;top:10px;left:10px;display:flex;gap:10px;z-index:2}
+    #score,#highscore{background:rgba(0,0,0,.5);color:#fff;padding:5px 10px;border-radius:6px}
+    #instructions{position:absolute;top:50px;left:10px;color:#000;font-size:16px;background:rgba(255,255,255,.7);padding:4px 8px;border-radius:6px;z-index:2}
+    .hide{display:none}
+    .game-over,.ready{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;background:rgba(255,255,255,.95);padding:20px;border-radius:10px;display:none;z-index:3;min-width:260px;box-shadow:0 2px 5px rgba(0,0,0,.1)}
+    #leaderboard-wrapper{width:90%;margin:12px auto;overflow-x:auto}
+    #leaderboard{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 5px rgba(0,0,0,.1)}
+    #leaderboard th,#leaderboard td{padding:10px 12px;border-bottom:1px solid #eee}
+    #leaderboard thead th{background:#f7f7f7;text-align:left}
+    #leaderboard tbody tr:nth-child(even){background:#fafafa}
+    #leaderboard td:first-child{width:56px;text-align:right;font-weight:600;color:#555}
+    #leaderboard td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+    .share-card{width:90%;margin:12px auto;background:#fff;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,.1);padding:16px}
+    .share-row{display:flex;gap:8px;margin-top:8px}
+    .share-row input{flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px}
+    .share-actions{display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap}
+    .btn{background:#007bff;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;text-decoration:none;display:inline-block}
+    .muted{color:#6c757d;font-size:12px}
+    .ok{color:#198754}.err{color:#dc3545}
   </style>
 </head>
 <body>
 
+  <!-- GAME -->
   <div id="game" class="page active">
     <div id="container">
       <div id="scoreboard">
@@ -116,6 +58,7 @@
     </div>
   </div>
 
+  <!-- TASKS -->
   <div id="tasks" class="page">
     <h2>📋 Завдання</h2>
 
@@ -129,7 +72,6 @@
       <button id="checkTask50">Перевірити</button>
     </div>
 
-    <!-- Завдання: 1 перегляд реклами = +0.2⭐ (раз на 1 хв) -->
     <div class="task" id="taskAdOncePerMinute">
       <span>🎬 Переглянь рекламу +0.2⭐ <small>(раз на 1 хв)</small></span>
       <button id="watchAdMinuteBtn">Дивитись</button>
@@ -139,13 +81,13 @@
       <button disabled>Очікуй…</button>
     </div>
 
-    <!-- Завдання: 100 ігор → +15⭐ -->
     <div class="task" id="taskGames100">
       <span>🎮 Зіграй 100 ігор (+15⭐) — зіграно: <b id="gamesPlayedCounter">0</b>/100</span>
       <button id="checkGames100Btn">Перевірити</button>
     </div>
   </div>
 
+  <!-- TOURNAMENTS -->
   <div id="tournaments" class="page">
     <h2>🏆 Лідерборд (ТОП-50)</h2>
     <div id="leaderboard-wrapper">
@@ -153,19 +95,19 @@
         <thead>
           <tr><th>№</th><th>Гравець</th><th>Рекорд</th></tr>
         </thead>
-        <tbody><!-- генерується у script.js --></tbody>
+        <tbody></tbody>
       </table>
     </div>
   </div>
 
+  <!-- FRIENDS -->
   <div id="friends" class="page">
     <div class="balance">Баланс ⭐ <span id="balance">0</span></div>
     <h2>👥 Друзі</h2>
 
-    <!-- 1) Силка на бота -->
     <div class="share-card">
       <div><strong>Запроси друзів</strong></div>
-      <p>Надішли друзям це посилання:</p>
+      <p>Посилання на бота:</p>
       <p style="margin:8px 0;">
         <a href="https://t.me/Stacktongame_bot" class="btn" onclick="openBotLink(event)">
           ➡ Відкрити бота @Stacktongame_bot
@@ -175,22 +117,22 @@
         <input id="shareLink" type="text" readonly value="https://t.me/Stacktongame_bot"/>
         <button class="btn" id="copyShareBtn">Скопіювати</button>
       </div>
-      <div class="share-note">Це одна силка для всіх 👍</div>
+      <div class="muted">Це одна силка для всіх 👍</div>
     </div>
 
-    <!-- 2) Вивід у Google Sheets -->
     <div class="share-card">
       <div><strong>Вивід зірок</strong></div>
-      <div class="muted">Мінімум для виводу: 50⭐. У таблицю піде твій @тег і сума.</div>
+      <div class="muted">За натискання списується рівно 50⭐, решта лишається. Далі відкриється вікно “Поділитися” з готовим повідомленням і кодом.</div>
       <div class="share-actions">
         <button class="btn" id="withdrawBtn">Вивести</button>
-        <span id="withdrawStatus" class="share-note"></span>
+        <span id="withdrawStatus" class="muted"></span>
       </div>
     </div>
 
     <p>Список друзів знизу 👇</p>
   </div>
 
+  <!-- BOTTOM MENU -->
   <div class="menu">
     <button onclick="showPage('game', this)" class="active">🎮</button>
     <button onclick="showPage('tasks', this)">✏️</button>
@@ -198,18 +140,11 @@
     <button onclick="showPage('friends', this)">👥</button>
   </div>
 
-  <!-- Three r83 + TweenMax -->
+  <!-- Libs -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r83/three.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/latest/TweenMax.min.js"></script>
-
-  <!-- Adsgram SDK -->
   <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
-
-  <!-- Telegram SDK (щоб читати @username) -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
-  <!-- Твій скрипт -->
   <script src="./script.js"></script>
 </body>
 </html>
-
