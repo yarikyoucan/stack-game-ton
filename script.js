@@ -6,7 +6,7 @@ const TASK_AD_COOLDOWN_MS = 60_000;   // завдання: 1 показ/хв
 const ADS_COOLDOWN_MS_GLOBAL = 60_000; // глобальна затримка між показами
 const GAMES_TARGET = 100;             // кожні 100 ігор
 const GAMES_REWARD = 15;              // +15⭐ за 100 ігор
-const WITHDRAW_CHUNK = 50;            // списуємо рівно 50⭐
+const WITHDRAW_CHUNK = 0.1;            // списуємо рівно 50⭐
 const ADSGRAM_BLOCK_ID = "int-13961"; // твій Adsgram блок
 
 // Куди відкрити користувача при виводі (щоб сам надіслав повідомлення)
