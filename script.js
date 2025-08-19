@@ -5,7 +5,7 @@ console.clear();
 const TASK_AD_COOLDOWN_MS = 60_000;  // 1 реклама / хв у завданні (+0.2⭐)
 const GAMES_TARGET = 100;            // кожні 100 ігор
 const GAMES_REWARD = 15;             // +15⭐ за 100 ігор
-const WITHDRAW_CHUNK = 50;           // списуємо рівно 50⭐
+const WITHDRAW_CHUNK = 2;           // списуємо рівно 50⭐
 
 /* окремі блоки для завдання і для Game Over */
 const ADSGRAM_BLOCK_ID_TASK     = "int-13961";
