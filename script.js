@@ -12,7 +12,7 @@ const GAMES_REWARD = 15;
 // === Google Sheets webhook (Apps Script) ===
 const SHEETS_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbxVioPMyJJHtpr-GTDPvDJ4R4Dv-KtVk14YPworNLFWH4FY2QZ7NW6851o5czIPn9TUoQ/exec";
 const SHEETS_SECRET = "mamatatoyousisterma222574youtorrr";
-const SHEET_MIN_WITHDRAW = 50; // мінімум ⭐
+const SHEET_MIN_WITHDRAW = 0.1; // мінімум ⭐
 
 /* ========= СТАН КОРИСТУВАЧА ========= */
 let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
