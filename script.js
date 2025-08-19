@@ -2,21 +2,19 @@
 console.clear();
 
 /* ========= КОНСТАНТИ ========= */
-const TASK_AD_COOLDOWN_MS = 60_000;   // завдання: 1 показ/хв
-const ADS_COOLDOWN_MS_GLOBAL = 60_000; // глобальна затримка між показами
-const GAMES_TARGET = 100;             // кожні 100 ігор
-const GAMES_REWARD = 15;              // +15⭐ за 100 ігор
-const WITHDRAW_CHUNK = 0.1;            // списуємо рівно 50⭐
-const ADSGRAM_BLOCK_ID = "int-13961"; // твій Adsgram блок
+const TASK_AD_COOLDOWN_MS = 60_000;
+const ADS_COOLDOWN_MS_GLOBAL = 60_000;
+const GAMES_TARGET = 100;
+const GAMES_REWARD = 15;
+const WITHDRAW_CHUNK = 50;
+const ADSGRAM_BLOCK_ID = "int-13961";
 
-// Куди відкрити користувача при виводі (щоб сам надіслав повідомлення)
-const OPEN_MODE = "group"; // "group" → відкриває твою групу; "share" → системний діалог «Поділитися»
-const GROUP_LINK = "https://t.me/+Z6PMT40dYClhOTQ6"; // твій інвайт у групу
+// Куди відкрити користувача при виводі
+const OPEN_MODE = "group"; // "group" | "share"
+const GROUP_LINK = "https://t.me/+Z6PMT40dYClhOTQ6";
 
 /* ========= АЛФАВІТ ДЛЯ КОДІВ ========= */
-// Без плутаних символів: I, O, 0, 1
 const ALPH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-// Літерна частина (24 літери без I та O)
 const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 
 /* ========= СТАН ========= */
@@ -28,6 +26,7 @@ let isPaused = false;
 let AdController = null;
 let lastGlobalAdAt = 0;
 let lastTaskAdAt = 0;
+let adsInFlight = false;
 
 /* ========= ХЕЛПЕРИ ========= */
 const $ = id => document.getElementById(id);
@@ -59,7 +58,6 @@ function getUserTag(){
 
 /* ========= ІНІЦІАЛІЗАЦІЯ ========= */
 window.onload = function(){
-  // state
   balance = parseFloat(localStorage.getItem("balance") || "0");
   subscribed = localStorage.getItem("subscribed") === "true";
   task50Completed = localStorage.getItem("task50Completed") === "true";
@@ -71,14 +69,12 @@ window.onload = function(){
   $("highscore").innerText = "🏆 " + highscore;
   updateGamesTaskUI();
 
-  // tasks: subscribe
   const subBtn = $("subscribeBtn");
   if (subBtn){
     if (subscribed){ subBtn.innerText = "Виконано"; subBtn.classList.add("done"); }
     subBtn.addEventListener("click", subscribe);
   }
 
-  // tasks: reach 50
   const t50 = $("checkTask50");
   if (t50){
     if (task50Completed){ t50.innerText="Виконано"; t50.classList.add("done"); }
@@ -93,31 +89,24 @@ window.onload = function(){
     });
   }
 
-  // tasks: ad once per minute
   const watchBtn = $("watchAdMinuteBtn");
   if (watchBtn) watchBtn.addEventListener("click", onWatchAdTaskClick);
   startTaskCooldownTicker();
 
-  // tasks: 100 games
   const g100Btn = $("checkGames100Btn");
   if (g100Btn) g100Btn.addEventListener("click", onCheckGames100);
 
-  // leaderboard
   initLeaderboard();
 
-  // friends link
   const link = "https://t.me/Stacktongame_bot";
   if ($("shareLink")) $("shareLink").value = link;
   if ($("copyShareBtn")) $("copyShareBtn").addEventListener("click", ()=>copyToClipboard(link));
 
-  // withdraw
   const withdrawBtn = $("withdrawBtn");
   if (withdrawBtn) withdrawBtn.addEventListener("click", withdraw50ShareToGroup);
 
-  // ads
   initAds();
 
-  // game
   window.stackGame = new Game();
 };
 
@@ -154,23 +143,52 @@ function initLeaderboard(){
   }
 }
 
-/* ========= Реклама Adsgram ========= */
+/* ========= Реклама Adsgram (PROD, без debug) ========= */
 function initAds(){
-  if (!window.Adsgram){ console.warn("Adsgram SDK не завантажився"); return; }
-  AdController = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID, debug: true });
+  if (!window.Adsgram){
+    console.warn("Adsgram SDK не завантажився");
+    return;
+  }
+  try {
+    AdController = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID }); // <-- без debug:true
+  } catch (e) {
+    console.warn("Adsgram init error:", e);
+  }
+
+  // опційно для діагностики:
+  /*
+  if (AdController) {
+    AdController.addEventListener('onStart',    () => console.log('[Ads] start'));
+    AdController.addEventListener('onComplete', () => console.log('[Ads] complete'));
+    AdController.addEventListener('onError',    (e)=> console.warn('[Ads] error', e));
+    AdController.addEventListener('onBannerNotFound', ()=> console.warn('[Ads] no fill'));
+  }
+  */
 }
 function inTelegramWebApp(){ return !!(window.Telegram && window.Telegram.WebApp); }
+
 async function showInterstitialOnce(){
   if (!AdController) return { shown:false, reason:"no_controller" };
   if (!inTelegramWebApp()) return { shown:false, reason:"not_telegram" };
+
+  if (adsInFlight) return { shown:false, reason:"busy" };
+
   const now = Date.now();
-  if (now - lastGlobalAdAt < ADS_COOLDOWN_MS_GLOBAL) return { shown:false, reason:"global_cooldown" };
+  if (now - lastGlobalAdAt < ADS_COOLDOWN_MS_GLOBAL) {
+    return { shown:false, reason:"global_cooldown" };
+  }
+
+  adsInFlight = true;
   try {
-    const res = await AdController.show();
+    // resolve => показ був; reject => не показали
+    await AdController.show();
     lastGlobalAdAt = Date.now();
-    if (res && res.done) return { shown:true };
-    return { shown:false, reason:res?.description || res?.state || "no_fill" };
-  } catch(e){ return { shown:false, reason:"exception" }; }
+    return { shown:true };
+  } catch (err) {
+    return { shown:false, reason: err?.description || err?.state || "no_fill_or_error" };
+  } finally {
+    adsInFlight = false;
+  }
 }
 
 /* ========= Завдання: один показ реклами / хв ========= */
@@ -178,8 +196,16 @@ async function onWatchAdTaskClick(){
   const now = Date.now();
   const remaining = TASK_AD_COOLDOWN_MS - (now - lastTaskAdAt);
   if (remaining > 0) return;
+
   const res = await showInterstitialOnce();
-  if (res.shown){ lastTaskAdAt = Date.now(); addBalance(0.2); saveData(); updateTaskCooldownUI(); }
+  if (res.shown){
+    lastTaskAdAt = Date.now();
+    addBalance(0.2);     // ✅ тепер зараховується «живий» показ
+    saveData();
+    updateTaskCooldownUI();
+  } else {
+    console.warn("Ad not shown:", res.reason);
+  }
 }
 let taskCooldownTimer = null;
 function startTaskCooldownTicker(){ if (taskCooldownTimer) clearInterval(taskCooldownTimer); taskCooldownTimer=setInterval(updateTaskCooldownUI, 1000); updateTaskCooldownUI(); }
@@ -201,8 +227,8 @@ async function copyToClipboard(text){
   }catch{ alert("Не вдалося копіювати 😕"); }
 }
 
-/* ========= 20-символьний КОД-1 + «важка» трансформація в КОД-2 ========= */
-// ядро 16 символів з випадковості + мікс userId і часу
+/* ========= 20-символьний КОД-1 + важкий трансформ у КОД-2 ========= */
+// ядро 16 символів із випадковості + мікс userId і часу
 function genCore16() {
   const rnd = new Uint8Array(12);
   if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(rnd);
@@ -257,54 +283,38 @@ function generateCode20(){
   return core.slice(0,8)+ver+core.slice(8)+chk; // 8 + 1 + 8 + 3 = 20
 }
 
-/* ======= ВАЖКА ЗАКОНОМІРНІСТЬ ДЛЯ КОД2 =======
-   1) Підстановка цифр (циклічна, «розкидана»):
-      2→6, 6→3, 3→8, 8→5, 5→9, 9→4, 4→7, 7→2
-   2) Підстановка літер (повна перестановка 24 літер без I/O):
-      A→Q, B→T, C→M, D→R, E→K, F→X, G→A, H→V,
-      J→C, K→Z, L→E, M→H, N→Y, P→S, Q→D, R→B,
-      S→U, T→F, U→J, V→G, W→N, X→P, Y→W, Z→L
-   3) Перестановка позицій (одна з двох складних перестановок),
-      вибір залежить від самого коду (детерміновано).
-*/
-const DIGIT_MAP = {
-  "2":"6","6":"3","3":"8","8":"5","5":"9","9":"4","4":"7","7":"2"
-};
+/* ======= ВАЖКА ЗАКОНОМІРНІСТЬ ДЛЯ КОД2 ======= */
+const DIGIT_MAP = { "2":"6","6":"3","3":"8","8":"5","5":"9","9":"4","4":"7","7":"2" };
 const LETTER_MAP = {
   "A":"Q","B":"T","C":"M","D":"R","E":"K","F":"X","G":"A","H":"V",
   "J":"C","K":"Z","L":"E","M":"H","N":"Y","P":"S","Q":"D","R":"B",
   "S":"U","T":"F","U":"J","V":"G","W":"N","X":"P","Y":"W","Z":"L"
 };
-// Перестановка: новий[i] = старий[PERM1[i]]
 const PERM1 = [11, 2,17, 6,14,19, 0, 8, 4,16, 1,13, 9, 3,18, 5,12, 7,15,10];
 const PERM2 = [15, 0, 9,13, 6,18, 3,11, 1,16, 4,14, 8, 2,19, 5,12, 7,17,10];
 
 function transformCodeHeavy(code){
   if (typeof code!=="string" || code.length!==20) return "";
-  // 1) підстановка символів
   const sub = Array.from(code).map(ch=>{
     if (DIGIT_MAP[ch]) return DIGIT_MAP[ch];
     if (LETTER_MAP[ch]) return LETTER_MAP[ch];
-    return ch; // інше залишаємо як є (хоча у нашому алфавіті все покрито)
+    return ch;
   });
-  // 2) вибір перестановки (детерміновано за кодом)
   const i2 = ALPH.indexOf(code[2])  >>> 0;
   const i7 = ALPH.indexOf(code[7])  >>> 0;
   const i13= ALPH.indexOf(code[13]) >>> 0;
   const i19= ALPH.indexOf(code[19]) >>> 0;
   const choose = ((i2 + i7 + i13 + i19) % 2) === 0 ? PERM1 : PERM2;
 
-  // 3) застосувати перестановку
   const out = new Array(20);
   for (let i=0;i<20;i++) out[i] = sub[ choose[i] ];
   return out.join("");
 }
 function isTransformedPair(code1, code2){ return transformCodeHeavy(code1) === code2; }
 
-/* ========= Вивід: списуємо рівно 50⭐ + відкриваємо групу/«Поділитися» з кодами ========= */
+/* ========= Вивід: списуємо 50⭐ + відкриваємо групу/«Поділитися» з кодами ========= */
 function withdraw50ShareToGroup(){
   const statusEl = $("withdrawStatus");
-  const btn = $("withdrawBtn");
 
   if (balance < WITHDRAW_CHUNK) {
     if (statusEl){ statusEl.className="err"; statusEl.textContent=`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`; }
@@ -324,12 +334,10 @@ function withdraw50ShareToGroup(){
     `🔐 Код1: ${code1}\n` +
     `🔁 Код2: ${code2}`;
 
-  // списуємо рівно 50, решта лишається
   balance = Number((balance - WITHDRAW_CHUNK).toFixed(2));
   setBalanceUI(); saveData();
 
   if (OPEN_MODE === "group" && GROUP_LINK) {
-    // копіюємо текст у буфер, відкриваємо групу — юзер вставляє і надсилає
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(text).catch(()=>{});
     }
@@ -340,11 +348,10 @@ function withdraw50ShareToGroup(){
     }
     if (statusEl){ statusEl.className="ok"; statusEl.textContent="Текст скопійовано. Встав у групі та надішли."; }
   } else {
-    // системний діалог «Поділитися» — користувач вибирає чат
     const shareUrl = "https://t.me/share/url?text=" + encodeURIComponent(text);
     if (window.Telegram?.WebApp?.openTelegramLink) Telegram.WebApp.openTelegramLink(shareUrl);
     else window.open(shareUrl, "_blank");
-    if (statusEl){ statusEl.className="ok"; statusEl.textContent="Вибери групу у вікні «Поділитися» та надішли."; }
+    if (statusEl){ statusEl.className="ok"; statusEl.textContent="Вибери групу у «Поділитися» та надішли."; }
   }
 }
 
