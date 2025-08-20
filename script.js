@@ -3,7 +3,6 @@ console.clear();
 
 /* ========= КОНСТАНТИ ========= */
 const TASK_AD_COOLDOWN_MS = 60_000;   // 1 реклама / хв у завданні (+0.2⭐)
-const PRE_AD_DELAY_MS     = 15_000;   // ⏳ 15с до показу реклами після Game Over
 const POST_AD_LOCK_MS     = 15_000;   // ⏳ 15с після реклами — блок на гру
 const MIN_BETWEEN_SAME_CTX_MS = 10_000;
 
@@ -13,11 +12,13 @@ const WITHDRAW_CHUNK = 50;
 
 const ADSGRAM_BLOCK_ID_TASK     = "int-13961";
 const ADSGRAM_BLOCK_ID_GAMEOVER = "int-13961"; // той самий блок, як просив
+const ADSGRAM_BLOCK_ID_5        = "int-13961"; // 5-рекл завдання
+const ADSGRAM_BLOCK_ID_10       = "int-13961"; // 10-рекл завдання
 
-/* ========= ЩОДЕННІ ЛІМІТИ РЕКЛАМНИХ ЗАВДАНЬ ========= */
-const DAILY_WINDOW_MS = 24 * 60 * 60 * 1000;
-const ADS_DAILY_GOAL_5  = 5;    // +1.2⭐
-const ADS_DAILY_GOAL_10 = 10;   // +2.5⭐
+/* ========= ЩОДЕННІ ЗАВДАННЯ 5/10 ========= */
+const REWARD_5  = 1.2;
+const REWARD_10 = 2.5;
+const COOLDOWN_24H = 24 * 60 * 60 * 1000;
 
 /* ========= ПОСИЛАННЯ ========= */
 const OPEN_MODE = "group"; // "group" | "share"
@@ -35,22 +36,25 @@ let isPaused = false;
 /* Реклама: контролери та кулдауни */
 let AdTask = null;
 let AdGameover = null;
+let Ad5 = null;
+let Ad10 = null;
+
 let lastAdAtTask = 0;
-let lastAdAtGameover = 0;
 let adInFlightTask = false;
 let adInFlightGameover = false;
+let adInFlight5 = false;
+let adInFlight10 = false;
 
-/* Pre/Post таймери у грі */
-let adPreUntil = 0;         // до якого часу триває 15с pre-roll
-let playLockUntil = 0;      // до якого часу триває 15с post-roll
-let adPreTimer = null;
+/* Post-таймер у грі */
+let playLockUntil = 0;
 let playLockTimer = null;
 
-/* Щоденні задачі по кількості переглядів */
-let adsWatchedToday = 0;
-let adsWindowStart = 0;   // timestamp початку 24-год вікна
-let claimed5Today = false;
-let claimed10Today = false;
+/* Лічильники для нових щоденних завдань (окремі та ізольовані) */
+let ads5Count = 0;
+let ads5CooldownUntil = 0;
+
+let ads10Count = 0;
+let ads10CooldownUntil = 0;
 
 /* ========= ХЕЛПЕРИ ========= */
 const $ = id => document.getElementById(id);
@@ -65,12 +69,11 @@ function saveData(){
   localStorage.setItem("lastTaskAdAt", String(lastAdAtTask));
   localStorage.setItem("gamesPlayedSinceClaim", String(gamesPlayedSinceClaim));
 
-  localStorage.setItem("adsWatchedToday", String(adsWatchedToday));
-  localStorage.setItem("adsWindowStart", String(adsWindowStart));
-  localStorage.setItem("claimed5Today", claimed5Today ? "true" : "false");
-  localStorage.setItem("claimed10Today", claimed10Today ? "true" : "false");
+  localStorage.setItem("ads5Count", String(ads5Count));
+  localStorage.setItem("ads5CooldownUntil", String(ads5CooldownUntil));
+  localStorage.setItem("ads10Count", String(ads10Count));
+  localStorage.setItem("ads10CooldownUntil", String(ads10CooldownUntil));
 
-  localStorage.setItem("adPreUntil", String(adPreUntil));
   localStorage.setItem("playLockUntil", String(playLockUntil));
 }
 
@@ -98,21 +101,16 @@ window.onload = function(){
   lastAdAtTask = parseInt(localStorage.getItem("lastTaskAdAt") || "0", 10);
   gamesPlayedSinceClaim = parseInt(localStorage.getItem("gamesPlayedSinceClaim") || "0", 10);
 
-  adsWatchedToday = parseInt(localStorage.getItem("adsWatchedToday") || "0", 10);
-  adsWindowStart  = parseInt(localStorage.getItem("adsWindowStart")  || "0", 10);
-  claimed5Today   = localStorage.getItem("claimed5Today")  === "true";
-  claimed10Today  = localStorage.getItem("claimed10Today") === "true";
+  ads5Count = parseInt(localStorage.getItem("ads5Count") || "0", 10);
+  ads5CooldownUntil = parseInt(localStorage.getItem("ads5CooldownUntil") || "0", 10);
+  ads10Count = parseInt(localStorage.getItem("ads10Count") || "0", 10);
+  ads10CooldownUntil = parseInt(localStorage.getItem("ads10CooldownUntil") || "0", 10);
 
-  adPreUntil    = parseInt(localStorage.getItem("adPreUntil")    || "0", 10);
   playLockUntil = parseInt(localStorage.getItem("playLockUntil") || "0", 10);
-
-  dailyResetCheck();
 
   setBalanceUI();
   $("highscore").innerText = "🏆 " + highscore;
   updateGamesTaskUI();
-  updateAdTasksProgressUI();
-  updateAdTaskButtonsState();
 
   const subBtn = $("subscribeBtn");
   if (subBtn){
@@ -134,44 +132,29 @@ window.onload = function(){
     });
   }
 
-  const watchBtn = $("watchAdMinuteBtn");
-  if (watchBtn) watchBtn.addEventListener("click", onWatchAdTaskClick);
+  $("watchAdMinuteBtn").addEventListener("click", onWatchAdTaskClick);
   startTaskCooldownTicker();
 
-  $("checkAds5Btn").addEventListener("click", onCheckAds5);
-  $("checkAds10Btn").addEventListener("click", onCheckAds10);
+  $("watchAds5Btn").addEventListener("click", onWatchAds5);
+  $("watchAds10Btn").addEventListener("click", onWatchAds10);
+  startDailyTasksTicker();
 
-  const g100Btn = $("checkGames100Btn");
-  if (g100Btn) g100Btn.addEventListener("click", onCheckGames100);
+  $("checkGames100Btn").addEventListener("click", onCheckGames100);
 
   initLeaderboard();
 
   const link = "https://t.me/Stacktongame_bot";
-  if ($("shareLink")) $("shareLink").value = link;
-  if ($("copyShareBtn")) $("copyShareBtn").addEventListener("click", ()=>copyToClipboard(link));
+  $("shareLink").value = link;
+  $("copyShareBtn").addEventListener("click", ()=>copyToClipboard(link));
 
-  const withdrawBtn = $("withdrawBtn");
-  if (withdrawBtn) withdrawBtn.addEventListener("click", withdraw50ShareToGroup);
+  $("withdrawBtn").addEventListener("click", withdraw50ShareToGroup);
 
   initAds();
 
-  // відновити pre/post екрани, якщо активні
-  updateAdPreUI();
   updatePlayLockUI();
 
   window.stackGame = new Game();
 };
-
-function dailyResetCheck(){
-  const now = Date.now();
-  if (!adsWindowStart || (now - adsWindowStart) >= DAILY_WINDOW_MS){
-    adsWindowStart = now;
-    adsWatchedToday = 0;
-    claimed5Today = false;
-    claimed10Today = false;
-    saveData();
-  }
-}
 
 function addBalance(n){ balance = parseFloat((balance + n).toFixed(2)); setBalanceUI(); saveData(); }
 function subscribe(){
@@ -191,7 +174,7 @@ function showPage(id, btn){
   document.querySelectorAll(".menu button").forEach(b=>b.classList.remove("active"));
   btn.classList.add("active");
   isPaused = (id !== "game");
-  if (id === "game"){ updateAdPreUI(); updatePlayLockUI(); }
+  if (id === "game"){ updatePlayLockUI(); }
 }
 window.showPage = showPage;
 
@@ -213,60 +196,26 @@ function initAds(){
     console.warn("Adsgram SDK не завантажився");
     return;
   }
-  try { AdTask = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID_TASK }); }
-  catch (e) { console.warn("Adsgram init (task) error:", e); }
-  try { AdGameover = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID_GAMEOVER }); }
-  catch (e) { console.warn("Adsgram init (gameover) error:", e); }
+  try { AdTask     = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID_TASK }); }     catch(e){ console.warn("Adsgram init task error:", e); }
+  try { AdGameover = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID_GAMEOVER }); } catch(e){ console.warn("Adsgram init gameover error:", e); }
+  try { Ad5        = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID_5 }); }        catch(e){ console.warn("Adsgram init 5 error:", e); }
+  try { Ad10       = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID_10 }); }       catch(e){ console.warn("Adsgram init 10 error:", e); }
 }
 function inTelegramWebApp(){ return !!(window.Telegram && window.Telegram.WebApp); }
 
-/**
- * Показ реклами (ctx: 'task' | 'gameover').
- * Якщо показ відбувся — +рахуємо у щоденний лічильник, вмикаємо POST-лок.
- */
-async function showInterstitialOnce(ctx){
-  const isTask = (ctx === 'task');
-  const controller = isTask ? (AdTask || AdGameover) : (AdGameover || AdTask);
+/* ========= Показ реклами з різними контекстами ========= */
+async function showAdController(controller, busyFlagRef){
   if (!controller) return { shown:false, reason:"no_controller" };
   if (!inTelegramWebApp()) return { shown:false, reason:"not_telegram" };
-
-  const now = Date.now();
-
-  // локальні бар'єри від дабл-кліків
-  if (isTask) {
-    if (adInFlightTask) return { shown:false, reason:"task_busy" };
-    if (now - lastAdAtTask < Math.max(MIN_BETWEEN_SAME_CTX_MS, TASK_AD_COOLDOWN_MS)) {
-      return { shown:false, reason:"task_ctx_cooldown" };
-    }
-    adInFlightTask = true;
-    try {
-      await controller.show();
-      lastAdAtTask = Date.now();
-      adsWatchedToday += 1; saveData();
-      updateAdTasksProgressUI();
-      return { shown:true };
-    } catch (err) {
-      return { shown:false, reason: err?.description || err?.state || "no_fill_or_error" };
-    } finally {
-      adInFlightTask = false;
-    }
-  } else {
-    if (adInFlightGameover) return { shown:false, reason:"gameover_busy" };
-    if (now - lastAdAtGameover < MIN_BETWEEN_SAME_CTX_MS) {
-      return { shown:false, reason:"gameover_ctx_cooldown" };
-    }
-    adInFlightGameover = true;
-    try {
-      await controller.show();
-      lastAdAtGameover = Date.now();
-      adsWatchedToday += 1; saveData();
-      updateAdTasksProgressUI();
-      return { shown:true };
-    } catch (err) {
-      return { shown:false, reason: err?.description || err?.state || "no_fill_or_error" };
-    } finally {
-      adInFlightGameover = false;
-    }
+  if (busyFlagRef.value) return { shown:false, reason:"busy" };
+  busyFlagRef.value = true;
+  try {
+    await controller.show();
+    return { shown:true };
+  } catch (err) {
+    return { shown:false, reason: err?.description || err?.state || "no_fill_or_error" };
+  } finally {
+    busyFlagRef.value = false;
   }
 }
 
@@ -276,8 +225,9 @@ async function onWatchAdTaskClick(){
   const remainingTask = TASK_AD_COOLDOWN_MS - (now - lastAdAtTask);
   if (remainingTask > 0) return;
 
-  const res = await showInterstitialOnce('task');
+  const res = await showAdController(AdTask, { get value(){return adInFlightTask;}, set value(v){adInFlightTask=v;} });
   if (res.shown){
+    lastAdAtTask = Date.now();
     addBalance(0.2);
   } else {
     console.warn("Ad not shown (task):", res.reason);
@@ -295,35 +245,73 @@ function updateTaskCooldownUI(){
   else { btn.disabled=false; btnWrap.style.display="flex"; cdBox.style.display="none"; }
 }
 
-/* ========= НОВІ ЩОДЕННІ ЗАВДАННЯ (5 і 10 реклам) ========= */
-function updateAdTasksProgressUI(){
-  $("ads5Progress").textContent  = String(Math.min(adsWatchedToday, ADS_DAILY_GOAL_5));
-  $("ads10Progress").textContent = String(Math.min(adsWatchedToday, ADS_DAILY_GOAL_10));
+/* ========= НОВІ ЩОДЕННІ ЗАВДАННЯ (ізольовані лічильники) ========= */
+function startDailyTasksTicker(){
+  setInterval(()=>{
+    updateDailyTaskUI('5');
+    updateDailyTaskUI('10');
+  }, 1000);
+  updateDailyTaskUI('5');
+  updateDailyTaskUI('10');
 }
-function updateAdTaskButtonsState(){
-  $("checkAds5Btn").disabled  = claimed5Today;
-  $("checkAds10Btn").disabled = claimed10Today;
-  if (claimed5Today)  $("checkAds5Btn").classList.add("done");
-  if (claimed10Today) $("checkAds10Btn").classList.add("done");
-}
-function onCheckAds5(){
-  dailyResetCheck();
-  if (claimed5Today){ alert("Цю нагороду вже отримано сьогодні ✅"); return; }
-  if (adsWatchedToday >= ADS_DAILY_GOAL_5){
-    addBalance(1.2);
-    claimed5Today = true; saveData(); updateAdTaskButtonsState();
+function updateDailyTaskUI(which){
+  if (which==='5'){
+    const onCooldown = Date.now() < ads5CooldownUntil;
+    $("ads5Progress").textContent = String(Math.min(ads5Count, 5));
+    $("taskAds5").style.display = onCooldown ? "none" : "flex";
+    $("taskAds5Status").style.display = onCooldown ? "flex" : "none";
+    if (onCooldown){
+      const remain = ads5CooldownUntil - Date.now();
+      $("ads5CooldownText").textContent = fmtHMS(remain);
+    }
   } else {
-    alert(`Потрібно ще ${ADS_DAILY_GOAL_5 - adsWatchedToday} реклам(и) до +1.2⭐`);
+    const onCooldown = Date.now() < ads10CooldownUntil;
+    $("ads10Progress").textContent = String(Math.min(ads10Count, 10));
+    $("taskAds10").style.display = onCooldown ? "none" : "flex";
+    $("taskAds10Status").style.display = onCooldown ? "flex" : "none";
+    if (onCooldown){
+      const remain = ads10CooldownUntil - Date.now();
+      $("ads10CooldownText").textContent = fmtHMS(remain);
+    }
   }
 }
-function onCheckAds10(){
-  dailyResetCheck();
-  if (claimed10Today){ alert("Цю нагороду вже отримано сьогодні ✅"); return; }
-  if (adsWatchedToday >= ADS_DAILY_GOAL_10){
-    addBalance(2.5);
-    claimed10Today = true; saveData(); updateAdTaskButtonsState();
+function fmtHMS(ms){
+  let s = Math.max(0, Math.ceil(ms/1000));
+  const hh = Math.floor(s/3600); s-=hh*3600;
+  const mm = Math.floor(s/60);   s-=mm*60;
+  const pad=n=>String(n).padStart(2,'0');
+  return `${pad(hh)}:${pad(mm)}:${pad(s)}`;
+}
+async function onWatchAds5(){
+  if (Date.now() < ads5CooldownUntil) return;
+  const res = await showAdController(Ad5, { get value(){return adInFlight5;}, set value(v){adInFlight5=v;} });
+  if (res.shown){
+    ads5Count += 1;
+    if (ads5Count >= 5){
+      ads5Count = 0;
+      ads5CooldownUntil = Date.now() + COOLDOWN_24H;
+      addBalance(REWARD_5);
+    }
+    saveData();
+    updateDailyTaskUI('5');
   } else {
-    alert(`Потрібно ще ${ADS_DAILY_GOAL_10 - adsWatchedToday} реклам(и) до +2.5⭐`);
+    console.warn("Ad not shown (5):", res.reason);
+  }
+}
+async function onWatchAds10(){
+  if (Date.now() < ads10CooldownUntil) return;
+  const res = await showAdController(Ad10, { get value(){return adInFlight10;}, set value(v){adInFlight10=v;} });
+  if (res.shown){
+    ads10Count += 1;
+    if (ads10Count >= 10){
+      ads10Count = 0;
+      ads10CooldownUntil = Date.now() + COOLDOWN_24H;
+      addBalance(REWARD_10);
+    }
+    saveData();
+    updateDailyTaskUI('10');
+  } else {
+    console.warn("Ad not shown (10):", res.reason);
   }
 }
 
@@ -413,35 +401,8 @@ function onCheckGames100(){
   }
 }
 
-/* ========= Екрани pre/post після реклами ========= */
-function isPreAdActive(){ return Date.now() < adPreUntil; }
+/* ========= Post-блок у грі (15с після реклами) ========= */
 function isPlayLocked(){ return Date.now() < playLockUntil; }
-
-function startAdPreCountdown(ms){
-  adPreUntil = Date.now() + ms; saveData(); updateAdPreUI();
-  if (adPreTimer) clearInterval(adPreTimer);
-  adPreTimer = setInterval(()=>{
-    updateAdPreUI();
-    if (!isPreAdActive()){
-      clearInterval(adPreTimer); adPreTimer=null;
-      // коли прекаунт завершено — запускаємо рекламу
-      doGameoverAdFlow();
-    }
-  }, 300);
-}
-function updateAdPreUI(){
-  const box = $("adPre"), span = $("adPreCountdown");
-  if (!box) return;
-  const remaining = Math.max(0, adPreUntil - Date.now());
-  if (remaining > 0){
-    box.style.display = "block";
-    if (span) span.textContent = String(Math.ceil(remaining/1000));
-    isPaused = true;
-  } else {
-    box.style.display = "none";
-  }
-}
-
 function setPlayLock(ms){
   playLockUntil = Date.now() + ms; saveData(); updatePlayLockUI();
   if (playLockTimer) clearInterval(playLockTimer);
@@ -449,7 +410,6 @@ function setPlayLock(ms){
     updatePlayLockUI();
     if (!isPlayLocked()){
       clearInterval(playLockTimer); playLockTimer=null;
-      // розблокували — гравець може стартувати гру
     }
   }, 300);
 }
@@ -591,15 +551,15 @@ class Game{
     this.addBlock(); this.tick(); this.showReady();
 
     document.addEventListener("keydown",(e)=>{ 
-      if(isPaused || isPreAdActive() || isPlayLocked()) { updateAdPreUI(); updatePlayLockUI(); return; } 
+      if(isPaused || isPlayLocked()) { updatePlayLockUI(); return; } 
       if(e.keyCode===32) this.onAction(); 
     });
     document.addEventListener("click",(e)=>{ 
-      if(isPaused || isPreAdActive() || isPlayLocked()) { updateAdPreUI(); updatePlayLockUI(); return; } 
+      if(isPaused || isPlayLocked()) { updatePlayLockUI(); return; } 
       if($("game").classList.contains("active") && e.target.tagName.toLowerCase()==="canvas") this.onAction(); 
     });
     $("start-button").addEventListener("click",()=>{ 
-      if(isPreAdActive() || isPlayLocked()) { updateAdPreUI(); updatePlayLockUI(); return; } 
+      if(isPlayLocked()) { updatePlayLockUI(); return; } 
       this.onAction(); 
     });
   }
@@ -607,7 +567,7 @@ class Game{
   showGameOver(){ $("gameOver").style.display="block"; $("ready").style.display="none"; this.state=this.STATES.ENDED; }
   hideOverlays(){ $("gameOver").style.display="none"; $("ready").style.display="none"; }
   onAction(){ 
-    if (isPreAdActive() || isPlayLocked()) { updateAdPreUI(); updatePlayLockUI(); return; }
+    if (isPlayLocked()) { updatePlayLockUI(); return; }
     switch(this.state){ 
       case this.STATES.READY: this.startGame(); break; 
       case this.STATES.PLAYING: this.placeBlock(); break; 
@@ -646,6 +606,17 @@ class Game{
     }
     this.addBlock();
   }
+  async endGame(){
+    this.showGameOver();
+    const currentScore=parseInt(this.scoreEl.innerText,10);
+    updateHighscore(currentScore);
+    gamesPlayedSinceClaim += 1; saveData(); updateGamesTaskUI();
+
+    // 1) Показ реклами одразу
+    const res = await showAdController(AdGameover, { get value(){return adInFlightGameover;}, set value(v){adInFlightGameover=v;} });
+    // 2) Якщо реклама показалась — 15с блок на гру
+    if (res.shown) setPlayLock(POST_AD_LOCK_MS);
+  }
   addBlock(){
     const last=this.blocks[this.blocks.length-1];
     if(last && last.state===last.STATES.MISSED) return this.endGame();
@@ -654,30 +625,13 @@ class Game{
     this.stage.setCamera(this.blocks.length*2);
     if(this.blocks.length>=5) $("instructions").classList.add("hide");
   }
-  async endGame(){
-    this.showGameOver();
-    const currentScore=parseInt(this.scoreEl.innerText,10);
-    updateHighscore(currentScore);
-    gamesPlayedSinceClaim += 1; saveData(); updateGamesTaskUI();
-
-    // ⏳ 15с до реклами
-    startAdPreCountdown(PRE_AD_DELAY_MS);
-  }
   tick(){ 
-    if(!isPaused && !isPreAdActive() && !isPlayLocked()){ 
+    if(!isPaused && !isPlayLocked()){ 
       this.blocks[this.blocks.length-1].tick(); 
       this.stage.render(); 
     } 
     requestAnimationFrame(()=>this.tick()); 
   }
-}
-
-/* ======== Ланцюжок показу реклами після Game Over ======== */
-async function doGameoverAdFlow(){
-  // спробувати показати рекламу
-  await showInterstitialOnce('gameover');
-  // у будь-якому випадку — 15с блок гри після спроби показу
-  setPlayLock(POST_AD_LOCK_MS);
 }
 
 function updateHighscore(currentScore){
@@ -687,3 +641,4 @@ function updateHighscore(currentScore){
     $("highscore").innerText="🏆 "+highscore;
   }
 }
+
