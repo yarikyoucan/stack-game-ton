@@ -1,72 +1,50 @@
 "use strict";
 console.clear();
 
-/* ========= КОНСТАНТИ ========= */
-const TASK_AD_COOLDOWN_MS = 60_000;   // 1 реклама / хв у завданні (+0.2⭐)
-const POST_AD_LOCK_MS     = 15_000;   // ⏳ 15с після реклами — блок на гру
-const MIN_BETWEEN_SAME_CTX_MS = 10_000;
+/* ===== Константи ===== */
+const WITHDRAW_CHUNK = 50;          // вивід
+const GAMES_TARGET = 100;           // за 100 ігор +10⭐
+const GAMES_REWARD = 10;
+const POST_AD_LOCK_MS = 15_000;     // 15 сек блок після реклами
 
-const GAMES_TARGET = 100;
-const GAMES_REWARD = 10;              // +10⭐ за 100 ігор
-const WITHDRAW_CHUNK = 50;
+// Adsgram (той самий блок для всього)
+const ADSGRAM_BLOCK_ID = "int-13961";
 
-const ADSGRAM_BLOCK_ID_TASK     = "int-13961";
-const ADSGRAM_BLOCK_ID_GAMEOVER = "int-13961"; // той самий блок, як просив
-const ADSGRAM_BLOCK_ID_5        = "int-13961"; // 5-рекл завдання
-const ADSGRAM_BLOCK_ID_10       = "int-13961"; // 10-рекл завдання
-
-/* ========= ЩОДЕННІ ЗАВДАННЯ 5/10 ========= */
-const REWARD_5  = 1.2;
-const REWARD_10 = 2.5;
+// Завдання на 5 і 10 реклам (ізольовані)
+const REWARD_5 = 5;                 // +5⭐ за 5 переглядів
+const REWARD_10 = 10;               // +10⭐ за 10 переглядів
 const COOLDOWN_24H = 24 * 60 * 60 * 1000;
 
-/* ========= ПОСИЛАННЯ ========= */
-const OPEN_MODE = "group"; // "group" | "share"
-const GROUP_LINK = "https://t.me/+Z6PMT40dYClhOTQ6";
+/* ===== Допоміжні ===== */
+const $ = id => document.getElementById(id);
+const formatStars = v => Number.isInteger(Number(v)) ? String(Number(v)) : Number(v).toFixed(1);
 
-/* ========= АЛФАВІТ ДЛЯ КОДІВ ========= */
-const ALPH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // без 0/1/I/O
-const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-
-/* ========= СТАН ========= */
+/* ===== Стан ===== */
 let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
 let gamesPlayedSinceClaim = 0;
 let isPaused = false;
 
-/* Реклама: контролери та кулдауни */
-let AdTask = null;
+// Після реклами — блок
+let playLockUntil = 0;
+let playLockTimer = null;
+
+// Adsgram контролери
 let AdGameover = null;
 let Ad5 = null;
 let Ad10 = null;
 
-let lastAdAtTask = 0;
-let adInFlightTask = false;
-let adInFlightGameover = false;
-let adInFlight5 = false;
-let adInFlight10 = false;
-
-/* Post-таймер у грі */
-let playLockUntil = 0;
-let playLockTimer = null;
-
-/* Лічильники для нових щоденних завдань (окремі та ізольовані) */
+// Ізольовані лічильники задач
 let ads5Count = 0;
 let ads5CooldownUntil = 0;
 
 let ads10Count = 0;
 let ads10CooldownUntil = 0;
 
-/* ========= ХЕЛПЕРИ ========= */
-const $ = id => document.getElementById(id);
-const formatStars = v => Number.isInteger(Number(v)) ? String(Number(v)) : Number(v).toFixed(1);
-const setBalanceUI = () => $("balance").innerText = formatStars(balance);
-
 function saveData(){
   localStorage.setItem("balance", String(balance));
-  localStorage.setItem("subscribed", subscribed ? "true" : "false");
-  localStorage.setItem("task50Completed", task50Completed ? "true" : "false");
+  localStorage.setItem("subscribed", subscribed ? "true":"false");
+  localStorage.setItem("task50Completed", task50Completed ? "true":"false");
   localStorage.setItem("highscore", String(highscore));
-  localStorage.setItem("lastTaskAdAt", String(lastAdAtTask));
   localStorage.setItem("gamesPlayedSinceClaim", String(gamesPlayedSinceClaim));
 
   localStorage.setItem("ads5Count", String(ads5Count));
@@ -77,7 +55,10 @@ function saveData(){
   localStorage.setItem("playLockUntil", String(playLockUntil));
 }
 
-/* ========= TELEGRAM USER ========= */
+function setBalanceUI(){ $("balance").innerText = formatStars(balance); }
+function addBalance(n){ balance = parseFloat((balance + n).toFixed(2)); setBalanceUI(); saveData(); }
+
+/* ===== Telegram user/tag (для виводу) ===== */
 function getTelegramUser(){
   const u = (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user) || null;
   if (!u) return { id:"", username:"", first_name:"", last_name:"" };
@@ -92,240 +73,9 @@ function getUserTag(){
   return "Гравець";
 }
 
-/* ========= ІНІЦІАЛІЗАЦІЯ ========= */
-window.onload = function(){
-  balance = parseFloat(localStorage.getItem("balance") || "0");
-  subscribed = localStorage.getItem("subscribed") === "true";
-  task50Completed = localStorage.getItem("task50Completed") === "true";
-  highscore = parseInt(localStorage.getItem("highscore") || "0", 10);
-  lastAdAtTask = parseInt(localStorage.getItem("lastTaskAdAt") || "0", 10);
-  gamesPlayedSinceClaim = parseInt(localStorage.getItem("gamesPlayedSinceClaim") || "0", 10);
-
-  ads5Count = parseInt(localStorage.getItem("ads5Count") || "0", 10);
-  ads5CooldownUntil = parseInt(localStorage.getItem("ads5CooldownUntil") || "0", 10);
-  ads10Count = parseInt(localStorage.getItem("ads10Count") || "0", 10);
-  ads10CooldownUntil = parseInt(localStorage.getItem("ads10CooldownUntil") || "0", 10);
-
-  playLockUntil = parseInt(localStorage.getItem("playLockUntil") || "0", 10);
-
-  setBalanceUI();
-  $("highscore").innerText = "🏆 " + highscore;
-  updateGamesTaskUI();
-
-  const subBtn = $("subscribeBtn");
-  if (subBtn){
-    if (subscribed){ subBtn.innerText = "Виконано"; subBtn.classList.add("done"); }
-    subBtn.addEventListener("click", subscribe);
-  }
-
-  const t50 = $("checkTask50");
-  if (t50){
-    if (task50Completed){ t50.innerText="Виконано"; t50.classList.add("done"); }
-    t50.addEventListener("click", ()=>{
-      if (highscore >= 50 && !task50Completed){
-        addBalance(10);
-        t50.innerText="Виконано"; t50.classList.add("done");
-        task50Completed = true; saveData();
-      } else if (highscore < 50){
-        alert("❌ Твій рекорд замалий (потрібно 50+)");
-      }
-    });
-  }
-
-  $("watchAdMinuteBtn").addEventListener("click", onWatchAdTaskClick);
-  startTaskCooldownTicker();
-
-  $("watchAds5Btn").addEventListener("click", onWatchAds5);
-  $("watchAds10Btn").addEventListener("click", onWatchAds10);
-  startDailyTasksTicker();
-
-  $("checkGames100Btn").addEventListener("click", onCheckGames100);
-
-  initLeaderboard();
-
-  const link = "https://t.me/Stacktongame_bot";
-  $("shareLink").value = link;
-  $("copyShareBtn").addEventListener("click", ()=>copyToClipboard(link));
-
-  $("withdrawBtn").addEventListener("click", withdraw50ShareToGroup);
-
-  initAds();
-
-  updatePlayLockUI();
-
-  window.stackGame = new Game();
-};
-
-function addBalance(n){ balance = parseFloat((balance + n).toFixed(2)); setBalanceUI(); saveData(); }
-function subscribe(){
-  if (subscribed) return;
-  const url = "https://t.me/stackofficialgame";
-  if (window.Telegram?.WebApp?.openTelegramLink) Telegram.WebApp.openTelegramLink(url);
-  else window.open(url, "_blank");
-  subscribed = true; addBalance(1);
-  const btn = $("subscribeBtn"); if (btn){ btn.innerText="Виконано"; btn.classList.add("done"); }
-  saveData();
-}
-
-/* ========= Навігація ========= */
-function showPage(id, btn){
-  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
-  $(id).classList.add("active");
-  document.querySelectorAll(".menu button").forEach(b=>b.classList.remove("active"));
-  btn.classList.add("active");
-  isPaused = (id !== "game");
-  if (id === "game"){ updatePlayLockUI(); }
-}
-window.showPage = showPage;
-
-/* ========= Лідерборд (50 пустих) ========= */
-function initLeaderboard(){
-  const tbody = document.querySelector("#leaderboard tbody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-  for (let i=1;i<=50;i++){
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${i}</td><td>—</td><td>—</td>`;
-    tbody.appendChild(tr);
-  }
-}
-
-/* ========= Реклама Adsgram ========= */
-function initAds(){
-  if (!window.Adsgram){
-    console.warn("Adsgram SDK не завантажився");
-    return;
-  }
-  try { AdTask     = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID_TASK }); }     catch(e){ console.warn("Adsgram init task error:", e); }
-  try { AdGameover = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID_GAMEOVER }); } catch(e){ console.warn("Adsgram init gameover error:", e); }
-  try { Ad5        = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID_5 }); }        catch(e){ console.warn("Adsgram init 5 error:", e); }
-  try { Ad10       = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID_10 }); }       catch(e){ console.warn("Adsgram init 10 error:", e); }
-}
-function inTelegramWebApp(){ return !!(window.Telegram && window.Telegram.WebApp); }
-
-/* ========= Показ реклами з різними контекстами ========= */
-async function showAdController(controller, busyFlagRef){
-  if (!controller) return { shown:false, reason:"no_controller" };
-  if (!inTelegramWebApp()) return { shown:false, reason:"not_telegram" };
-  if (busyFlagRef.value) return { shown:false, reason:"busy" };
-  busyFlagRef.value = true;
-  try {
-    await controller.show();
-    return { shown:true };
-  } catch (err) {
-    return { shown:false, reason: err?.description || err?.state || "no_fill_or_error" };
-  } finally {
-    busyFlagRef.value = false;
-  }
-}
-
-/* ========= Завдання: один показ реклами / хв (дає +0.2⭐) ========= */
-async function onWatchAdTaskClick(){
-  const now = Date.now();
-  const remainingTask = TASK_AD_COOLDOWN_MS - (now - lastAdAtTask);
-  if (remainingTask > 0) return;
-
-  const res = await showAdController(AdTask, { get value(){return adInFlightTask;}, set value(v){adInFlightTask=v;} });
-  if (res.shown){
-    lastAdAtTask = Date.now();
-    addBalance(0.2);
-  } else {
-    console.warn("Ad not shown (task):", res.reason);
-  }
-  updateTaskCooldownUI();
-}
-let taskCooldownTimer = null;
-function startTaskCooldownTicker(){ if (taskCooldownTimer) clearInterval(taskCooldownTimer); taskCooldownTimer=setInterval(updateTaskCooldownUI, 1000); updateTaskCooldownUI(); }
-function updateTaskCooldownUI(){
-  const btnWrap=$("taskAdOncePerMinute"), btn=$("watchAdMinuteBtn"), cdBox=$("taskAdStatus"), cdText=$("adCooldownText");
-  if (!btnWrap||!btn||!cdBox||!cdText) return;
-  const now=Date.now();
-  const remaining=Math.max(0, TASK_AD_COOLDOWN_MS-(now-lastAdAtTask));
-  if (remaining>0){ btn.disabled=true; btnWrap.style.display="none"; cdBox.style.display="flex"; cdText.innerText=Math.ceil(remaining/1000)+"с"; }
-  else { btn.disabled=false; btnWrap.style.display="flex"; cdBox.style.display="none"; }
-}
-
-/* ========= НОВІ ЩОДЕННІ ЗАВДАННЯ (ізольовані лічильники) ========= */
-function startDailyTasksTicker(){
-  setInterval(()=>{
-    updateDailyTaskUI('5');
-    updateDailyTaskUI('10');
-  }, 1000);
-  updateDailyTaskUI('5');
-  updateDailyTaskUI('10');
-}
-function updateDailyTaskUI(which){
-  if (which==='5'){
-    const onCooldown = Date.now() < ads5CooldownUntil;
-    $("ads5Progress").textContent = String(Math.min(ads5Count, 5));
-    $("taskAds5").style.display = onCooldown ? "none" : "flex";
-    $("taskAds5Status").style.display = onCooldown ? "flex" : "none";
-    if (onCooldown){
-      const remain = ads5CooldownUntil - Date.now();
-      $("ads5CooldownText").textContent = fmtHMS(remain);
-    }
-  } else {
-    const onCooldown = Date.now() < ads10CooldownUntil;
-    $("ads10Progress").textContent = String(Math.min(ads10Count, 10));
-    $("taskAds10").style.display = onCooldown ? "none" : "flex";
-    $("taskAds10Status").style.display = onCooldown ? "flex" : "none";
-    if (onCooldown){
-      const remain = ads10CooldownUntil - Date.now();
-      $("ads10CooldownText").textContent = fmtHMS(remain);
-    }
-  }
-}
-function fmtHMS(ms){
-  let s = Math.max(0, Math.ceil(ms/1000));
-  const hh = Math.floor(s/3600); s-=hh*3600;
-  const mm = Math.floor(s/60);   s-=mm*60;
-  const pad=n=>String(n).padStart(2,'0');
-  return `${pad(hh)}:${pad(mm)}:${pad(s)}`;
-}
-async function onWatchAds5(){
-  if (Date.now() < ads5CooldownUntil) return;
-  const res = await showAdController(Ad5, { get value(){return adInFlight5;}, set value(v){adInFlight5=v;} });
-  if (res.shown){
-    ads5Count += 1;
-    if (ads5Count >= 5){
-      ads5Count = 0;
-      ads5CooldownUntil = Date.now() + COOLDOWN_24H;
-      addBalance(REWARD_5);
-    }
-    saveData();
-    updateDailyTaskUI('5');
-  } else {
-    console.warn("Ad not shown (5):", res.reason);
-  }
-}
-async function onWatchAds10(){
-  if (Date.now() < ads10CooldownUntil) return;
-  const res = await showAdController(Ad10, { get value(){return adInFlight10;}, set value(v){adInFlight10=v;} });
-  if (res.shown){
-    ads10Count += 1;
-    if (ads10Count >= 10){
-      ads10Count = 0;
-      ads10CooldownUntil = Date.now() + COOLDOWN_24H;
-      addBalance(REWARD_10);
-    }
-    saveData();
-    updateDailyTaskUI('10');
-  } else {
-    console.warn("Ad not shown (10):", res.reason);
-  }
-}
-
-/* ========= Друзі / копіювання ========= */
-function openBotLink(e){ e.preventDefault(); const url="https://t.me/Stacktongame_bot"; if (window.Telegram?.WebApp?.openTelegramLink) Telegram.WebApp.openTelegramLink(url); else window.open(url,"_blank"); }
-async function copyToClipboard(text){
-  try{
-    if (navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(text); }
-    else { const ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); }
-    alert("Скопійовано ✅");
-  }catch{ alert("Не вдалося копіювати 😕"); }
-}
-
-/* ========= 20-символьні коди для «Вивести» ========= */
+/* ===== 20-символьні коди для «Вивести» (як і було) ===== */
+const ALPH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 function genCore16() {
   const rnd = new Uint8Array(12);
   if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(rnd);
@@ -343,9 +93,7 @@ function genCore16() {
   while(out.length<16) out+=ALPH[Math.floor(Math.random()*ALPH.length)];
   return out.slice(0,16);
 }
-function checksumState(core){
-  let s=0; for(let i=0;i<core.length;i++){ const v=ALPH.indexOf(core[i]); s=((s*37)+(v+7))%9677; } return s;
-}
+function checksumState(core){ let s=0; for(let i=0;i<core.length;i++){ const v=ALPH.indexOf(core[i]); s=((s*37)+(v+7))%9677; } return s; }
 function versionCharFor(core){
   let sumEven=0,sumOdd=0;
   for(let i=0;i<core.length;i++){ const v=LETTERS.indexOf(core[i]); if (v>=0){ if((i%2)===0) sumEven=(sumEven+v)%32; else sumOdd=(sumOdd+v)%32; } }
@@ -368,28 +116,207 @@ function transformCodeHeavy(code){
   const out=new Array(20); for(let i=0;i<20;i++) out[i]=sub[choose[i]]; return out.join("");
 }
 
-/* ========= Вивід 50⭐ ========= */
+/* ===== Ініціалізація ===== */
+window.onload = function(){
+  // збереження
+  balance = parseFloat(localStorage.getItem("balance") || "0");
+  subscribed = localStorage.getItem("subscribed") === "true";
+  task50Completed = localStorage.getItem("task50Completed") === "true";
+  highscore = parseInt(localStorage.getItem("highscore") || "0", 10);
+  gamesPlayedSinceClaim = parseInt(localStorage.getItem("gamesPlayedSinceClaim") || "0", 10);
+
+  ads5Count = parseInt(localStorage.getItem("ads5Count") || "0", 10);
+  ads5CooldownUntil = parseInt(localStorage.getItem("ads5CooldownUntil") || "0", 10);
+  ads10Count = parseInt(localStorage.getItem("ads10Count") || "0", 10);
+  ads10CooldownUntil = parseInt(localStorage.getItem("ads10CooldownUntil") || "0", 10);
+
+  playLockUntil = parseInt(localStorage.getItem("playLockUntil") || "0", 10);
+
+  setBalanceUI();
+  $("highscore").innerText = "🏆 " + highscore;
+  updateGamesTaskUI();
+
+  // підписка
+  const subBtn=$("subscribeBtn");
+  if (subBtn){
+    if (subscribed){ subBtn.innerText="Виконано"; subBtn.classList.add("done"); }
+    subBtn.addEventListener("click", subscribe);
+  }
+
+  // рекорд 50
+  const t50=$("checkTask50");
+  if (t50){
+    if (task50Completed){ t50.innerText="Виконано"; t50.classList.add("done"); }
+    t50.addEventListener("click", ()=>{
+      if (highscore>=50 && !task50Completed){
+        addBalance(10);
+        t50.innerText="Виконано"; t50.classList.add("done");
+        task50Completed = true; saveData();
+      } else if (highscore<50){
+        alert("❌ Твій рекорд замалий (потрібно 50+)");
+      }
+    });
+  }
+
+  // завдання 5/10 реклам
+  $("watchAds5Btn").addEventListener("click", onWatchAds5);
+  $("watchAds10Btn").addEventListener("click", onWatchAds10);
+  startDailyTasksTicker();
+
+  // 100 ігор
+  $("checkGames100Btn").addEventListener("click", onCheckGames100);
+
+  // друзі
+  const link="https://t.me/Stacktongame_bot";
+  $("shareLink").value=link;
+  $("copyShareBtn").addEventListener("click", ()=>copyToClipboard(link));
+  $("withdrawBtn").addEventListener("click", withdraw50ShareToGroup);
+
+  // таблиця ТОП-50
+  initLeaderboard();
+
+  // Adsgram
+  initAds();
+
+  // відновити лок
+  updatePlayLockUI();
+
+  // старт гри
+  window.stackGame = new Game();
+};
+
+/* ===== Навігація ===== */
+function showPage(id, btn){
+  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+  $(id).classList.add("active");
+  document.querySelectorAll(".menu button").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  isPaused = (id !== "game");
+  if (id === "game"){ updatePlayLockUI(); }
+}
+window.showPage = showPage;
+
+/* ===== Підписка ===== */
+function subscribe(){
+  if (subscribed) return;
+  const url="https://t.me/stackofficialgame";
+  if (window.Telegram?.WebApp?.openTelegramLink) Telegram.WebApp.openTelegramLink(url);
+  else window.open(url, "_blank");
+  subscribed=true; addBalance(1);
+  const btn=$("subscribeBtn"); if (btn){ btn.innerText="Виконано"; btn.classList.add("done"); }
+  saveData();
+}
+
+/* ===== Копіювання ===== */
+async function copyToClipboard(text){
+  try{
+    if (navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(text); }
+    else { const ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); }
+    alert("Скопійовано ✅");
+  }catch{ alert("Не вдалося копіювати 😕"); }
+}
+
+/* ===== Вивід 50⭐ (відкриває групу і копіює текст) ===== */
+const GROUP_LINK = "https://t.me/+Z6PMT40dYClhOTQ6";
 function withdraw50ShareToGroup(){
-  const statusEl = $("withdrawStatus");
-  if (balance < WITHDRAW_CHUNK) { if (statusEl){ statusEl.className="err"; statusEl.textContent=`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`; } return; }
+  const statusEl=$("withdrawStatus");
+  if (balance < WITHDRAW_CHUNK){ if (statusEl){ statusEl.className="err"; statusEl.textContent=`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`; } return; }
   const code1=generateCode20(), code2=transformCodeHeavy(code1);
   const u=getTelegramUser(), tag=getUserTag();
   const text = `🔔 Заявка на вивід\n👤 Гравець: ${tag}${u.id? " (id"+u.id+")":""}\n⭐ Сума: ${WITHDRAW_CHUNK}\n🏆 Highscore: ${highscore}\n🔐 Код1: ${code1}\n🔁 Код2: ${code2}`;
   balance = Number((balance - WITHDRAW_CHUNK).toFixed(2)); setBalanceUI(); saveData();
   if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).catch(()=>{}); }
-  if (OPEN_MODE==="group" && GROUP_LINK){
-    if (window.Telegram?.WebApp?.openTelegramLink) Telegram.WebApp.openTelegramLink(GROUP_LINK);
-    else window.open(GROUP_LINK,"_blank");
-    if (statusEl){ statusEl.className="ok"; statusEl.textContent="Текст скопійовано. Встав у групі та надішли."; }
-  } else {
-    const shareUrl = "https://t.me/share/url?text=" + encodeURIComponent(text);
-    if (window.Telegram?.WebApp?.openTelegramLink) Telegram.WebApp.openTelegramLink(shareUrl);
-    else window.open(shareUrl, "_blank");
-    if (statusEl){ statusEl.className="ok"; statusEl.textContent="Вибери групу у «Поділитися» та надішли."; }
+  if (window.Telegram?.WebApp?.openTelegramLink) Telegram.WebApp.openTelegramLink(GROUP_LINK);
+  else window.open(GROUP_LINK,"_blank");
+  if (statusEl){ statusEl.className="ok"; statusEl.textContent="Текст скопійовано. Встав у групі та надішли."; }
+}
+
+/* ===== ТОП-50 пустий ===== */
+function initLeaderboard(){
+  const tbody=document.querySelector("#leaderboard tbody");
+  if (!tbody) return;
+  tbody.innerHTML="";
+  for (let i=1;i<=50;i++){
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${i}</td><td>—</td><td>—</td>`;
+    tbody.appendChild(tr);
   }
 }
 
-/* ========= Завдання 100 ігор ========= */
+/* ===== Adsgram ===== */
+function initAds(){
+  if (!window.Adsgram){ console.warn("Adsgram SDK не завантажився"); return; }
+  try { AdGameover = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID }); } catch(e){ console.warn("Adsgram gameover init error:", e); }
+  try { Ad5        = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID }); } catch(e){ console.warn("Adsgram 5 init error:", e); }
+  try { Ad10       = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID }); } catch(e){ console.warn("Adsgram 10 init error:", e); }
+}
+function inTelegramWebApp(){ return !!(window.Telegram && window.Telegram.WebApp); }
+async function showAd(controller){
+  if (!controller) return { shown:false, reason:"no_controller" };
+  if (!inTelegramWebApp()) return { shown:false, reason:"not_telegram" };
+  try{ await controller.show(); return { shown:true }; }
+  catch(err){ return { shown:false, reason: err?.description || err?.state || "no_fill_or_error" }; }
+}
+
+/* ===== Завдання 5/10 реклам (ізольовані) ===== */
+function startDailyTasksTicker(){
+  setInterval(()=>{ updateDailyTaskUI('5'); updateDailyTaskUI('10'); }, 1000);
+  updateDailyTaskUI('5'); updateDailyTaskUI('10');
+}
+function updateDailyTaskUI(which){
+  if (which==='5'){
+    const onCd = Date.now() < ads5CooldownUntil;
+    $("ads5Progress").textContent = String(Math.min(ads5Count, 5));
+    $("taskAds5").style.display = onCd? "none":"flex";
+    $("taskAds5Status").style.display = onCd? "flex":"none";
+    if (onCd){ $("ads5CooldownText").textContent = fmtHMS(ads5CooldownUntil - Date.now()); }
+  } else {
+    const onCd = Date.now() < ads10CooldownUntil;
+    $("ads10Progress").textContent = String(Math.min(ads10Count, 10));
+    $("taskAds10").style.display = onCd? "none":"flex";
+    $("taskAds10Status").style.display = onCd? "flex":"none";
+    if (onCd){ $("ads10CooldownText").textContent = fmtHMS(ads10CooldownUntil - Date.now()); }
+  }
+}
+function fmtHMS(ms){
+  let s = Math.max(0, Math.ceil(ms/1000));
+  const hh=Math.floor(s/3600); s-=hh*3600;
+  const mm=Math.floor(s/60);   s-=mm*60;
+  const pad=n=>String(n).padStart(2,'0');
+  return `${pad(hh)}:${pad(mm)}:${pad(s)}`;
+}
+async function onWatchAds5(){
+  if (Date.now() < ads5CooldownUntil) return;
+  const res = await showAd(Ad5);
+  if (res.shown){
+    ads5Count += 1;
+    if (ads5Count >= 5){
+      ads5Count = 0;
+      ads5CooldownUntil = Date.now() + COOLDOWN_24H;
+      addBalance(REWARD_5);
+    }
+    saveData(); updateDailyTaskUI('5');
+  } else {
+    console.warn("Ad not shown (5):", res.reason);
+  }
+}
+async function onWatchAds10(){
+  if (Date.now() < ads10CooldownUntil) return;
+  const res = await showAd(Ad10);
+  if (res.shown){
+    ads10Count += 1;
+    if (ads10Count >= 10){
+      ads10Count = 0;
+      ads10CooldownUntil = Date.now() + COOLDOWN_24H;
+      addBalance(REWARD_10);
+    }
+    saveData(); updateDailyTaskUI('10');
+  } else {
+    console.warn("Ad not shown (10):", res.reason);
+  }
+}
+
+/* ===== 100 ігор ===== */
 function updateGamesTaskUI(){ const c=$("gamesPlayedCounter"); if (c) c.textContent=String(Math.min(gamesPlayedSinceClaim, GAMES_TARGET)); }
 function onCheckGames100(){
   if (gamesPlayedSinceClaim >= GAMES_TARGET){
@@ -401,47 +328,45 @@ function onCheckGames100(){
   }
 }
 
-/* ========= Post-блок у грі (15с після реклами) ========= */
+/* ===== Post-блок 15с після реклами ===== */
 function isPlayLocked(){ return Date.now() < playLockUntil; }
 function setPlayLock(ms){
   playLockUntil = Date.now() + ms; saveData(); updatePlayLockUI();
   if (playLockTimer) clearInterval(playLockTimer);
   playLockTimer = setInterval(()=>{
     updatePlayLockUI();
-    if (!isPlayLocked()){
-      clearInterval(playLockTimer); playLockTimer=null;
-    }
+    if (!isPlayLocked()){ clearInterval(playLockTimer); playLockTimer=null; }
   }, 300);
 }
 function updatePlayLockUI(){
-  const box = $("playLock"), span = $("playLockCountdown");
+  const box=$("playLock"), span=$("playLockCountdown");
   if (!box) return;
-  const remaining = Math.max(0, playLockUntil - Date.now());
-  if (remaining > 0){
-    box.style.display = "block";
-    if (span) span.textContent = String(Math.ceil(remaining/1000));
+  const remaining=Math.max(0, playLockUntil - Date.now());
+  if (remaining>0){
+    box.style.display="block";
+    if (span) span.textContent=String(Math.ceil(remaining/1000));
     isPaused = true;
   } else {
-    box.style.display = "none";
+    box.style.display="none";
   }
 }
 
-/* ========= 3D Stack (гра) ========= */
+/* ====== ГРА (оригінальна механіка, лише гачок у endGame) ====== */
 class Stage{
   constructor(){
-    this.container = document.getElementById("container");
-    this.scene = new THREE.Scene();
-    this.renderer = new THREE.WebGLRenderer({antialias:true,alpha:false});
+    this.container=document.getElementById("container");
+    this.scene=new THREE.Scene();
+    this.renderer=new THREE.WebGLRenderer({antialias:true,alpha:false});
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setClearColor('#D0CBC7', 1);
     this.container.appendChild(this.renderer.domElement);
-    const aspect = window.innerWidth / window.innerHeight, d = 20;
-    this.camera = new THREE.OrthographicCamera(-d*aspect, d*aspect, d, -d, -100, 1000);
+    const aspect=window.innerWidth/window.innerHeight, d=20;
+    this.camera=new THREE.OrthographicCamera(-d*aspect, d*aspect, d, -d, -100, 1000);
     this.camera.position.set(2,2,2);
-    this.cameraTarget = new THREE.Vector3(0,0,0);
+    this.cameraTarget=new THREE.Vector3(0,0,0);
     this.camera.lookAt(this.cameraTarget);
-    this.light = new THREE.DirectionalLight(0xffffff,0.5); this.light.position.set(0,499,0);
-    this.softLight = new THREE.AmbientLight(0xffffff,0.4);
+    this.light=new THREE.DirectionalLight(0xffffff,0.5); this.light.position.set(0,499,0);
+    this.softLight=new THREE.AmbientLight(0xffffff,0.4);
     this.scene.add(this.light); this.scene.add(this.softLight);
     window.addEventListener('resize', ()=>this.onResize()); this.onResize();
   }
@@ -466,42 +391,43 @@ class Block{
   constructor(prev){
     this.STATES={ACTIVE:'active',STOPPED:'stopped',MISSED:'missed'};
     this.MOVE_AMOUNT=12;
-    this.targetBlock = prev;
-    this.index = (prev?prev.index:0)+1;
-    this.workingPlane = this.index%2 ? 'x' : 'z';
-    this.workingDimension = this.index%2 ? 'width' : 'depth';
-    this.dimension = { width: prev?prev.dimension.width:10, height: prev?prev.dimension.height:2, depth: prev?prev.dimension.depth:10 };
-    this.position = { x: prev?prev.position.x:0, y: this.dimension.height*this.index, z: prev?prev.position.z:0 };
-    this.colorOffset = prev?prev.colorOffset:Math.round(Math.random()*100);
-    if(!prev){ this.color=0x333344; } else {
+    this.targetBlock=prev;
+    this.index=(prev?prev.index:0)+1;
+    this.workingPlane=this.index%2 ? 'x' : 'z';
+    this.workingDimension=this.index%2 ? 'width' : 'depth';
+    this.dimension={ width: prev?prev.dimension.width:10, height: prev?prev.dimension.height:2, depth: prev?prev.dimension.depth:10 };
+    this.position={ x: prev?prev.position.x:0, y: this.dimension.height*this.index, z: prev?prev.position.z:0 };
+    this.colorOffset=prev?prev.colorOffset:Math.round(Math.random()*100);
+    if(!prev){ this.color=0x333344; }
+    else {
       const o=this.index+this.colorOffset;
       const r=Math.sin(0.3*o)*55+200, g=Math.sin(0.3*o+2)*55+200, b=Math.sin(0.3*o+4)*55+200;
       this.color=new THREE.Color(r/255,g/255,b/255);
     }
-    this.state = this.index>1 ? this.STATES.ACTIVE : this.STATES.STOPPED;
-    this.speed = -0.1 - (this.index*0.005); if (this.speed<-4) this.speed=-4;
-    this.direction = this.speed;
+    this.state=this.index>1?this.STATES.ACTIVE:this.STATES.STOPPED;
+    this.speed=-0.1-(this.index*0.005); if(this.speed<-4) this.speed=-4;
+    this.direction=this.speed;
 
-    const geom = new THREE.BoxGeometry(this.dimension.width, this.dimension.height, this.dimension.depth);
-    geom.translate(this.dimension.width/2, this.dimension.height/2, this.dimension.depth/2);
-    this.material = new THREE.MeshToonMaterial({color:this.color});
-    this.mesh = new THREE.Mesh(geom, this.material);
-    this.mesh.position.set(this.position.x, this.position.y, this.position.z);
-    if (this.state===this.STATES.ACTIVE) {
+    const geom=new THREE.BoxGeometry(this.dimension.width,this.dimension.height,this.dimension.depth);
+    geom.translate(this.dimension.width/2,this.dimension.height/2,this.dimension.depth/2);
+    this.material=new THREE.MeshToonMaterial({color:this.color});
+    this.mesh=new THREE.Mesh(geom,this.material);
+    this.mesh.position.set(this.position.x,this.position.y,this.position.z);
+    if(this.state===this.STATES.ACTIVE){
       this.position[this.workingPlane] = Math.random()>0.5 ? -this.MOVE_AMOUNT : this.MOVE_AMOUNT;
     }
   }
   reverseDirection(){ this.direction = this.direction>0 ? this.speed : Math.abs(this.speed); }
   place(){
     this.state=this.STATES.STOPPED;
-    let overlap = this.targetBlock.dimension[this.workingDimension] - Math.abs(this.position[this.workingPlane]-this.targetBlock.position[this.workingPlane]);
+    let overlap=this.targetBlock.dimension[this.workingDimension]-Math.abs(this.position[this.workingPlane]-this.targetBlock.position[this.workingPlane]);
     const ret={plane:this.workingPlane,direction:this.direction};
-    if (this.dimension[this.workingDimension]-overlap<0.3){
+    if(this.dimension[this.workingDimension]-overlap<0.3){
       overlap=this.dimension[this.workingDimension]; ret.bonus=true;
       this.position.x=this.targetBlock.position.x; this.position.z=this.targetBlock.position.z;
       this.dimension.width=this.targetBlock.dimension.width; this.dimension.depth=this.targetBlock.dimension.depth;
     }
-    if (overlap>0){
+    if(overlap>0){
       const choppedDim={width:this.dimension.width,height:this.dimension.height,depth:this.dimension.depth};
       choppedDim[this.workingDimension]-=overlap; this.dimension[this.workingDimension]=overlap;
 
@@ -514,10 +440,10 @@ class Block{
       const chopped=new THREE.Mesh(choppedG,this.material);
 
       const choppedPos={x:this.position.x,y:this.position.y,z:this.position.z};
-      if (this.position[this.workingPlane] < this.targetBlock.position[this.workingPlane]) {
-        this.position[this.workingPlane] = this.targetBlock.position[this.workingPlane];
+      if(this.position[this.workingPlane] < this.targetBlock.position[this.workingPlane]){
+        this.position[this.workingPlane]=this.targetBlock.position[this.workingPlane];
       } else {
-        choppedPos[this.workingPlane] += overlap;
+        choppedPos[this.workingPlane]+=overlap;
       }
 
       placed.position.set(this.position.x,this.position.y,this.position.z);
@@ -531,11 +457,11 @@ class Block{
     return ret;
   }
   tick(){
-    if (this.state===this.STATES.ACTIVE){
+    if(this.state===this.STATES.ACTIVE){
       const v=this.position[this.workingPlane];
-      if (v>this.MOVE_AMOUNT || v<-this.MOVE_AMOUNT) this.reverseDirection();
-      this.position[this.workingPlane] += this.direction;
-      this.mesh.position[this.workingPlane] = this.position[this.workingPlane];
+      if(v>this.MOVE_AMOUNT || v<-this.MOVE_AMOUNT) this.reverseDirection();
+      this.position[this.workingPlane]+=this.direction;
+      this.mesh.position[this.workingPlane]=this.position[this.workingPlane];
     }
   }
 }
@@ -612,9 +538,9 @@ class Game{
     updateHighscore(currentScore);
     gamesPlayedSinceClaim += 1; saveData(); updateGamesTaskUI();
 
-    // 1) Показ реклами одразу
-    const res = await showAdController(AdGameover, { get value(){return adInFlightGameover;}, set value(v){adInFlightGameover=v;} });
-    // 2) Якщо реклама показалась — 15с блок на гру
+    // ► Показ реклами одразу після Game Over
+    const res = await showAd(AdGameover);
+    // ► Після показу — блокуємо гру на 15 сек
     if (res.shown) setPlayLock(POST_AD_LOCK_MS);
   }
   addBlock(){
