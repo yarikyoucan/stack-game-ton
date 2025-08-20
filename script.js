@@ -2,19 +2,24 @@
 console.clear();
 
 /* ========= КОНСТАНТИ ========= */
-const TASK_AD_COOLDOWN_MS = 60_000;  // 1 реклама / хв у завданні (+0.2⭐)
-const GAMES_TARGET = 100;            // кожні 100 ігор
-const GAMES_REWARD = 15;             // +15⭐ за 100 ігор
-const WITHDRAW_CHUNK = 50;           // списуємо рівно 50⭐
-
-/* окремі блоки для завдання і для Game Over */
-const ADSGRAM_BLOCK_ID_TASK     = "int-13961";
-const ADSGRAM_BLOCK_ID_GAMEOVER = "int-13961"; // можеш змінити на інший int-xxxxx
-
-/* мінімальний локальний кулдаун усередині одного контексту (захист від дабл-кліку) */
+const TASK_AD_COOLDOWN_MS = 60_000;   // 1 реклама / хв у завданні (+0.2⭐)
+const PRE_AD_DELAY_MS     = 15_000;   // ⏳ 15с до показу реклами після Game Over
+const POST_AD_LOCK_MS     = 15_000;   // ⏳ 15с після реклами — блок на гру
 const MIN_BETWEEN_SAME_CTX_MS = 10_000;
 
-/* Куди відкривати користувача при виводі 50⭐ */
+const GAMES_TARGET = 100;
+const GAMES_REWARD = 10;              // +10⭐ за 100 ігор
+const WITHDRAW_CHUNK = 50;
+
+const ADSGRAM_BLOCK_ID_TASK     = "int-13961";
+const ADSGRAM_BLOCK_ID_GAMEOVER = "int-13961"; // той самий блок, як просив
+
+/* ========= ЩОДЕННІ ЛІМІТИ РЕКЛАМНИХ ЗАВДАНЬ ========= */
+const DAILY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const ADS_DAILY_GOAL_5  = 5;    // +1.2⭐
+const ADS_DAILY_GOAL_10 = 10;   // +2.5⭐
+
+/* ========= ПОСИЛАННЯ ========= */
 const OPEN_MODE = "group"; // "group" | "share"
 const GROUP_LINK = "https://t.me/+Z6PMT40dYClhOTQ6";
 
@@ -27,7 +32,7 @@ let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
 let gamesPlayedSinceClaim = 0;
 let isPaused = false;
 
-/* ========= РЕКЛАМА: два контролери і два локальні кулдауни ========= */
+/* Реклама: контролери та кулдауни */
 let AdTask = null;
 let AdGameover = null;
 let lastAdAtTask = 0;
@@ -35,17 +40,38 @@ let lastAdAtGameover = 0;
 let adInFlightTask = false;
 let adInFlightGameover = false;
 
+/* Pre/Post таймери у грі */
+let adPreUntil = 0;         // до якого часу триває 15с pre-roll
+let playLockUntil = 0;      // до якого часу триває 15с post-roll
+let adPreTimer = null;
+let playLockTimer = null;
+
+/* Щоденні задачі по кількості переглядів */
+let adsWatchedToday = 0;
+let adsWindowStart = 0;   // timestamp початку 24-год вікна
+let claimed5Today = false;
+let claimed10Today = false;
+
 /* ========= ХЕЛПЕРИ ========= */
 const $ = id => document.getElementById(id);
 const formatStars = v => Number.isInteger(Number(v)) ? String(Number(v)) : Number(v).toFixed(1);
 const setBalanceUI = () => $("balance").innerText = formatStars(balance);
+
 function saveData(){
   localStorage.setItem("balance", String(balance));
   localStorage.setItem("subscribed", subscribed ? "true" : "false");
   localStorage.setItem("task50Completed", task50Completed ? "true" : "false");
   localStorage.setItem("highscore", String(highscore));
-  localStorage.setItem("lastTaskAdAt", String(lastTaskAdAt));
+  localStorage.setItem("lastTaskAdAt", String(lastAdAtTask));
   localStorage.setItem("gamesPlayedSinceClaim", String(gamesPlayedSinceClaim));
+
+  localStorage.setItem("adsWatchedToday", String(adsWatchedToday));
+  localStorage.setItem("adsWindowStart", String(adsWindowStart));
+  localStorage.setItem("claimed5Today", claimed5Today ? "true" : "false");
+  localStorage.setItem("claimed10Today", claimed10Today ? "true" : "false");
+
+  localStorage.setItem("adPreUntil", String(adPreUntil));
+  localStorage.setItem("playLockUntil", String(playLockUntil));
 }
 
 /* ========= TELEGRAM USER ========= */
@@ -64,19 +90,29 @@ function getUserTag(){
 }
 
 /* ========= ІНІЦІАЛІЗАЦІЯ ========= */
-let lastTaskAdAt = 0;
-
 window.onload = function(){
   balance = parseFloat(localStorage.getItem("balance") || "0");
   subscribed = localStorage.getItem("subscribed") === "true";
   task50Completed = localStorage.getItem("task50Completed") === "true";
   highscore = parseInt(localStorage.getItem("highscore") || "0", 10);
-  lastTaskAdAt = parseInt(localStorage.getItem("lastTaskAdAt") || "0", 10);
+  lastAdAtTask = parseInt(localStorage.getItem("lastTaskAdAt") || "0", 10);
   gamesPlayedSinceClaim = parseInt(localStorage.getItem("gamesPlayedSinceClaim") || "0", 10);
+
+  adsWatchedToday = parseInt(localStorage.getItem("adsWatchedToday") || "0", 10);
+  adsWindowStart  = parseInt(localStorage.getItem("adsWindowStart")  || "0", 10);
+  claimed5Today   = localStorage.getItem("claimed5Today")  === "true";
+  claimed10Today  = localStorage.getItem("claimed10Today") === "true";
+
+  adPreUntil    = parseInt(localStorage.getItem("adPreUntil")    || "0", 10);
+  playLockUntil = parseInt(localStorage.getItem("playLockUntil") || "0", 10);
+
+  dailyResetCheck();
 
   setBalanceUI();
   $("highscore").innerText = "🏆 " + highscore;
   updateGamesTaskUI();
+  updateAdTasksProgressUI();
+  updateAdTaskButtonsState();
 
   const subBtn = $("subscribeBtn");
   if (subBtn){
@@ -102,6 +138,9 @@ window.onload = function(){
   if (watchBtn) watchBtn.addEventListener("click", onWatchAdTaskClick);
   startTaskCooldownTicker();
 
+  $("checkAds5Btn").addEventListener("click", onCheckAds5);
+  $("checkAds10Btn").addEventListener("click", onCheckAds10);
+
   const g100Btn = $("checkGames100Btn");
   if (g100Btn) g100Btn.addEventListener("click", onCheckGames100);
 
@@ -116,8 +155,23 @@ window.onload = function(){
 
   initAds();
 
+  // відновити pre/post екрани, якщо активні
+  updateAdPreUI();
+  updatePlayLockUI();
+
   window.stackGame = new Game();
 };
+
+function dailyResetCheck(){
+  const now = Date.now();
+  if (!adsWindowStart || (now - adsWindowStart) >= DAILY_WINDOW_MS){
+    adsWindowStart = now;
+    adsWatchedToday = 0;
+    claimed5Today = false;
+    claimed10Today = false;
+    saveData();
+  }
+}
 
 function addBalance(n){ balance = parseFloat((balance + n).toFixed(2)); setBalanceUI(); saveData(); }
 function subscribe(){
@@ -137,6 +191,7 @@ function showPage(id, btn){
   document.querySelectorAll(".menu button").forEach(b=>b.classList.remove("active"));
   btn.classList.add("active");
   isPaused = (id !== "game");
+  if (id === "game"){ updateAdPreUI(); updatePlayLockUI(); }
 }
 window.showPage = showPage;
 
@@ -152,7 +207,7 @@ function initLeaderboard(){
   }
 }
 
-/* ========= Реклама Adsgram: два незалежні контролери ========= */
+/* ========= Реклама Adsgram ========= */
 function initAds(){
   if (!window.Adsgram){
     console.warn("Adsgram SDK не завантажився");
@@ -166,7 +221,8 @@ function initAds(){
 function inTelegramWebApp(){ return !!(window.Telegram && window.Telegram.WebApp); }
 
 /**
- * Показ реклами в конкретному контексті (task | gameover) з локальним кулдауном
+ * Показ реклами (ctx: 'task' | 'gameover').
+ * Якщо показ відбувся — +рахуємо у щоденний лічильник, вмикаємо POST-лок.
  */
 async function showInterstitialOnce(ctx){
   const isTask = (ctx === 'task');
@@ -175,13 +231,19 @@ async function showInterstitialOnce(ctx){
   if (!inTelegramWebApp()) return { shown:false, reason:"not_telegram" };
 
   const now = Date.now();
+
+  // локальні бар'єри від дабл-кліків
   if (isTask) {
     if (adInFlightTask) return { shown:false, reason:"task_busy" };
-    if (now - lastAdAtTask < MIN_BETWEEN_SAME_CTX_MS) return { shown:false, reason:"task_local_cooldown" };
+    if (now - lastAdAtTask < Math.max(MIN_BETWEEN_SAME_CTX_MS, TASK_AD_COOLDOWN_MS)) {
+      return { shown:false, reason:"task_ctx_cooldown" };
+    }
     adInFlightTask = true;
     try {
       await controller.show();
       lastAdAtTask = Date.now();
+      adsWatchedToday += 1; saveData();
+      updateAdTasksProgressUI();
       return { shown:true };
     } catch (err) {
       return { shown:false, reason: err?.description || err?.state || "no_fill_or_error" };
@@ -190,11 +252,15 @@ async function showInterstitialOnce(ctx){
     }
   } else {
     if (adInFlightGameover) return { shown:false, reason:"gameover_busy" };
-    if (now - lastAdAtGameover < MIN_BETWEEN_SAME_CTX_MS) return { shown:false, reason:"gameover_local_cooldown" };
+    if (now - lastAdAtGameover < MIN_BETWEEN_SAME_CTX_MS) {
+      return { shown:false, reason:"gameover_ctx_cooldown" };
+    }
     adInFlightGameover = true;
     try {
       await controller.show();
       lastAdAtGameover = Date.now();
+      adsWatchedToday += 1; saveData();
+      updateAdTasksProgressUI();
       return { shown:true };
     } catch (err) {
       return { shown:false, reason: err?.description || err?.state || "no_fill_or_error" };
@@ -207,27 +273,58 @@ async function showInterstitialOnce(ctx){
 /* ========= Завдання: один показ реклами / хв (дає +0.2⭐) ========= */
 async function onWatchAdTaskClick(){
   const now = Date.now();
-  const remaining = TASK_AD_COOLDOWN_MS - (now - lastTaskAdAt);
-  if (remaining > 0) return;
+  const remainingTask = TASK_AD_COOLDOWN_MS - (now - lastAdAtTask);
+  if (remainingTask > 0) return;
 
   const res = await showInterstitialOnce('task');
   if (res.shown){
-    lastTaskAdAt = Date.now();
     addBalance(0.2);
-    saveData();
-    updateTaskCooldownUI();
   } else {
     console.warn("Ad not shown (task):", res.reason);
   }
+  updateTaskCooldownUI();
 }
 let taskCooldownTimer = null;
 function startTaskCooldownTicker(){ if (taskCooldownTimer) clearInterval(taskCooldownTimer); taskCooldownTimer=setInterval(updateTaskCooldownUI, 1000); updateTaskCooldownUI(); }
 function updateTaskCooldownUI(){
   const btnWrap=$("taskAdOncePerMinute"), btn=$("watchAdMinuteBtn"), cdBox=$("taskAdStatus"), cdText=$("adCooldownText");
   if (!btnWrap||!btn||!cdBox||!cdText) return;
-  const now=Date.now(), remaining=Math.max(0,TASK_AD_COOLDOWN_MS-(now-lastTaskAdAt));
+  const now=Date.now();
+  const remaining=Math.max(0, TASK_AD_COOLDOWN_MS-(now-lastAdAtTask));
   if (remaining>0){ btn.disabled=true; btnWrap.style.display="none"; cdBox.style.display="flex"; cdText.innerText=Math.ceil(remaining/1000)+"с"; }
   else { btn.disabled=false; btnWrap.style.display="flex"; cdBox.style.display="none"; }
+}
+
+/* ========= НОВІ ЩОДЕННІ ЗАВДАННЯ (5 і 10 реклам) ========= */
+function updateAdTasksProgressUI(){
+  $("ads5Progress").textContent  = String(Math.min(adsWatchedToday, ADS_DAILY_GOAL_5));
+  $("ads10Progress").textContent = String(Math.min(adsWatchedToday, ADS_DAILY_GOAL_10));
+}
+function updateAdTaskButtonsState(){
+  $("checkAds5Btn").disabled  = claimed5Today;
+  $("checkAds10Btn").disabled = claimed10Today;
+  if (claimed5Today)  $("checkAds5Btn").classList.add("done");
+  if (claimed10Today) $("checkAds10Btn").classList.add("done");
+}
+function onCheckAds5(){
+  dailyResetCheck();
+  if (claimed5Today){ alert("Цю нагороду вже отримано сьогодні ✅"); return; }
+  if (adsWatchedToday >= ADS_DAILY_GOAL_5){
+    addBalance(1.2);
+    claimed5Today = true; saveData(); updateAdTaskButtonsState();
+  } else {
+    alert(`Потрібно ще ${ADS_DAILY_GOAL_5 - adsWatchedToday} реклам(и) до +1.2⭐`);
+  }
+}
+function onCheckAds10(){
+  dailyResetCheck();
+  if (claimed10Today){ alert("Цю нагороду вже отримано сьогодні ✅"); return; }
+  if (adsWatchedToday >= ADS_DAILY_GOAL_10){
+    addBalance(2.5);
+    claimed10Today = true; saveData(); updateAdTaskButtonsState();
+  } else {
+    alert(`Потрібно ще ${ADS_DAILY_GOAL_10 - adsWatchedToday} реклам(и) до +2.5⭐`);
+  }
 }
 
 /* ========= Друзі / копіювання ========= */
@@ -240,23 +337,16 @@ async function copyToClipboard(text){
   }catch{ alert("Не вдалося копіювати 😕"); }
 }
 
-/* ========= 20-символьний КОД-1 + важкий трансформ у КОД-2 ========= */
-// ядро 16 символів із випадковості + мікс userId і часу
+/* ========= 20-символьні коди для «Вивести» ========= */
 function genCore16() {
   const rnd = new Uint8Array(12);
   if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(rnd);
   else rnd.fill(Date.now() % 256);
-
   const u = (window.Telegram?.WebApp?.initDataUnsafe?.user?.id) || 0;
   const mix = ((Number(u) ^ (Date.now() & 0xffffffff)) >>> 0);
-  rnd[8]  ^= (mix       ) & 0xff;
-  rnd[9]  ^= (mix >>>  8) & 0xff;
-  rnd[10] ^= (mix >>> 16) & 0xff;
-  rnd[11] ^= (mix >>> 24) & 0xff;
-
-  // Base32 на нашому алфавіті (без 0/1/I/O)
-  let bits=0, value=0, out="";
-  for (let i=0;i<rnd.length;i++){
+  rnd[8]^=(mix)&0xff; rnd[9]^=(mix>>>8)&0xff; rnd[10]^=(mix>>>16)&0xff; rnd[11]^=(mix>>>24)&0xff;
+  let bits=0,value=0,out="";
+  for(let i=0;i<rnd.length;i++){
     let b=rnd[i]; if (b<0) b+=256;
     bits+=8; value=(value<<8)|b;
     while(bits>=5){ out+=ALPH[(value >>> (bits-5)) & 31]; bits-=5; }
@@ -266,99 +356,42 @@ function genCore16() {
   return out.slice(0,16);
 }
 function checksumState(core){
-  let s=0;
-  for(let i=0;i<core.length;i++){
-    const v=ALPH.indexOf(core[i]);
-    s=((s*37)+(v+7))%9677;
-  }
-  return s;
+  let s=0; for(let i=0;i<core.length;i++){ const v=ALPH.indexOf(core[i]); s=((s*37)+(v+7))%9677; } return s;
 }
 function versionCharFor(core){
   let sumEven=0,sumOdd=0;
-  for(let i=0;i<core.length;i++){
-    const v = LETTERS.indexOf(core[i]);
-    if (v>=0){ if((i%2)===0) sumEven=(sumEven+v)%32; else sumOdd=(sumOdd+v)%32; }
-  }
-  const idx0 = Math.max(0, LETTERS.indexOf(core[0]));
-  const idx15 = Math.max(0, LETTERS.indexOf(core[15]));
-  const verIdx = ((sumEven*11)+(sumOdd*7)+(idx0*3)+(idx15*5)+13)%32;
+  for(let i=0;i<core.length;i++){ const v=LETTERS.indexOf(core[i]); if (v>=0){ if((i%2)===0) sumEven=(sumEven+v)%32; else sumOdd=(sumOdd+v)%32; } }
+  const idx0=Math.max(0,LETTERS.indexOf(core[0])), idx15=Math.max(0,LETTERS.indexOf(core[15]));
+  const verIdx=((sumEven*11)+(sumOdd*7)+(idx0*3)+(idx15*5)+13)%32;
   return ALPH[verIdx];
 }
-function checkTail(core){
-  const s=checksumState(core);
-  const ch1=ALPH[s%32], ch2=ALPH[(s*31+3)%32], ch3=ALPH[(s*17+5)%32];
-  return ch1+ch2+ch3;
-}
-function generateCode20(){
-  const core=genCore16();
-  const ver=versionCharFor(core);
-  const chk=checkTail(core);
-  return core.slice(0,8)+ver+core.slice(8)+chk; // 8 + 1 + 8 + 3 = 20
-}
+function checkTail(core){ const s=checksumState(core); return ALPH[s%32]+ALPH[(s*31+3)%32]+ALPH[(s*17+5)%32]; }
+function generateCode20(){ const core=genCore16(); const ver=versionCharFor(core); const chk=checkTail(core); return core.slice(0,8)+ver+core.slice(8)+chk; }
 
-/* ======= ВАЖКА ЗАКОНОМІРНІСТЬ ДЛЯ КОД2 ======= */
 const DIGIT_MAP = { "2":"6","6":"3","3":"8","8":"5","5":"9","9":"4","4":"7","7":"2" };
-const LETTER_MAP = {
-  "A":"Q","B":"T","C":"M","D":"R","E":"K","F":"X","G":"A","H":"V",
-  "J":"C","K":"Z","L":"E","M":"H","N":"Y","P":"S","Q":"D","R":"B",
-  "S":"U","T":"F","U":"J","V":"G","W":"N","X":"P","Y":"W","Z":"L"
-};
-const PERM1 = [11, 2,17, 6,14,19, 0, 8, 4,16, 1,13, 9, 3,18, 5,12, 7,15,10];
-const PERM2 = [15, 0, 9,13, 6,18, 3,11, 1,16, 4,14, 8, 2,19, 5,12, 7,17,10];
-
+const LETTER_MAP = {"A":"Q","B":"T","C":"M","D":"R","E":"K","F":"X","G":"A","H":"V","J":"C","K":"Z","L":"E","M":"H","N":"Y","P":"S","Q":"D","R":"B","S":"U","T":"F","U":"J","V":"G","W":"N","X":"P","Y":"W","Z":"L"};
+const PERM1 = [11,2,17,6,14,19,0,8,4,16,1,13,9,3,18,5,12,7,15,10];
+const PERM2 = [15,0,9,13,6,18,3,11,1,16,4,14,8,2,19,5,12,7,17,10];
 function transformCodeHeavy(code){
   if (typeof code!=="string" || code.length!==20) return "";
-  const sub = Array.from(code).map(ch=>{
-    if (DIGIT_MAP[ch]) return DIGIT_MAP[ch];
-    if (LETTER_MAP[ch]) return LETTER_MAP[ch];
-    return ch;
-  });
-  const i2 = ALPH.indexOf(code[2])  >>> 0;
-  const i7 = ALPH.indexOf(code[7])  >>> 0;
-  const i13= ALPH.indexOf(code[13]) >>> 0;
-  const i19= ALPH.indexOf(code[19]) >>> 0;
-  const choose = ((i2 + i7 + i13 + i19) % 2) === 0 ? PERM1 : PERM2;
-
-  const out = new Array(20);
-  for (let i=0;i<20;i++) out[i] = sub[ choose[i] ];
-  return out.join("");
+  const sub=Array.from(code).map(ch=> DIGIT_MAP[ch] || LETTER_MAP[ch] || ch );
+  const i2=ALPH.indexOf(code[2])>>>0, i7=ALPH.indexOf(code[7])>>>0, i13=ALPH.indexOf(code[13])>>>0, i19=ALPH.indexOf(code[19])>>>0;
+  const choose=((i2+i7+i13+i19)%2)===0?PERM1:PERM2;
+  const out=new Array(20); for(let i=0;i<20;i++) out[i]=sub[choose[i]]; return out.join("");
 }
-function isTransformedPair(code1, code2){ return transformCodeHeavy(code1) === code2; }
 
-/* ========= Вивід: списуємо 50⭐ + відкриваємо групу/«Поділитися» з кодами ========= */
+/* ========= Вивід 50⭐ ========= */
 function withdraw50ShareToGroup(){
   const statusEl = $("withdrawStatus");
-
-  if (balance < WITHDRAW_CHUNK) {
-    if (statusEl){ statusEl.className="err"; statusEl.textContent=`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`; }
-    return;
-  }
-
-  const code1 = generateCode20();
-  const code2 = transformCodeHeavy(code1);
-
-  const u = getTelegramUser();
-  const tag = getUserTag();
-  const text =
-    `🔔 Заявка на вивід\n` +
-    `👤 Гравець: ${tag}${u.id ? " (id"+u.id+")" : ""}\n` +
-    `⭐ Сума: ${WITHDRAW_CHUNK}\n` +
-    `🏆 Highscore: ${highscore}\n` +
-    `🔐 Код1: ${code1}\n` +
-    `🔁 Код2: ${code2}`;
-
-  balance = Number((balance - WITHDRAW_CHUNK).toFixed(2));
-  setBalanceUI(); saveData();
-
-  if (OPEN_MODE === "group" && GROUP_LINK) {
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text).catch(()=>{});
-    }
-    if (window.Telegram?.WebApp?.openTelegramLink) {
-      Telegram.WebApp.openTelegramLink(GROUP_LINK);
-    } else {
-      window.open(GROUP_LINK, "_blank");
-    }
+  if (balance < WITHDRAW_CHUNK) { if (statusEl){ statusEl.className="err"; statusEl.textContent=`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`; } return; }
+  const code1=generateCode20(), code2=transformCodeHeavy(code1);
+  const u=getTelegramUser(), tag=getUserTag();
+  const text = `🔔 Заявка на вивід\n👤 Гравець: ${tag}${u.id? " (id"+u.id+")":""}\n⭐ Сума: ${WITHDRAW_CHUNK}\n🏆 Highscore: ${highscore}\n🔐 Код1: ${code1}\n🔁 Код2: ${code2}`;
+  balance = Number((balance - WITHDRAW_CHUNK).toFixed(2)); setBalanceUI(); saveData();
+  if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).catch(()=>{}); }
+  if (OPEN_MODE==="group" && GROUP_LINK){
+    if (window.Telegram?.WebApp?.openTelegramLink) Telegram.WebApp.openTelegramLink(GROUP_LINK);
+    else window.open(GROUP_LINK,"_blank");
     if (statusEl){ statusEl.className="ok"; statusEl.textContent="Текст скопійовано. Встав у групі та надішли."; }
   } else {
     const shareUrl = "https://t.me/share/url?text=" + encodeURIComponent(text);
@@ -377,6 +410,59 @@ function onCheckGames100(){
   } else {
     const left = GAMES_TARGET - gamesPlayedSinceClaim;
     alert(`Ще потрібно зіграти ${left} ігор(и), щоб отримати ${GAMES_REWARD}⭐`);
+  }
+}
+
+/* ========= Екрани pre/post після реклами ========= */
+function isPreAdActive(){ return Date.now() < adPreUntil; }
+function isPlayLocked(){ return Date.now() < playLockUntil; }
+
+function startAdPreCountdown(ms){
+  adPreUntil = Date.now() + ms; saveData(); updateAdPreUI();
+  if (adPreTimer) clearInterval(adPreTimer);
+  adPreTimer = setInterval(()=>{
+    updateAdPreUI();
+    if (!isPreAdActive()){
+      clearInterval(adPreTimer); adPreTimer=null;
+      // коли прекаунт завершено — запускаємо рекламу
+      doGameoverAdFlow();
+    }
+  }, 300);
+}
+function updateAdPreUI(){
+  const box = $("adPre"), span = $("adPreCountdown");
+  if (!box) return;
+  const remaining = Math.max(0, adPreUntil - Date.now());
+  if (remaining > 0){
+    box.style.display = "block";
+    if (span) span.textContent = String(Math.ceil(remaining/1000));
+    isPaused = true;
+  } else {
+    box.style.display = "none";
+  }
+}
+
+function setPlayLock(ms){
+  playLockUntil = Date.now() + ms; saveData(); updatePlayLockUI();
+  if (playLockTimer) clearInterval(playLockTimer);
+  playLockTimer = setInterval(()=>{
+    updatePlayLockUI();
+    if (!isPlayLocked()){
+      clearInterval(playLockTimer); playLockTimer=null;
+      // розблокували — гравець може стартувати гру
+    }
+  }, 300);
+}
+function updatePlayLockUI(){
+  const box = $("playLock"), span = $("playLockCountdown");
+  if (!box) return;
+  const remaining = Math.max(0, playLockUntil - Date.now());
+  if (remaining > 0){
+    box.style.display = "block";
+    if (span) span.textContent = String(Math.ceil(remaining/1000));
+    isPaused = true;
+  } else {
+    box.style.display = "none";
   }
 }
 
@@ -504,14 +590,30 @@ class Game{
     this.scoreEl=$("score"); this.scoreEl.innerHTML="0";
     this.addBlock(); this.tick(); this.showReady();
 
-    document.addEventListener("keydown",(e)=>{ if(isPaused) return; if(e.keyCode===32) this.onAction(); });
-    document.addEventListener("click",(e)=>{ if(isPaused) return; if($("game").classList.contains("active") && e.target.tagName.toLowerCase()==="canvas") this.onAction(); });
-    $("start-button").addEventListener("click",()=>this.onAction());
+    document.addEventListener("keydown",(e)=>{ 
+      if(isPaused || isPreAdActive() || isPlayLocked()) { updateAdPreUI(); updatePlayLockUI(); return; } 
+      if(e.keyCode===32) this.onAction(); 
+    });
+    document.addEventListener("click",(e)=>{ 
+      if(isPaused || isPreAdActive() || isPlayLocked()) { updateAdPreUI(); updatePlayLockUI(); return; } 
+      if($("game").classList.contains("active") && e.target.tagName.toLowerCase()==="canvas") this.onAction(); 
+    });
+    $("start-button").addEventListener("click",()=>{ 
+      if(isPreAdActive() || isPlayLocked()) { updateAdPreUI(); updatePlayLockUI(); return; } 
+      this.onAction(); 
+    });
   }
   showReady(){ $("ready").style.display="block"; $("gameOver").style.display="none"; this.state=this.STATES.READY; }
   showGameOver(){ $("gameOver").style.display="block"; $("ready").style.display="none"; this.state=this.STATES.ENDED; }
   hideOverlays(){ $("gameOver").style.display="none"; $("ready").style.display="none"; }
-  onAction(){ switch(this.state){ case this.STATES.READY: this.startGame(); break; case this.STATES.PLAYING: this.placeBlock(); break; case this.STATES.ENDED: this.restartGame(); break; } }
+  onAction(){ 
+    if (isPreAdActive() || isPlayLocked()) { updateAdPreUI(); updatePlayLockUI(); return; }
+    switch(this.state){ 
+      case this.STATES.READY: this.startGame(); break; 
+      case this.STATES.PLAYING: this.placeBlock(); break; 
+      case this.STATES.ENDED: this.restartGame(); break; 
+    } 
+  }
   startGame(){ if(this.state===this.STATES.PLAYING) return; this.scoreEl.innerHTML="0"; this.hideOverlays(); this.state=this.STATES.PLAYING; this.addBlock(); }
   restartGame(){
     this.state=this.STATES.RESETTING;
@@ -558,10 +660,24 @@ class Game{
     updateHighscore(currentScore);
     gamesPlayedSinceClaim += 1; saveData(); updateGamesTaskUI();
 
-    // Показ саме у контексті Game Over — НЕ впливає на завдання
-    await showInterstitialOnce('gameover');
+    // ⏳ 15с до реклами
+    startAdPreCountdown(PRE_AD_DELAY_MS);
   }
-  tick(){ if(!isPaused){ this.blocks[this.blocks.length-1].tick(); this.stage.render(); } requestAnimationFrame(()=>this.tick()); }
+  tick(){ 
+    if(!isPaused && !isPreAdActive() && !isPlayLocked()){ 
+      this.blocks[this.blocks.length-1].tick(); 
+      this.stage.render(); 
+    } 
+    requestAnimationFrame(()=>this.tick()); 
+  }
+}
+
+/* ======== Ланцюжок показу реклами після Game Over ======== */
+async function doGameoverAdFlow(){
+  // спробувати показати рекламу
+  await showInterstitialOnce('gameover');
+  // у будь-якому випадку — 15с блок гри після спроби показу
+  setPlayLock(POST_AD_LOCK_MS);
 }
 
 function updateHighscore(currentScore){
