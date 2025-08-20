@@ -55,6 +55,12 @@
       <div class="ready" id="ready">
         <div id="start-button" style="cursor:pointer;">▶ Старт</div>
       </div>
+
+      <!-- 15-с таймер після реклами по Game Over -->
+      <div class="game-over" id="postAdTimer" style="display:none;">
+        <h2>Пауза перед новою грою</h2>
+        <p>Можна буде почати через: <b id="postAdCountdown">15</b> с</p>
+      </div>
     </div>
   </div>
 
@@ -72,12 +78,33 @@
       <button id="checkTask50">Перевірити</button>
     </div>
 
+    <!-- Старе завдання: 1 реклама / хв = +0.2⭐ -->
     <div class="task" id="taskAdOncePerMinute">
       <span>🎬 Переглянь рекламу +0.2⭐ <small>(раз на 1 хв)</small></span>
       <button id="watchAdMinuteBtn">Дивитись</button>
     </div>
     <div class="task" id="taskAdStatus" style="display:none;">
       <span>⌛ Наступний перегляд доступний через: <span id="adCooldownText">60с</span></span>
+      <button disabled>Очікуй…</button>
+    </div>
+
+    <!-- Нове завдання: 5 реклам (+5⭐), власний 24-год кулдаун -->
+    <div class="task" id="taskWatch5">
+      <span>🎬 Переглянь 5 реклам (+5⭐) — <b id="ad5Counter">0/5</b></span>
+      <button id="watchAd5Btn">Дивитися</button>
+    </div>
+    <div class="task" id="taskWatch5Cooldown" style="display:none;">
+      <span>⌛ «5 реклам» доступне через: <span id="ad5CooldownText">—</span></span>
+      <button disabled>Очікуй…</button>
+    </div>
+
+    <!-- Нове завдання: 10 реклам (+10⭐), власний 24-год кулдаун -->
+    <div class="task" id="taskWatch10">
+      <span>🎬 Переглянь 10 реклам (+10⭐) — <b id="ad10Counter">0/10</b></span>
+      <button id="watchAd10Btn">Дивитися</button>
+    </div>
+    <div class="task" id="taskWatch10Cooldown" style="display:none;">
+      <span>⌛ «10 реклам» доступне через: <span id="ad10CooldownText">—</span></span>
       <button disabled>Очікуй…</button>
     </div>
 
@@ -149,11 +176,6 @@
 
   <!-- Telegram WebApp API -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
-  <!-- App -->
-  <script src="./script.js"></script>
-</body>
-</html>
 
 
 
