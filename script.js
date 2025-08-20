@@ -412,7 +412,7 @@ async function onWatchAd5(){
 
   ad5Count += 1;
   if (ad5Count >= TASK5_TARGET){
-    addBalance(5);
+    addBalance(1.2);
     ad5Count = 0;
     lastTask5RewardAt = Date.now();
   }
@@ -428,7 +428,7 @@ async function onWatchAd10(){
 
   ad10Count += 1;
   if (ad10Count >= TASK10_TARGET){
-    addBalance(10);
+    addBalance(2.5);
     ad10Count = 0;
     lastTask10RewardAt = Date.now();
   }
