@@ -325,7 +325,7 @@ async function onWatchAdTaskClick(){
 
   const res = await showInterstitialOnce('task'); // стандартний режим
   if (res.shown){
-    addBalance(0.2);
+    addBalance(0.15);
     updateTaskCooldownUI();
   }
 }
