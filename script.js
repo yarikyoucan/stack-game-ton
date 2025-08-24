@@ -132,7 +132,7 @@ window.onload = function(){
         t50.innerText="Виконано"; t50.classList.add("done");
         task50Completed = true; saveData();
       } else {
-        alert("❌ Твій рекорд замалий (потрібно 50+)");
+        alert("❌ Твій рекорд замалий (потрібно 75+)");
       }
     });
   }
