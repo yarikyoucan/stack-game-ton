@@ -3,11 +3,11 @@ console.clear();
 
 /* ========= КОНСТАНТИ ========= */
 const TASK_AD_COOLDOWN_MS = 60_000;   // 1 реклама / хв у завданні (+0.2⭐)
-const GAME_AD_COOLDOWN_MS = 60_000;   // локальний запобіжник для gameover
-const ANY_AD_COOLDOWN_MS  = 60_000;   // глобальний антиспам (НЕ діє на task5/task10/gameover)
+const ANY_AD_COOLDOWN_MS  = 60_000;   // глобальний антиспам (для різних контекстів)
 const MIN_BETWEEN_SAME_CTX_MS = 10_000;
 
 const POST_AD_TIMER_MS = 15_000;      // 15 секунд пауза після реклами по Game Over
+const GAME_AD_COOLDOWN_MS = POST_AD_TIMER_MS; // ✅ щоб реклама могла бути після кожної гри
 
 const GAMES_TARGET = 100;
 const GAMES_REWARD = 10;
@@ -19,7 +19,7 @@ const ADSGRAM_BLOCK_ID_GAMEOVER = "int-13961";
 const OPEN_MODE = "group"; // "group" | "share"
 const GROUP_LINK = "https://t.me/+Z6PMT40dYClhOTQ6";
 
-/* --- Нові квести на рекламу --- */
+/* --- Добові квести на рекламу (5 і 10) --- */
 const TASK5_TARGET = 5;
 const TASK10_TARGET = 10;
 const TASK_DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 год
@@ -29,11 +29,11 @@ const ALPH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // без 0/1/I/O
 const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 
 /* ========= СТАН ========= */
-let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
+let balance = 0, subscribed = false, task75Completed = false, highscore = 0;
 let gamesPlayedSinceClaim = 0;
 let isPaused = false;
 
-/* --- нові стани завдань на перегляд --- */
+/* --- стани добових квестів --- */
 let ad5Count = 0, ad10Count = 0;
 let lastTask5RewardAt = 0, lastTask10RewardAt = 0;
 
@@ -45,12 +45,12 @@ let postAdInterval = null;
 let AdTask = null;
 let AdGameover = null;
 
-/* узгоджені назви змінних */
-let lastTaskAdAt = 0;        // для "раз на хвилину +0.2⭐"
-let lastGameoverAdAt = 0;    // останній показ у контексті gameover
-let lastAnyAdAt = 0;         // глобальний час останнього показу
+/* узгоджені назви змінних (збереження в LS теж під ці ключі) */
+let lastTaskAdAt = 0;        // для "раз на хвилину +0.2⭐" (task)
+let lastGameoverAdAt = 0;    // локальний кулдаун для gameover
+let lastAnyAdAt = 0;         // глобальний час останнього показу (будь-який контекст)
 
-/* захисти від дабл-кліку для нових квестів */
+/* анти-даблклік для добових квестів */
 let lastTask5AdAt = 0;
 let lastTask10AdAt = 0;
 
@@ -67,13 +67,13 @@ const setBalanceUI = () => $("balance").innerText = formatStars(balance);
 function saveData(){
   localStorage.setItem("balance", String(balance));
   localStorage.setItem("subscribed", subscribed ? "true" : "false");
-  localStorage.setItem("task50Completed", task50Completed ? "true" : "false");
+  localStorage.setItem("task75Completed", task75Completed ? "true" : "false"); // ✅ новий ключ
   localStorage.setItem("highscore", String(highscore));
   localStorage.setItem("lastTaskAdAt", String(lastTaskAdAt));
   localStorage.setItem("gamesPlayedSinceClaim", String(gamesPlayedSinceClaim));
   localStorage.setItem("lastAnyAdAt", String(lastAnyAdAt));
 
-  // нові поля
+  // добові квести
   localStorage.setItem("ad5Count", String(ad5Count));
   localStorage.setItem("ad10Count", String(ad10Count));
   localStorage.setItem("lastTask5RewardAt", String(lastTask5RewardAt));
@@ -101,7 +101,7 @@ let dailyTasksTicker = null;
 window.onload = function(){
   balance = parseFloat(localStorage.getItem("balance") || "0");
   subscribed = localStorage.getItem("subscribed") === "true";
-  task50Completed = localStorage.getItem("task50Completed") === "true";
+  task75Completed = localStorage.getItem("task75Completed") === "true"; // ✅ читаємо новий ключ
   highscore = parseInt(localStorage.getItem("highscore") || "0", 10);
 
   lastTaskAdAt     = parseInt(localStorage.getItem("lastTaskAdAt") || "0", 10);
@@ -117,30 +117,41 @@ window.onload = function(){
   $("highscore").innerText = "🏆 " + highscore;
   updateGamesTaskUI();
 
+  // Підписка
   const subBtn = $("subscribeBtn");
   if (subBtn){
     if (subscribed){ subBtn.innerText = "Виконано"; subBtn.classList.add("done"); }
     subBtn.addEventListener("click", subscribe);
   }
 
-  const t50 = $("checkTask50");
-  if (t50){
-    if (task50Completed){ t50.innerText="Виконано"; t50.classList.add("done"); }
-    t50.addEventListener("click", ()=>{
-      if (highscore >= 75 && !task50Completed){
+  // ✅ Оновлюємо текст завдання на 75 у DOM (щоб не правити HTML)
+  const tWrap = $("task50"); // id лишився старий
+  if (tWrap){
+    const span = tWrap.querySelector("span");
+    if (span) span.innerHTML = "🎯 Досягни рекорду 75 (+10⭐)";
+  }
+
+  // Кнопка перевірки рекорду
+  const tBtn = $("checkTask50"); // id лишився старий
+  if (tBtn){
+    if (task75Completed){ tBtn.innerText="Виконано"; tBtn.classList.add("done"); }
+    tBtn.addEventListener("click", ()=>{
+      if (highscore >= 75 && !task75Completed){
         addBalance(10);
-        t50.innerText="Виконано"; t50.classList.add("done");
-        task50Completed = true; saveData();
-      } else {
+        task75Completed = true; saveData();
+        tBtn.innerText="Виконано"; tBtn.classList.add("done");
+      } else if (highscore < 75){
         alert("❌ Твій рекорд замалий (потрібно 75+)");
       }
     });
   }
 
+  // Стара кнопка «раз на хвилину +0.2⭐»
   const watchBtn = $("watchAdMinuteBtn");
   if (watchBtn) watchBtn.addEventListener("click", onWatchAdTaskClick);
   startTaskCooldownTicker();
 
+  // Кнопка «100 ігор»
   const g100Btn = $("checkGames100Btn");
   if (g100Btn) g100Btn.addEventListener("click", onCheckGames100);
 
@@ -153,6 +164,7 @@ window.onload = function(){
   const withdrawBtn = $("withdrawBtn");
   if (withdrawBtn) withdrawBtn.addEventListener("click", withdraw50ShareToGroup);
 
+  // Добові квести
   if ($("watchAd5Btn"))  $("watchAd5Btn").addEventListener("click", onWatchAd5);
   if ($("watchAd10Btn")) $("watchAd10Btn").addEventListener("click", onWatchAd10);
   startDailyTasksTicker();
@@ -229,6 +241,7 @@ async function showInterstitialOnce(ctx, opts = {}){
   const bypassGlobal = !!opts.bypassGlobal;
   const touchGlobal  = (opts.touchGlobal !== false); // default true
 
+  // Глобальний антиспам (НЕ для bypass)
   if (!bypassGlobal){
     if (now - lastAnyAdAt < ANY_AD_COOLDOWN_MS) {
       return { shown:false, reason:"global_1min_cooldown" };
@@ -294,6 +307,7 @@ async function showInterstitialOnce(ctx, opts = {}){
 
   if (isGameover){
     if (adInFlightGameover) return { shown:false, reason:"gameover_busy" };
+    // ✅ локальний кулдаун = 15с (під таймер), щоб реклама була після КОЖНОЇ гри
     if (now - lastGameoverAdAt < Math.max(MIN_BETWEEN_SAME_CTX_MS, GAME_AD_COOLDOWN_MS)) {
       return { shown:false, reason:"gameover_ctx_cooldown" };
     }
@@ -301,7 +315,7 @@ async function showInterstitialOnce(ctx, opts = {}){
     try{
       await controller.show();
       lastGameoverAdAt = Date.now();
-      if (touchGlobal) lastAnyAdAt = lastGameoverAdAt;
+      // для gameover global можна не оновлювати (touchGlobal=false у виклику)
       saveData();
       return { shown:true };
     }catch(err){
@@ -325,7 +339,7 @@ async function onWatchAdTaskClick(){
 
   const res = await showInterstitialOnce('task'); // стандартний режим
   if (res.shown){
-    addBalance(0.15);
+    addBalance(0.2);
     updateTaskCooldownUI();
   }
 }
@@ -410,7 +424,7 @@ async function onWatchAd5(){
 
   ad5Count += 1;
   if (ad5Count >= TASK5_TARGET){
-    addBalance(1);
+    addBalance(5);
     ad5Count = 0;
     lastTask5RewardAt = Date.now();
   }
@@ -426,7 +440,7 @@ async function onWatchAd10(){
 
   ad10Count += 1;
   if (ad10Count >= TASK10_TARGET){
-    addBalance(2);
+    addBalance(10);
     ad10Count = 0;
     lastTask10RewardAt = Date.now();
   }
@@ -669,7 +683,7 @@ class Block{
       choppedG.translate(choppedDim.width/2,choppedDim.height/2,choppedDim.depth/2);
       const chopped=new THREE.Mesh(choppedG,this.material);
 
-      const choppedPos={x:this.position.x,y:this.position.y,z:this.position.z};
+      const choppedPos={x:this.position.x,y:this.position.y,z=this.position.z};
       if (this.position[this.workingPlane] < this.targetBlock.position[this.workingPlane]) {
         this.position[this.workingPlane] = this.targetBlock.position[this.workingPlane];
       } else {
@@ -711,19 +725,16 @@ class Game{
     $("start-button").addEventListener("click",()=>{ if (postAdTimerActive) return; this.onAction(); });
   }
 
-  /* --- НОВЕ: повний ресет сцени після Game Over, щоб не зациклювалось --- */
+  /* --- Повний ресет сцени після Game Over, щоб не зациклювалось --- */
   hardResetAfterEnd(){
-    // прибираємо всі меші з груп
     [this.newBlocks, this.placedBlocks, this.choppedBlocks].forEach(g=>{
       for(let i=g.children.length-1;i>=0;i--) g.remove(g.children[i]);
     });
-    // обнуляємо блоки та камеру
     this.blocks = [];
     this.stage.setCamera(2, 0);
     this.scoreEl.innerHTML = "0";
     $("instructions").classList.remove("hide");
-    // створюємо заново базовий блок (index 1, STOPPED)
-    this.addBlock(); // тепер у нас чиста база і blocks.length === 1
+    this.addBlock(); // створюємо базовий блок (index 1, STOPPED)
   }
 
   showReady(){ $("ready").style.display="block"; $("gameOver").style.display="none"; $("postAdTimer").style.display="none"; this.state=this.STATES.READY; }
@@ -739,7 +750,7 @@ class Game{
   }
 
   startGame(){
-    // СТРАХОВКА: якщо останній блок був MISSED (після попередньої гри) — очистити сцену
+    // якщо попередній останній блок був MISSED — очистити сцену
     if (this.blocks.length && this.blocks[this.blocks.length-1].state === 'missed'){
       this.hardResetAfterEnd();
     }
@@ -796,10 +807,10 @@ class Game{
     updateHighscore(currentScore);
     gamesPlayedSinceClaim += 1; saveData(); updateGamesTaskUI();
 
-    // 2) реклама
+    // 2) реклама (bypassGlobal, щоб не блочив ANY_AD_COOLDOWN)
     await showInterstitialOnce('gameover', { bypassGlobal:true, touchGlobal:false });
 
-    // 3) таймер і після нього — ПОВНИЙ РЕСЕТ, щоб не зациклювалось
+    // 3) таймер і після нього — ПОВНИЙ РЕСЕТ
     this.startPostAdCountdown();
   }
 
@@ -819,7 +830,7 @@ class Game{
         $("postAdTimer").style.display = "none";
         postAdTimerActive = false;
 
-        // 🔥 ФІКС: готуємо чисту базу для наступної гри
+        // готуємо чисту базу для наступної гри
         this.hardResetAfterEnd();
 
         this.showReady(); // показуємо кнопку "Старт"
