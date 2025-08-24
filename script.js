@@ -127,12 +127,12 @@ window.onload = function(){
   if (t50){
     if (task50Completed){ t50.innerText="Виконано"; t50.classList.add("done"); }
     t50.addEventListener("click", ()=>{
-      if (highscore >= 50 && !task50Completed){
+      if (highscore >= 75 && !task50Completed){
         addBalance(10);
         t50.innerText="Виконано"; t50.classList.add("done");
         task50Completed = true; saveData();
       } else {
-        alert("❌ Твій рекорд замалий (потрібно 50+)");
+        alert("❌ Твій рекорд замалий (потрібно 75+)");
       }
     });
   }
