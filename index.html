@@ -36,99 +36,77 @@
     .challenge-countdown{margin-top:6px;font-weight:600}
     .challenge-actions{display:flex;align-items:center;gap:8px;margin-top:10px}
 
-    /* (на випадок, якщо десь лишалась стара «арена») */
+    /* (стара арена схована) */
     .arena-wrap{ display:none !important; }
 
-    /* --- НОВИЙ банер: два прямокутники + «іскри» + кулаки в центр --- */
+    /* --- банер з двома прямокутниками, «іскрами» та кулаками --- */
     .duel-banner{
-      position:relative;
-      width:92%;
-      margin:12px auto 8px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:10px;
+      position:relative; width:92%; margin:12px auto 8px;
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
     }
     .duel-banner .box{
-      flex:1;
-      height:68px;
-      border-radius:16px;
-      background:
-        radial-gradient(120% 120% at 0% 0%, #ffffff 0%, #f3f6ff 40%, #e9eeff 100%);
-      box-shadow:
-        0 6px 16px rgba(0,0,0,.08),
-        inset 0 1px 0 rgba(255,255,255,.6);
-      position:relative;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      overflow:hidden;
+      flex:1; height:68px; border-radius:16px;
+      background:radial-gradient(120% 120% at 0% 0%, #ffffff 0%, #f3f6ff 40%, #e9eeff 100%);
+      box-shadow:0 6px 16px rgba(0,0,0,.08), inset 0 1px 0 rgba(255,255,255,.6);
+      position:relative; display:flex; align-items:center; justify-content:center; overflow:hidden;
     }
     .duel-banner .box::after{
-      content:"";
-      position:absolute; inset:-30%;
+      content:""; position:absolute; inset:-30%;
       background: radial-gradient(circle, rgba(255,235,59,.35), transparent 60%);
-      filter: blur(18px);
-      opacity:.4;
+      filter: blur(18px); opacity:.4;
     }
     .duel-banner .sparks{
-      position:absolute; left:50%; top:50%;
-      transform:translate(-50%,-50%);
+      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
       width:48px; height:32px; pointer-events:none;
     }
     .duel-banner .sparks i{
       position:absolute; width:12px; height:12px; border-radius:50%;
-      background: radial-gradient(circle, #ffd54f, rgba(255,213,79,.0) 60%);
-      opacity:.85;
-      animation:blink 1.6s ease-in-out infinite;
+      background: radial-gradient(circle, #ffd54f, rgba(255,213,79,0) 60%);
+      opacity:.85; animation:blink 1.6s ease-in-out infinite;
     }
     .duel-banner .sparks i:nth-child(1){ left:2px;  top:-4px; animation-delay:.0s; }
     .duel-banner .sparks i:nth-child(2){ left:16px; top:6px;  animation-delay:.5s; }
     .duel-banner .sparks i:nth-child(3){ left:28px; top:-2px; animation-delay:1.0s; }
-
-    @keyframes blink{
-      0%,100%{ transform:scale(.5); opacity:.35; }
-      50%    { transform:scale(1.15); opacity:1; }
-    }
-
+    @keyframes blink{ 0%,100%{ transform:scale(.5); opacity:.35 } 50%{ transform:scale(1.15); opacity:1 } }
     .fist{ font-size:40px; line-height:1; text-shadow:0 2px 2px rgba(0,0,0,.15) }
-    .fist-left  { transform: translateX(4px); }
-    .fist-right { transform: translateX(-4px); }
+    .fist-left{ transform:translateX(4px) } .fist-right{ transform:translateX(-4px) }
+    @media (max-width:420px){ .duel-banner .box{height:62px} .fist{font-size:36px} }
 
-    @media (max-width:420px){
-      .duel-banner .box{ height:62px; }
-      .fist{ font-size:36px; }
-    }
-
-    /* --- СМУЖКА-підпис під банером (була раніше) --- */
+    /* смужка-підпис */
     .duel-ribbon{ width:92%; margin:6px auto 10px; }
     .duel-ribbon .strip{
       height:32px; border-radius:999px;
       background:linear-gradient(135deg,#6a5acd 0%, #5ac8fa 100%);
       color:#fff; display:flex; align-items:center; justify-content:center;
       font-weight:800; letter-spacing:1.6px; text-transform:uppercase; font-size:14px;
-      box-shadow:0 4px 12px rgba(90,100,255,.25);
-      user-select:none;
+      box-shadow:0 4px 12px rgba(90,100,255,.25); user-select:none;
     }
 
-    /* --- НИЗ ДЛЯ ЗАПОВНЕННЯ ПУСТОТИ: короткі правила батлу --- */
-    .duel-footer{ width:92%; margin:8px auto 90px; }
+    /* короткі правила */
+    .duel-footer{ width:92%; margin:8px auto 10px; }
     .duel-footer .pill{
       display:flex; align-items:center; justify-content:space-between; gap:10px;
       padding:10px 12px; border-radius:14px;
       background:linear-gradient(90deg,#edf1ff 0%, #f7f9ff 100%);
       box-shadow:0 6px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.7);
-      color:#2f2f44; font-size:13px; font-weight:600;
-      flex-wrap:wrap;
+      color:#2f2f44; font-size:13px; font-weight:600; flex-wrap:wrap;
     }
     .duel-footer .item{ display:flex; align-items:center; gap:6px; white-space:nowrap; }
-    .duel-footer .sep{
-      width:1px; height:18px; background:rgba(0,0,0,.08);
-    }
+    .duel-footer .sep{ width:1px; height:18px; background:rgba(0,0,0,.08); }
     @media (max-width:480px){
       .duel-footer .sep{ display:none; }
       .duel-footer .pill{ justify-content:center; row-gap:6px; }
     }
+
+    /* ▼ НИЖНІЙ ПОПЕРЕДЖУВАЛЬНИЙ БАНЕР (повернуто) */
+    .loss-banner{
+      width:92%; margin:8px auto 90px;
+      background:linear-gradient(135deg,#ff6a6a 0%, #ffb86c 100%);
+      color:#fff; border-radius:14px; padding:10px 12px;
+      box-shadow:0 8px 18px rgba(255,120,120,.25);
+      font-weight:700; text-align:center;
+    }
+    .loss-banner small{ display:block; opacity:.9; font-weight:600; }
 
     /* ДРУЗІ */
     .share-card{width:90%;margin:12px auto;background:#fff;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,.1);padding:16px}
@@ -138,6 +116,10 @@
     .btn{background:#007bff;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;text-decoration:none;display:inline-block}
     .muted{color:#6c757d;font-size:12px}
     .ok{color:#198754}.err{color:#dc3545}
+
+    /* список виводів */
+    .payout-list{list-style:none;margin:8px 0 0;padding:0}
+    .payout-list li{padding:6px 8px;border:1px solid #eee;border-radius:8px;margin-top:6px;font-size:14px}
   </style>
 </head>
 <body>
@@ -183,7 +165,6 @@
       <button id="checkTask50">Перевірити</button>
     </div>
 
-    <!-- 1 реклама / хв = +0.15⭐ -->
     <div class="task" id="taskAdOncePerMinute">
       <span>🎬 Переглянь рекламу +0.15⭐ <small>(раз на 1 хв)</small></span>
       <button id="watchAdMinuteBtn">Дивитись</button>
@@ -193,7 +174,6 @@
       <button disabled>Очікуй…</button>
     </div>
 
-    <!-- 5 реклам (+1⭐), добовий кулдаун -->
     <div class="task" id="taskWatch5">
       <span>🎬 Переглянь 5 реклам (+1⭐) — <b id="ad5Counter">0/5</b></span>
       <button id="watchAd5Btn">Дивитися</button>
@@ -203,7 +183,6 @@
       <button disabled>Очікуй…</button>
     </div>
 
-    <!-- 10 реклам (+2⭐), добовий кулдаун -->
     <div class="task" id="taskWatch10">
       <span>🎬 Переглянь 10 реклам (+2⭐) — <b id="ad10Counter">0/10</b></span>
       <button id="watchAd10Btn">Дивитися</button>
@@ -255,19 +234,17 @@
       </div>
     </div>
 
-    <!-- Банер з двома прямокутниками, «іскрами» та кулаками в центр -->
+    <!-- Банер: два прямокутники + «іскри» + кулаки -->
     <div class="duel-banner" aria-label="Арена батлу">
       <div class="box"><span class="fist fist-left">🤜</span></div>
       <div class="sparks"><i></i><i></i><i></i></div>
       <div class="box"><span class="fist fist-right">🤛</span></div>
     </div>
 
-    <!-- Смужка-підпис -->
-    <div class="duel-ribbon">
-      <div class="strip">BATTLES</div>
-    </div>
+    <!-- Смужка «BATTLES» -->
+    <div class="duel-ribbon"><div class="strip">BATTLES</div></div>
 
-    <!-- Низ: короткі правила (закриваємо порожній простір) -->
+    <!-- Короткі правила -->
     <div class="duel-footer">
       <div class="pill">
         <div class="item">🎯 Мета: побий рекорд за 3 год</div>
@@ -276,6 +253,12 @@
         <div class="sep"></div>
         <div class="item">⚠️ Програш: ставка згорає</div>
       </div>
+    </div>
+
+    <!-- ▼ Нижній попереджувальний банер -->
+    <div class="loss-banner">
+      ⚠️ УВАГА: якщо не поб’єш рекорд до завершення часу — ставка повністю згорає.
+      <small>Грай обережно та плануй спроби!</small>
     </div>
   </div>
 
@@ -308,7 +291,11 @@
       </div>
     </div>
 
-    <p>Список друзів знизу 👇</p>
+    <!-- Список виводів -->
+    <div class="share-card">
+      <div><strong>Список виводів</strong></div>
+      <ul id="payoutList" class="payout-list"></ul>
+    </div>
   </div>
 
   <!-- BOTTOM MENU -->
