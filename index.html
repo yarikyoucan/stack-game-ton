@@ -5,13 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Stack Game</title>
   <style>
+    /* --- БАЗА ІНТЕРФЕЙСУ --- */
     body{margin:0;font-family:Arial,sans-serif;background:#f4f4f4;display:flex;flex-direction:column;height:100vh;padding-bottom:64px}
     .page{flex:1;display:none;overflow:auto;padding:10px}.page.active{display:block}
     .menu{display:flex;justify-content:space-around;border-top:1px solid #ccc;background:#fff;padding:10px 0;position:fixed;left:0;right:0;bottom:0;z-index:9999}
     .menu button{flex:1;background:none;border:none;font-size:22px;cursor:pointer}.menu button.active{color:green;font-weight:bold}
+
     .task{display:flex;justify-content:space-between;align-items:center;background:#fff;padding:15px;margin:10px auto;border-radius:10px;width:90%;box-shadow:0 2px 5px rgba(0,0,0,.1)}
     .task button{background:#007bff;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}.task button.done{background:#28a745}.task button:disabled{opacity:.6;cursor:not-allowed}
     .balance{font-size:20px;margin-bottom:20px;text-align:center}
+
+    /* --- ГРА --- */
     #container{position:relative;width:100%;height:100%;overflow:hidden;background:#d0cbc7}
     #container canvas{position:absolute!important;top:0;left:0;width:100%!important;height:100%!important;z-index:1}
     #scoreboard{position:absolute;top:10px;left:10px;display:flex;gap:10px;z-index:2}
@@ -19,13 +23,114 @@
     #instructions{position:absolute;top:50px;left:10px;color:#000;font-size:16px;background:rgba(255,255,255,.7);padding:4px 8px;border-radius:6px;z-index:2}
     .hide{display:none}
     .game-over,.ready{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;background:rgba(255,255,255,.95);padding:20px;border-radius:10px;display:none;z-index:3;min-width:260px;box-shadow:0 2px 5px rgba(0,0,0,.1)}
-    #leaderboard-wrapper{width:90%;margin:12px auto;overflow-x:auto}
-    #leaderboard{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 5px rgba(0,0,0,.1)}
-    #leaderboard th,#leaderboard td{padding:10px 12px;border-bottom:1px solid #eee}
-    #leaderboard thead th{background:#f7f7f7;text-align:left}
-    #leaderboard tbody tr:nth-child(even){background:#fafafa}
-    #leaderboard td:first-child{width:56px;text-align:right;font-weight:600;color:#555}
-    #leaderboard td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+
+    /* --- «Виклик суперника» --- */
+    .tour-hero{width:90%;margin:12px auto;padding:16px;border-radius:14px;color:#fff;background:linear-gradient(135deg,#6a5acd,#5ac8fa)}
+    .tour-hero-title{font-size:20px;font-weight:700}
+    .tour-hero-sub{opacity:.95;margin-top:4px}
+    .challenge-card{width:90%;margin:12px auto;background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);padding:14px}
+    .challenge-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:10px 0}
+    .opponent-score{font-weight:700;font-size:20px}
+    .stake-wrap{display:flex;gap:8px;align-items:center;flex:1}
+    #stakeInput{flex:0 0 110px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px}
+    .challenge-countdown{margin-top:6px;font-weight:600}
+    .challenge-actions{display:flex;align-items:center;gap:8px;margin-top:10px}
+
+    /* (на випадок, якщо десь лишалась стара «арена») */
+    .arena-wrap{ display:none !important; }
+
+    /* --- НОВИЙ банер: два прямокутники + «іскри» + кулаки в центр --- */
+    .duel-banner{
+      position:relative;
+      width:92%;
+      margin:12px auto 8px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .duel-banner .box{
+      flex:1;
+      height:68px;
+      border-radius:16px;
+      background:
+        radial-gradient(120% 120% at 0% 0%, #ffffff 0%, #f3f6ff 40%, #e9eeff 100%);
+      box-shadow:
+        0 6px 16px rgba(0,0,0,.08),
+        inset 0 1px 0 rgba(255,255,255,.6);
+      position:relative;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      overflow:hidden;
+    }
+    .duel-banner .box::after{
+      content:"";
+      position:absolute; inset:-30%;
+      background: radial-gradient(circle, rgba(255,235,59,.35), transparent 60%);
+      filter: blur(18px);
+      opacity:.4;
+    }
+    .duel-banner .sparks{
+      position:absolute; left:50%; top:50%;
+      transform:translate(-50%,-50%);
+      width:48px; height:32px; pointer-events:none;
+    }
+    .duel-banner .sparks i{
+      position:absolute; width:12px; height:12px; border-radius:50%;
+      background: radial-gradient(circle, #ffd54f, rgba(255,213,79,.0) 60%);
+      opacity:.85;
+      animation:blink 1.6s ease-in-out infinite;
+    }
+    .duel-banner .sparks i:nth-child(1){ left:2px;  top:-4px; animation-delay:.0s; }
+    .duel-banner .sparks i:nth-child(2){ left:16px; top:6px;  animation-delay:.5s; }
+    .duel-banner .sparks i:nth-child(3){ left:28px; top:-2px; animation-delay:1.0s; }
+
+    @keyframes blink{
+      0%,100%{ transform:scale(.5); opacity:.35; }
+      50%    { transform:scale(1.15); opacity:1; }
+    }
+
+    .fist{ font-size:40px; line-height:1; text-shadow:0 2px 2px rgba(0,0,0,.15) }
+    .fist-left  { transform: translateX(4px); }
+    .fist-right { transform: translateX(-4px); }
+
+    @media (max-width:420px){
+      .duel-banner .box{ height:62px; }
+      .fist{ font-size:36px; }
+    }
+
+    /* --- СМУЖКА-підпис під банером (була раніше) --- */
+    .duel-ribbon{ width:92%; margin:6px auto 10px; }
+    .duel-ribbon .strip{
+      height:32px; border-radius:999px;
+      background:linear-gradient(135deg,#6a5acd 0%, #5ac8fa 100%);
+      color:#fff; display:flex; align-items:center; justify-content:center;
+      font-weight:800; letter-spacing:1.6px; text-transform:uppercase; font-size:14px;
+      box-shadow:0 4px 12px rgba(90,100,255,.25);
+      user-select:none;
+    }
+
+    /* --- НИЗ ДЛЯ ЗАПОВНЕННЯ ПУСТОТИ: короткі правила батлу --- */
+    .duel-footer{ width:92%; margin:8px auto 90px; }
+    .duel-footer .pill{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      padding:10px 12px; border-radius:14px;
+      background:linear-gradient(90deg,#edf1ff 0%, #f7f9ff 100%);
+      box-shadow:0 6px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.7);
+      color:#2f2f44; font-size:13px; font-weight:600;
+      flex-wrap:wrap;
+    }
+    .duel-footer .item{ display:flex; align-items:center; gap:6px; white-space:nowrap; }
+    .duel-footer .sep{
+      width:1px; height:18px; background:rgba(0,0,0,.08);
+    }
+    @media (max-width:480px){
+      .duel-footer .sep{ display:none; }
+      .duel-footer .pill{ justify-content:center; row-gap:6px; }
+    }
+
+    /* ДРУЗІ */
     .share-card{width:90%;margin:12px auto;background:#fff;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,.1);padding:16px}
     .share-row{display:flex;gap:8px;margin-top:8px}
     .share-row input{flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px}
@@ -78,7 +183,7 @@
       <button id="checkTask50">Перевірити</button>
     </div>
 
-    <!-- Старе завдання: 1 реклама / хв = +0.2⭐ -->
+    <!-- 1 реклама / хв = +0.15⭐ -->
     <div class="task" id="taskAdOncePerMinute">
       <span>🎬 Переглянь рекламу +0.15⭐ <small>(раз на 1 хв)</small></span>
       <button id="watchAdMinuteBtn">Дивитись</button>
@@ -88,7 +193,7 @@
       <button disabled>Очікуй…</button>
     </div>
 
-    <!-- Нове завдання: 5 реклам (+1⭐), власний 24-год кулдаун -->
+    <!-- 5 реклам (+1⭐), добовий кулдаун -->
     <div class="task" id="taskWatch5">
       <span>🎬 Переглянь 5 реклам (+1⭐) — <b id="ad5Counter">0/5</b></span>
       <button id="watchAd5Btn">Дивитися</button>
@@ -98,7 +203,7 @@
       <button disabled>Очікуй…</button>
     </div>
 
-    <!-- Нове завдання: 10 реклам (+2⭐), власний 24-год кулдаун -->
+    <!-- 10 реклам (+2⭐), добовий кулдаун -->
     <div class="task" id="taskWatch10">
       <span>🎬 Переглянь 10 реклам (+2⭐) — <b id="ad10Counter">0/10</b></span>
       <button id="watchAd10Btn">Дивитися</button>
@@ -116,14 +221,61 @@
 
   <!-- TOURNAMENTS -->
   <div id="tournaments" class="page">
-    <h2>🏆 Лідерборд (ТОП-50)скоро...</h2>
-    <div id="leaderboard-wrapper">
-      <table id="leaderboard">
-        <thead>
-          <tr><th>№</th><th>Гравець</th><th>Рекорд</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+    <div class="tour-hero">
+      <div class="tour-hero-title">⚔️ Виклик суперника</div>
+      <div class="tour-hero-sub">Згенеруй рекорд, зроби ставку ⭐ і побий його за 3 години</div>
+    </div>
+
+    <div class="challenge-card">
+      <div class="challenge-row">
+        <div>
+          <div class="muted">Суперник</div>
+          <div class="opponent-score" id="opponentScore">—</div>
+        </div>
+        <button class="btn" id="genOpponentBtn">Згенерувати</button>
+      </div>
+
+      <div class="challenge-row">
+        <label for="stakeInput" class="muted">Ставка ⭐</label>
+        <div class="stake-wrap">
+          <input id="stakeInput" type="number" min="1" step="0.5" value="1" />
+          <button class="btn" id="startChallengeBtn">Почати виклик (3 год)</button>
+        </div>
+      </div>
+
+      <div class="challenge-info" id="challengeInfo">Немає активного виклику.</div>
+
+      <div class="challenge-countdown" id="challengeCountdown" style="display:none;">
+        ⏳ Залишилось: <span id="challengeLeft">03:00:00</span>
+      </div>
+
+      <div class="challenge-actions">
+        <button class="btn" id="checkChallengeBtn" disabled>Перевірити</button>
+        <span id="challengeStatus" class="muted"></span>
+      </div>
+    </div>
+
+    <!-- Банер з двома прямокутниками, «іскрами» та кулаками в центр -->
+    <div class="duel-banner" aria-label="Арена батлу">
+      <div class="box"><span class="fist fist-left">🤜</span></div>
+      <div class="sparks"><i></i><i></i><i></i></div>
+      <div class="box"><span class="fist fist-right">🤛</span></div>
+    </div>
+
+    <!-- Смужка-підпис -->
+    <div class="duel-ribbon">
+      <div class="strip">BATTLES</div>
+    </div>
+
+    <!-- Низ: короткі правила (закриваємо порожній простір) -->
+    <div class="duel-footer">
+      <div class="pill">
+        <div class="item">🎯 Мета: побий рекорд за 3 год</div>
+        <div class="sep"></div>
+        <div class="item">💎 Виграш: ×1.5 від ставки</div>
+        <div class="sep"></div>
+        <div class="item">⚠️ Програш: ставка згорає</div>
+      </div>
     </div>
   </div>
 
@@ -170,15 +322,10 @@
   <!-- Libs -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r83/three.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/latest/TweenMax.min.js"></script>
-
-  <!-- Adsgram SDK (PROD, без debug) -->
   <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
-
-  <!-- Telegram WebApp API -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
   <!-- App -->
   <script src="./script.js"></script>
 </body>
 </html>
-
