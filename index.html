@@ -5,121 +5,146 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Stack Game</title>
   <style>
-    /* --- БАЗА ІНТЕРФЕЙСУ --- */
-    body{margin:0;font-family:Arial,sans-serif;background:#f4f4f4;display:flex;flex-direction:column;height:100vh;padding-bottom:64px}
+    /* --- БАЗА --- */
+    body{margin:0;font-family:Arial,sans-serif;background:#0f172a;display:flex;flex-direction:column;height:100vh;padding-bottom:64px}
     .page{flex:1;display:none;overflow:auto;padding:10px}.page.active{display:block}
-    .menu{display:flex;justify-content:space-around;border-top:1px solid #ccc;background:#fff;padding:10px 0;position:fixed;left:0;right:0;bottom:0;z-index:9999}
-    .menu button{flex:1;background:none;border:none;font-size:22px;cursor:pointer}.menu button.active{color:green;font-weight:bold}
 
-    .task{display:flex;justify-content:space-between;align-items:center;background:#fff;padding:15px;margin:10px auto;border-radius:10px;width:90%;box-shadow:0 2px 5px rgba(0,0,0,.1)}
-    .task button{background:#007bff;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}.task button.done{background:#28a745}.task button:disabled{opacity:.6;cursor:not-allowed}
-    .balance{font-size:20px;margin-bottom:20px;text-align:center}
+    /* НИЖНЄ МЕНЮ: темно-синє напівпрозоре */
+    .menu{
+      display:flex;justify-content:space-around;
+      border-top:1px solid rgba(255,255,255,.15);
+      background:rgba(15,23,42,.75);
+      padding:10px 0;position:fixed;left:0;right:0;bottom:0;z-index:9999
+    }
+    .menu button{flex:1;background:none;border:none;font-size:22px;cursor:pointer;color:#fff}
+    .menu button.active{color:#3b82f6;font-weight:bold}
 
-    /* --- ГРА --- */
-    #container{position:relative;width:100%;height:100%;overflow:hidden;background:#d0cbc7}
-    #container canvas{position:absolute!important;top:0;left:0;width:100%!important;height:100%!important;z-index:1}
+    /* --- ГРА: нічний фон з будинками під прозорим canvas --- */
+    #container{
+      position:relative;width:100%;height:100%;overflow:hidden;
+      background:
+        url('data:image/svg+xml;utf8,\
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="220" viewBox="0 0 800 220">\
+<rect width="800" height="220" fill="none"/>\
+<path d="M0 190 L20 170 L45 172 L45 190 L70 160 L95 162 L95 190 L130 150 L160 152 L160 190 L200 165 L230 167 L230 190 L270 155 L310 157 L310 190 L350 170 L380 172 L380 190 L420 160 L455 162 L455 190 L495 168 L530 170 L530 190 L570 156 L610 158 L610 190 L650 170 L690 172 L690 190 L730 160 L770 165 L770 190 L800 150 L800 220 L0 220 Z" fill="%23040a1c"/>\
+<path d="M0 200 L30 180 L50 180 L50 200 L80 155 L110 155 L110 200 L150 140 L180 140 L180 200 L220 165 L250 165 L250 200 L300 145 L340 145 L340 200 Л380 175 L420 175 L420 200 L460 150 L500 150 L500 200 L540 165 L580 165 L580 200 L620 145 L660 145 L660 200 L700 175 L740 175 L740 200 L800 160 L800 220 L0 220 Z" fill="%23000a1a"/>\
+<g fill="%23ffd34d">\
+<rect x="60" y="170" width="6" height="10"/><rect x="66" y="170" width="6" height="10" opacity="0.6"/>\
+<rect x="206" y="176" width="6" height="10"/><rect x="214" y="176" width="6" height="10" opacity="0.6"/>\
+<rect x="362" y="182" width="6" height="10"/><rect x="370" y="182" width="6" height="10" opacity="0.6"/>\
+<rect x="526" y="178" width="6" height="10"/><rect x="534" y="178" width="6" height="10" opacity="0.6"/>\
+<rect x="686" y="182" width="6" height="10"/><rect x="694" y="182" width="6" height="10" opacity="0.6"/>\
+</g></svg>') bottom repeat-x,
+        radial-gradient(1000px 520px at 20% -10%, rgba(99,102,241,.35), transparent 60%),
+        radial-gradient(900px 600px at 85% 110%, rgba(56,189,248,.25), transparent 60%),
+        linear-gradient(180deg,#1e1b4b 0%, #0b1020 60%, #090f1a 100%);
+      background-size:auto 220px, auto, auto, cover;
+      background-position:bottom, center, center, center;
+    }
+    #container canvas{
+      position:absolute!important;top:0;left:0;width:100%!important;height:100%!important;z-index:1!important;
+      background:transparent!important; /* прозорий — фон видно */
+    }
     #scoreboard{position:absolute;top:10px;left:10px;display:flex;gap:10px;z-index:2}
     #score,#highscore{background:rgba(0,0,0,.5);color:#fff;padding:5px 10px;border-radius:6px}
-    #instructions{position:absolute;top:50px;left:10px;color:#000;font-size:16px;background:rgba(255,255,255,.7);padding:4px 8px;border-radius:6px;z-index:2}
+    #instructions{position:absolute;top:50px;left:10px;color:#fff;font-size:16px;background:rgba(0,0,0,.4);padding:4px 8px;border-radius:6px;z-index:2}
     .hide{display:none}
-    .game-over,.ready{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;background:rgba(255,255,255,.95);padding:20px;border-radius:10px;display:none;z-index:3;min-width:260px;box-shadow:0 2px 5px rgba(0,0,0,.1)}
-
-    /* --- «Виклик суперника» --- */
-    .tour-hero{width:90%;margin:12px auto;padding:16px;border-radius:14px;color:#fff;background:linear-gradient(135deg,#6a5acd,#5ac8fa)}
-    .tour-hero-title{font-size:20px;font-weight:700}
-    .tour-hero-sub{opacity:.95;margin-top:4px}
-    .challenge-card{width:90%;margin:12px auto;background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);padding:14px}
-    .challenge-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:10px 0}
-    .opponent-score{font-weight:700;font-size:20px}
-    .stake-wrap{display:flex;gap:8px;align-items:center;flex:1}
-    #stakeInput{flex:0 0 110px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px}
-    .challenge-countdown{margin-top:6px;font-weight:600}
-    .challenge-actions{display:flex;align-items:center;gap:8px;margin-top:10px}
-
-    /* (стара арена схована) */
-    .arena-wrap{ display:none !important; }
-
-    /* --- банер з двома прямокутниками, «іскрами» та кулаками --- */
-    .duel-banner{
-      position:relative; width:92%; margin:12px auto 8px;
-      display:flex; align-items:center; justify-content:space-between; gap:10px;
-    }
-    .duel-banner .box{
-      flex:1; height:68px; border-radius:16px;
-      background:radial-gradient(120% 120% at 0% 0%, #ffffff 0%, #f3f6ff 40%, #e9eeff 100%);
-      box-shadow:0 6px 16px rgba(0,0,0,.08), inset 0 1px 0 rgba(255,255,255,.6);
-      position:relative; display:flex; align-items:center; justify-content:center; overflow:hidden;
-    }
-    .duel-banner .box::after{
-      content:""; position:absolute; inset:-30%;
-      background: radial-gradient(circle, rgba(255,235,59,.35), transparent 60%);
-      filter: blur(18px); opacity:.4;
-    }
-    .duel-banner .sparks{
-      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-      width:48px; height:32px; pointer-events:none;
-    }
-    .duel-banner .sparks i{
-      position:absolute; width:12px; height:12px; border-radius:50%;
-      background: radial-gradient(circle, #ffd54f, rgba(255,213,79,0) 60%);
-      opacity:.85; animation:blink 1.6s ease-in-out infinite;
-    }
-    .duel-banner .sparks i:nth-child(1){ left:2px;  top:-4px; animation-delay:.0s; }
-    .duel-banner .sparks i:nth-child(2){ left:16px; top:6px;  animation-delay:.5s; }
-    .duel-banner .sparks i:nth-child(3){ left:28px; top:-2px; animation-delay:1.0s; }
-    @keyframes blink{ 0%,100%{ transform:scale(.5); opacity:.35 } 50%{ transform:scale(1.15); opacity:1 } }
-    .fist{ font-size:40px; line-height:1; text-shadow:0 2px 2px rgba(0,0,0,.15) }
-    .fist-left{ transform:translateX(4px) } .fist-right{ transform:translateX(-4px) }
-    @media (max-width:420px){ .duel-banner .box{height:62px} .fist{font-size:36px} }
-
-    /* смужка-підпис */
-    .duel-ribbon{ width:92%; margin:6px auto 10px; }
-    .duel-ribbon .strip{
-      height:32px; border-radius:999px;
-      background:linear-gradient(135deg,#6a5acd 0%, #5ac8fa 100%);
-      color:#fff; display:flex; align-items:center; justify-content:center;
-      font-weight:800; letter-spacing:1.6px; text-transform:uppercase; font-size:14px;
-      box-shadow:0 4px 12px rgba(90,100,255,.25); user-select:none;
+    .game-over,.ready{
+      position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+      text-align:center;background:rgba(15,23,42,.95);color:#fff;
+      padding:20px;border-radius:10px;display:none;z-index:3;min-width:260px;
+      box-shadow:0 2px 5px rgba(0,0,0,.4)
     }
 
-    /* короткі правила */
-    .duel-footer{ width:92%; margin:8px auto 10px; }
-    .duel-footer .pill{
-      display:flex; align-items:center; justify-content:space-between; gap:10px;
-      padding:10px 12px; border-radius:14px;
-      background:linear-gradient(90deg,#edf1ff 0%, #f7f9ff 100%);
-      box-shadow:0 6px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.7);
-      color:#2f2f44; font-size:13px; font-weight:600; flex-wrap:wrap;
+    /* --- ЗАВДАННЯ & ГАМАНЕЦЬ: затверджена неон-тема --- */
+    .themed{
+      position:relative;color:#eef;padding-bottom:84px;
+      background:
+        radial-gradient(1200px 500px at 15% 0%, rgba(99,102,241,.35), transparent 60%),
+        radial-gradient(1000px 600px at 85% 100%, rgba(56,189,248,.25), transparent 60%),
+        linear-gradient(135deg,#0f172a 0%, #1e1b4b 45%, #3b82f6 100%);
     }
-    .duel-footer .item{ display:flex; align-items:center; gap:6px; white-space:nowrap; }
-    .duel-footer .sep{ width:1px; height:18px; background:rgba(0,0,0,.08); }
-    @media (max-width:480px){
-      .duel-footer .sep{ display:none; }
-      .duel-footer .pill{ justify-content:center; row-gap:6px; }
+    #tasks.themed{
+      background-image:
+        radial-gradient(1200px 500px at 15% 0%, rgba(99,102,241,.35), transparent 60%),
+        radial-gradient(1000px 600px at 85% 100%, rgba(56,189,248,.25), transparent 60%),
+        linear-gradient(135deg,#0f172a 0%, #1e1b4b 45%, #3b82f6 100%),
+        url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="620" height="180" viewBox="0 0 620 180"><g fill="%23ffffff1f" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="800" transform="rotate(-18 310 90)"><text x="-60" y="40">TASKS • TASKS • TASKS • TASKS • TASKS •</text><text x="-60" y="100">TASKS • TASKS • TASKS • TASKS • TASKS •</text><text x="-60" y="160">TASKS • TASKS • TASKS • TASKS • TASKS •</text></g></svg>');
+      background-size:auto,auto,auto,620px 180px; background-repeat:no-repeat,no-repeat,no-repeat,repeat;
     }
+    #friends.themed{
+      background-image:
+        radial-gradient(1200px 500px at 15% 0%, rgba(99,102,241,.35), transparent 60%),
+        radial-gradient(1000px 600px at 85% 100%, rgba(56,189,248,.25), transparent 60%),
+        linear-gradient(135deg,#0f172a 0%, #1e1b4b 45%, #3b82f6 100%),
+        url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="180" viewBox="0 0 640 180"><g fill="%23ffffff1f" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="800" transform="rotate(-18 320 90)"><text x="-60" y="40">WALLET • WALLET • WALLET • WALLET • WALLET •</text><text x="-60" y="100">WALLET • WALLET • WALLET • WALLET • WALLET •</text><text x="-60" y="160">WALLET • WALLET • WALLET • WALLET • WALLET •</text></g></svg>');
+      background-size:auto,auto,auto,640px 180px; background-repeat:no-repeat,no-repeat,no-repeat,repeat;
+    }
+    .themed .task,.themed .share-card{width:90%;margin:12px auto;background:rgba(255,255,255,.06);border-radius:10px;border:1px solid rgba(255,255,255,.15);padding:16px;backdrop-filter:blur(6px);box-shadow:0 10px 30px rgba(0,0,0,.15)}
+    .themed .btn{background:#3b82f6;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
+    .themed .btn:hover{filter:brightness(1.05)}
+    .themed .muted{color:#c7d2fe}
+    .task button.done{background:#28a745}
 
-    /* ▼ НИЖНІЙ ПОПЕРЕДЖУВАЛЬНИЙ БАНЕР (повернуто) */
-    .loss-banner{
-      width:92%; margin:8px auto 90px;
-      background:linear-gradient(135deg,#ff6a6a 0%, #ffb86c 100%);
-      color:#fff; border-radius:14px; padding:10px 12px;
-      box-shadow:0 8px 18px rgba(255,120,120,.25);
-      font-weight:700; text-align:center;
-    }
-    .loss-banner small{ display:block; opacity:.9; font-weight:600; }
-
-    /* ДРУЗІ */
-    .share-card{width:90%;margin:12px auto;background:#fff;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,.1);padding:16px}
     .share-row{display:flex;gap:8px;margin-top:8px}
     .share-row input{flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px}
     .share-actions{display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap}
-    .btn{background:#007bff;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;text-decoration:none;display:inline-block}
-    .muted{color:#6c757d;font-size:12px}
-    .ok{color:#198754}.err{color:#dc3545}
+    .muted{font-size:12px}
 
-    /* список виводів */
-    .payout-list{list-style:none;margin:8px 0 0;padding:0}
-    .payout-list li{padding:6px 8px;border:1px solid #eee;border-radius:8px;margin-top:6px;font-size:14px}
+    /* Баланс по центру, більший; заголовок гаманця більший */
+    #friends .balance{font-size:28px;font-weight:800;text-align:center;margin:16px 0;color:#eaf2ff}
+    #friends h2.wallet-title{color:#eaf2ff;text-align:center;font-size:26px;margin:0 0 20px}
+
+    /* --- BATTLES: перший редизайн + повноекранний патерн "BATTLES" --- */
+    #tournaments{
+      position:relative;color:#eef;padding-bottom:84px;
+      background-image:
+        radial-gradient(1200px 500px at 15% 0%, rgba(99,102,241,.35), transparent 60%),
+        radial-gradient(1000px 600px at 85% 100%, rgba(56,189,248,.25), transparent 60%),
+        linear-gradient(135deg,#0f172a 0%, #1e1b4b 45%, #3b82f6 100%),
+        url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="760" height="200" viewBox="0 0 760 200"><g fill="%23ffffff15" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="800" transform="rotate(-18 380 100)"><text x="-60" y="40">BATTLES • BATTLES • BATTLES • BATTLES • BATTLES •</text><text x="-60" y="100">BATTLES • BATTLES • BATTLES • BATTLES • BATTLES •</text><text x="-60" y="160">BATTLES • BATTLES • BATTLES • BATTLES • BATTLES •</text></g></svg>');
+      background-size:auto,auto,auto,760px 200px; background-repeat:no-repeat,no-repeat,no-repeat,repeat;
+    }
+    #tournaments .tour-hero{
+      width:90%;margin:12px auto;padding:16px;border-radius:14px;color:#fff;
+      background:linear-gradient(135deg, rgba(99,102,241,.9), rgba(90,200,250,.9));
+      box-shadow:0 10px 30px rgba(0,0,0,.15);
+    }
+    .tour-hero-title{font-size:20px;font-weight:700}
+    .tour-hero-sub{opacity:.95;margin-top:4px}
+
+    #tournaments .challenge-card{
+      width:90%;margin:12px auto;background:rgba(255,255,255,.06);border-radius:12px;
+      border:1px solid rgba(255,255,255,.15);padding:14px;color:#eef;backdrop-filter:blur(6px);
+      box-shadow:0 10px 30px rgba(0,0,0,.15);
+    }
+    #tournaments .challenge-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:10px 0}
+    #tournaments .opponent-score{font-weight:700;font-size:20px}
+    #tournaments #stakeInput{flex:0 0 110px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px}
+    #tournaments .stake-wrap{display:flex;gap:8px;align-items:center;flex:1}
+    #tournaments .challenge-countdown{margin-top:6px;font-weight:600}
+    #tournaments .challenge-actions{display:flex;align-items:center;gap:8px;margin-top:10px}
+    #tournaments .btn{background:#3b82f6;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
+    #tournaments .btn:hover{filter:brightness(1.05)}
+    #tournaments .muted{color:#c7d2fe}
+
+    /* ЄДИНИЙ нижній інфо-банер */
+    .battle-panel{
+      width:92%; margin:14px auto 96px;
+      border-radius:16px; overflow:hidden;
+      background:
+        linear-gradient(135deg, rgba(30,27,75,.85), rgba(37,99,235,.85)),
+        url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="280" height="280" viewBox="0 0 280 280"><g fill="none" stroke="%23ffffff22"><path d="M0 40h280M0 80h280M0 120h280M0 160h280M0 200h280M0 240h280"/><path d="M40 0v280M80 0v280M120 0v280M160 0v280M200 0v280M240 0v280"/></g></svg>') center/280px repeat;
+      border:1px solid rgba(255,255,255,.18);
+      color:#eaf2ff; box-shadow:0 10px 30px rgba(0,0,0,.2);
+    }
+    .battle-panel .inner{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:14px 16px}
+    .battle-panel .title{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
+    .battle-panel .title .logo{width:38px;height:38px;border-radius:12px;background:radial-gradient(circle at 30% 30%, #93c5fd, #6366f1);box-shadow:inset 0 1px 0 rgba(255,255,255,.35), 0 6px 16px rgba(99,102,241,.35);display:grid;place-items:center;font-size:20px}
+    .battle-panel .rules{display:flex;gap:10px;flex:1;min-width:220px;justify-content:center;flex-wrap:wrap}
+    .battle-panel .pill{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);padding:6px 10px;border-radius:999px;font-weight:700;font-size:13px}
+    .battle-panel .cta{display:flex;gap:8px;align-items:center}
+    .battle-panel .cta .btn{padding:10px 12px;border-radius:10px}
   </style>
 </head>
 <body>
@@ -152,49 +177,49 @@
   </div>
 
   <!-- TASKS -->
-  <div id="tasks" class="page">
-    <h2>📋 Завдання</h2>
+  <div id="tasks" class="page themed">
+    <h2 class="muted" style="color:#eaf2ff;margin-left:14px">📋 Завдання</h2>
 
     <div class="task">
       <span>Підпишись на канал +1⭐</span>
-      <button id="subscribeBtn">Перейти</button>
+      <button id="subscribeBtn" class="btn">Перейти</button>
     </div>
 
-    <div class="task" id="task50">
+    <div class="task" id="task50" style="justify-content:space-between;">
       <span>🎯 Досягни рекорду 75 (+10⭐)</span>
-      <button id="checkTask50">Перевірити</button>
+      <button id="checkTask50" class="btn" style="margin-left:auto;">Перевірити</button>
     </div>
 
     <div class="task" id="taskAdOncePerMinute">
       <span>🎬 Переглянь рекламу +0.15⭐ <small>(раз на 1 хв)</small></span>
-      <button id="watchAdMinuteBtn">Дивитись</button>
+      <button id="watchAdMinuteBtn" class="btn">Дивитись</button>
     </div>
     <div class="task" id="taskAdStatus" style="display:none;">
       <span>⌛ Наступний перегляд доступний через: <span id="adCooldownText">60с</span></span>
-      <button disabled>Очікуй…</button>
+      <button class="btn" disabled>Очікуй…</button>
     </div>
 
     <div class="task" id="taskWatch5">
       <span>🎬 Переглянь 5 реклам (+1⭐) — <b id="ad5Counter">0/5</b></span>
-      <button id="watchAd5Btn">Дивитися</button>
+      <button id="watchAd5Btn" class="btn">Дивитися</button>
     </div>
     <div class="task" id="taskWatch5Cooldown" style="display:none;">
       <span>⌛ «5 реклам» доступне через: <span id="ad5CooldownText">—</span></span>
-      <button disabled>Очікуй…</button>
+      <button class="btn" disabled>Очікуй…</button>
     </div>
 
     <div class="task" id="taskWatch10">
       <span>🎬 Переглянь 10 реклам (+2⭐) — <b id="ad10Counter">0/10</b></span>
-      <button id="watchAd10Btn">Дивитися</button>
+      <button id="watchAd10Btn" class="btn">Дивитися</button>
     </div>
     <div class="task" id="taskWatch10Cooldown" style="display:none;">
       <span>⌛ «10 реклам» доступне через: <span id="ad10CooldownText">—</span></span>
-      <button disabled>Очікуй…</button>
+      <button class="btn" disabled>Очікуй…</button>
     </div>
 
-    <div class="task" id="taskGames100">
+    <div class="task" id="taskGames100" style="justify-content:space-between;">
       <span>🎮 Зіграй 100 ігор (+10⭐) — зіграно: <b id="gamesPlayedCounter">0</b>/100</span>
-      <button id="checkGames100Btn">Перевірити</button>
+      <button id="checkGames100Btn" class="btn" style="margin-left:auto;">Перевірити</button>
     </div>
   </div>
 
@@ -234,42 +259,33 @@
       </div>
     </div>
 
-    <!-- Банер: два прямокутники + «іскри» + кулаки -->
-    <div class="duel-banner" aria-label="Арена батлу">
-      <div class="box"><span class="fist fist-left">🤜</span></div>
-      <div class="sparks"><i></i><i></i><i></i></div>
-      <div class="box"><span class="fist fist-right">🤛</span></div>
-    </div>
-
-    <!-- Смужка «BATTLES» -->
-    <div class="duel-ribbon"><div class="strip">BATTLES</div></div>
-
-    <!-- Короткі правила -->
-    <div class="duel-footer">
-      <div class="pill">
-        <div class="item">🎯 Мета: побий рекорд за 3 год</div>
-        <div class="sep"></div>
-        <div class="item">💎 Виграш: ×1.5 від ставки</div>
-        <div class="sep"></div>
-        <div class="item">⚠️ Програш: ставка згорає</div>
+    <!-- ЄДИНИЙ нижній інфо-банер -->
+    <div class="battle-panel" aria-label="Правила батлу">
+      <div class="inner">
+        <div class="title">
+          <div class="logo">⚔️</div>
+          <div>BATTLES</div>
+        </div>
+        <div class="rules">
+          <div class="pill">🎯 Мета: побий рекорд за 3 год</div>
+          <div class="pill">💎 Виграш: ×1.5 від ставки</div>
+          <div class="pill">⚠️ Якщо не встигаєш — ставка згорає</div>
+        </div>
+        <div class="cta">
+          <button class="btn" onclick="document.getElementById('stakeInput').focus()">Зробити ставку</button>
+        </div>
       </div>
-    </div>
-
-    <!-- ▼ Нижній попереджувальний банер -->
-    <div class="loss-banner">
-      ⚠️ УВАГА: якщо не поб’єш рекорд до завершення часу — ставка повністю згорає.
-      <small>Грай обережно та плануй спроби!</small>
     </div>
   </div>
 
   <!-- FRIENDS -->
-  <div id="friends" class="page">
+  <div id="friends" class="page themed">
     <div class="balance">Баланс ⭐ <span id="balance">0</span></div>
-    <h2>💳 Гаманець</h2>
+    <h2 class="wallet-title">💳 Гаманець</h2>
 
     <div class="share-card">
       <div><strong>Запроси друзів</strong></div>
-      <p>Посилання на бота:</p>
+      <p class="muted">Посилання на бота:</p>
       <p style="margin:8px 0;">
         <a href="https://t.me/Stacktongame_bot" class="btn" onclick="openBotLink(event)">
           ➡ Відкрити бота @Stacktongame_bot
@@ -291,7 +307,6 @@
       </div>
     </div>
 
-    <!-- Список виводів -->
     <div class="share-card">
       <div><strong>Список виводів</strong></div>
       <ul id="payoutList" class="payout-list"></ul>
@@ -313,6 +328,19 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
   <!-- App -->
+  <script>
+    function showPage(id, btn){
+      document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id===id));
+      document.querySelectorAll('.menu button').forEach(b => b.classList.toggle('active', b===btn));
+    }
+    function openBotLink(e){
+      if (window.Telegram && Telegram.WebApp) {
+        Telegram.WebApp.openTelegramLink('https://t.me/Stacktongame_bot');
+        e.preventDefault();
+      }
+    }
+  </script>
   <script src="./script.js"></script>
 </body>
 </html>
+
