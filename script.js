@@ -627,13 +627,16 @@ function onCheckGames100(){
 }
 
 /* ========= БАТЛ: логіка ========= */
-// 5% шанс отримати діапазон 83..120, інакше 121..200
+/* НОВИЙ генератор:
+   - 15%: діапазон 83..100
+   - 85%: діапазон 101..150
+*/
 function weightedOppScore(){
   const r = Math.random();
-  if (r < 0.05){
-    return 83 + Math.floor(Math.random()*(120-83+1));
+  if (r < 0.15){
+    return 83 + Math.floor(Math.random() * (100 - 83 + 1));
   }
-  return 121 + Math.floor(Math.random()*(200-121+1));
+  return 101 + Math.floor(Math.random() * (150 - 101 + 1));
 }
 
 function setupChallengeUI(){
@@ -758,18 +761,22 @@ class Stage{
   constructor(){
     this.container = document.getElementById("container");
     this.scene = new THREE.Scene();
-    this.renderer = new THREE.WebGLRenderer({antialias:true,alpha:false});
+    // ГОЛОВНЕ: прозорий рендерер, щоб CSS-фон було видно під грою
+    this.renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setClearColor('#D0CBC7', 1);
+    this.renderer.setClearColor(0x000000, 0); // повністю прозорий фон канваса
     this.container.appendChild(this.renderer.domElement);
+
     const aspect = window.innerWidth / window.innerHeight, d = 20;
     this.camera = new THREE.OrthographicCamera(-d*aspect, d*aspect, d, -d, -100, 1000);
     this.camera.position.set(2,2,2);
     this.cameraTarget = new THREE.Vector3(0,0,0);
     this.camera.lookAt(this.cameraTarget);
+
     this.light = new THREE.DirectionalLight(0xffffff,0.5); this.light.position.set(0,499,0);
     this.softLight = new THREE.AmbientLight(0xffffff,0.4);
     this.scene.add(this.light); this.scene.add(this.softLight);
+
     window.addEventListener('resize', ()=>this.onResize()); this.onResize();
   }
   add(o){ this.scene.add(o); } remove(o){ this.scene.remove(o); }
