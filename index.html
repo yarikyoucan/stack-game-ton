@@ -53,7 +53,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="220" viewBox="0 0 800 220">\
   <rect width="800" height="220" fill="none"/>\
   <path d="M0 190 L20 170 L45 172 L45 190 L70 160 L95 162 L95 190 L130 150 L160 152 L160 190 L200 165 L230 167 L230 190 L270 155 L310 157 L310 190 L350 170 L380 172 L380 190 L420 160 L455 162 L455 190 L495 168 L530 170 L530 190 L570 156 L610 158 L610 190 L650 170 L690 172 L690 190 L730 160 L770 165 L770 190 L800 150 L800 220 L0 220 Z" fill="%23040a1c"/>\
-  <path d="M0 200 L30 180 L50 180 L50 200 L80 155 L110 155 L110 200 L150 140 L180 140 L180 200 L220 165 L250 165 L250 200 L300 145 L340 145 L340 200 Л380 175 Л420 175 Л420 200 Л460 150 Л500 150 Л500 200 Л540 165 Л580 165 Л580 200 Л620 145 Л660 145 Л660 200 Л700 175 Л740 175 Л740 200 Л800 160 Л800 220 Л0 220 Z" fill="%23000a1a"/>\
+  <path d="M0 200 L30 180 L50 180 L50 200 L80 155 L110 155 L110 200 L150 140 L180 140 L180 200 L220 165 L250 165 L250 200 L300 145 L340 145 L340 200 L380 175 L420 175 L420 200 L460 150 L500 150 L500 200 L540 165 L580 165 L580 200 L620 145 L660 145 L660 200 L700 175 L740 175 L740 200 L800 160 L800 220 L0 220 Z" fill="%23000a1a"/>\
   <g fill="%23ffd34d">\
     <rect x="58" y="184" width="6" height="10"/><rect x="66" y="184" width="6" height="10" opacity="0.6"/>\
     <rect x="206" y="186" width="6" height="10"/><rect x="214" y="186" width="6" height="10" opacity="0.6"/>\
@@ -397,9 +397,9 @@
       const infoBtn = document.getElementById('shopInfoBtn');
       const infoPop = document.getElementById('shopInfoPop');
       const infoClose = document.getElementById('shopInfoClose');
-      infoBtn?.addEventListener('click', ()=>infoPop.classList.toggle('open'));
-      infoClose?.addEventListener('click', ()=>infoPop.classList.remove('open'));
-      document.addEventListener('click', (e)=>{ if (!infoPop.contains(e.target) && !infoBtn.contains(e.target)) infoPop.classList.remove('open'); });
+      infoBtn?.addEventListener('click', (e)=>{ e.stopPropagation(); infoPop.classList.toggle('open'); });
+      infoClose?.addEventListener('click', (e)=>{ e.stopPropagation(); infoPop.classList.remove('open'); });
+      document.addEventListener('click', (e)=>{ if (!infoPop?.contains(e.target) && !infoBtn?.contains(e.target)) infoPop?.classList.remove('open'); });
 
       // i18n — словники
       const I18N = {
@@ -467,7 +467,7 @@
           nice_try: "Nice try 👍",
           restart_hint: "Click or press Space to start again",
           start_btn: "▶ Start",
-          pause_before_new game: "Pause before new game",
+          pause_before_new_game: "Pause before new game",
           you_can_start_in: "You can start in:",
           sec_suffix: "s",
 
