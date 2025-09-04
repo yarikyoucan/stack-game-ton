@@ -182,11 +182,22 @@ window.onload = function(){
   // батл UI
   setupChallengeUI();
 
+  // Adsgram
   initAds();
 
+  // RICHADS: прибираємо завдання, якщо в HTML залишилось помилково
+  const taskRich = $("taskRichAds");
+  if (taskRich && taskRich.parentElement) {
+    taskRich.parentElement.removeChild(taskRich);
+  }
+
+  // Гра
   window.stackGame = new Game();
 
   updateAdTasksUI();
+
+  // RICHADS: автопоказ (30–60с), без завдань
+  initRichAdsAutorotate();
 };
 
 function addBalance(n){ balance = parseFloat((balance + n).toFixed(2)); setBalanceUI(); saveData(); }
@@ -233,9 +244,9 @@ function initAds(){
   try { AdGameover = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID_GAMEOVER }); }
   catch (e) { console.warn("Adsgram init (gameover) error:", e); }
 }
-function inTelegramWebApp(){ return !!(window.Telegram && window.Telegram.WebApp); }
+function inTelegramWebApp(){ return !!(window.Telegram && Telegram.WebApp); }
 
-/** Показ реклами */
+/** Показ реклами (Adsgram) */
 async function showInterstitialOnce(ctx, opts = {}){
   const isTaskMinute = (ctx === 'task');
   const isTask5 = (ctx === 'task5');
@@ -761,7 +772,7 @@ class Stage{
   constructor(){
     this.container = document.getElementById("container");
     this.scene = new THREE.Scene();
-    // ГОЛОВНЕ: прозорий рендерер, щоб CSS-фон було видно під грою
+    // прозорий рендерер, щоб CSS-фон було видно під грою
     this.renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setClearColor(0x000000, 0); // повністю прозорий фон канваса
@@ -954,7 +965,7 @@ class Game{
     this.addBlock();
   }
 
-  addBlock(){
+  async addBlock(){
     const last=this.blocks[this.blocks.length-1];
     if(last && last.state===last.STATES.MISSED) return this.endGame();
     this.scoreEl.innerHTML=String(this.blocks.length-1);
@@ -1004,5 +1015,88 @@ function updateHighscore(currentScore){
     highscore=currentScore;
     localStorage.setItem("highscore", String(highscore));
     $("highscore").innerText="🏆 "+highscore;
+  }
+}
+
+/* =========================================================
+   RICHADS AUTOROTATE (30–60 сек), без завдань і без винагород
+   Залежить від скрипта в HTML:
+   <script src="https://richinfo.co/richpartners/telegram/js/tg-ob.js"></script>
+   і ініціалізації:
+   new TelegramAdsController().initialize({ pubId:"965326", appId:"3592" })
+   ========================================================= */
+const RICHADS_PUB_ID = "965326";
+const RICHADS_APP_ID = "3592";
+
+let richAdsController = null;
+let richAdsTimerId = null;
+let richAdsInitTried = 0;
+
+function richadsIsReady(){
+  return !!(richAdsController);
+}
+
+function initRichAdsAutorotate(){
+  // Якщо SDK завантажено, ініціалізуємо локальний контролер (не чіпаємо той, що в інлайні)
+  try{
+    if (typeof window.TelegramAdsController === "function") {
+      richAdsController = new window.TelegramAdsController();
+      richAdsController.initialize({ pubId: RICHADS_PUB_ID, appId: RICHADS_APP_ID });
+      // стартуємо цикл
+      scheduleNextRichAds();
+      console.log("[RichAds] ready (autorotate 30–60s)");
+    } else {
+      if (richAdsInitTried < 10){
+        richAdsInitTried++;
+        setTimeout(initRichAdsAutorotate, 1000);
+      } else {
+        console.warn("[RichAds] SDK не готовий");
+      }
+    }
+  }catch(e){
+    console.warn("[RichAds] init error:", e);
+  }
+}
+
+function scheduleNextRichAds(){
+  clearTimeout(richAdsTimerId);
+  const delay = 30_000 + Math.floor(Math.random()*30_000); // 30–60 сек
+  richAdsTimerId = setTimeout(tryShowRichAds, delay);
+  // console.log(`[RichAds] наступний показ через ${Math.round(delay/1000)}с`);
+}
+
+async function tryShowRichAds(){
+  // Умови для безпечного показу (щоб не конфліктувало з Adsgram та грою)
+  if (!inTelegramWebApp()) { scheduleNextRichAds(); return; }
+  if (!richadsIsReady())   { scheduleNextRichAds(); return; }
+  if (isPaused)            { scheduleNextRichAds(); return; } // лише на сторінці Game
+  if (postAdTimerActive)   { scheduleNextRichAds(); return; }
+
+  // не перебивати Adsgram: глобальний cooldown
+  const now = Date.now();
+  const globalLeft = ANY_AD_COOLDOWN_MS - (now - lastAnyAdAt);
+  if (globalLeft > 0) { scheduleNextRichAds(); return; }
+
+  try{
+    // пробуємо різні методи, бо у різних версіях SDK назва могла відрізнятись
+    if (typeof richAdsController.showInterstitialAd === "function") {
+      await richAdsController.showInterstitialAd();
+    } else if (typeof richAdsController.showInterstitial === "function") {
+      await richAdsController.showInterstitial();
+    } else if (typeof richAdsController.show === "function") {
+      await richAdsController.show();
+    } else {
+      console.warn("[RichAds] немає методу show* у SDK");
+    }
+
+    // фіксуємо глобальний анти-спам
+    lastAnyAdAt = Date.now();
+    saveData();
+
+  } catch (err){
+    console.warn("[RichAds] помилка показу:", err?.message || err);
+  } finally {
+    // плануємо наступний
+    scheduleNextRichAds();
   }
 }
