@@ -1,106 +1,5 @@
-// script.js  — версія з Firebase Firestore
 "use strict";
 console.clear();
-
-/* ====================== Firebase ====================== */
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-import {
-  getFirestore, doc, getDoc, setDoc, updateDoc,
-  arrayUnion, serverTimestamp
-} from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
-import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-analytics.js";
-
-/* ---- Актуальний firebaseConfig ---- */
-const firebaseConfig = {
-  apiKey: "AIzaSyC-lyjuHWsbLgYsygynLnt4dZxSKcpsdsk",
-  authDomain: "stack-game-ton.firebaseapp.com",
-  projectId: "stack-game-ton",
-  storageBucket: "stack-game-ton.appspot.com", // ✅ виправлено
-  messagingSenderId: "203011584430",
-  appId: "1:203011584430:web:f5cae943d14f070087583f",
-  measurementId: "G-RK979SWXLW"
-};
-
-const app = initializeApp(firebaseConfig);
-const db  = getFirestore(app);
-// Analytics тільки якщо підтримується
-isSupported().then(ok => { if (ok) getAnalytics(app); });
-
-/* ---- Ідентифікатор гравця ---- */
-function getTelegramUser(){
-  const u = (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user) || null;
-  if (!u) return { id:"", username:"", first_name:"", last_name:"" };
-  return { id:u.id||"", username:u.username||"", first_name:u.first_name||"", last_name:u.last_name||"" };
-}
-function getUserId(){
-  const u = getTelegramUser();
-  if (u.id) return String(u.id);
-  return "guest-" + Math.random().toString(36).slice(2, 10);
-}
-const USER_ID = getUserId();
-const userRef = doc(db, "players", USER_ID);
-
-/* ---- Значення за замовчуванням ---- */
-const DEFAULT_DATA = {
-  balance: 0,
-  subscribed: false,
-  task50Completed: false,
-  highscore: 0,
-  lastTaskAdAt: 0,
-  lastAnyAdAt: 0,
-  gamesPlayedSinceClaim: 0,
-  ad5Count: 0,
-  ad10Count: 0,
-  lastTask5RewardAt: 0,
-  lastTask10RewardAt: 0,
-  oppScorePending: null,
-  challengeActive: false,
-  challengeStartAt: 0,
-  challengeDeadline: 0,
-  challengeStake: 0,
-  challengeOpp: 0,
-  payouts: [],
-  createdAt: serverTimestamp(),
-  updatedAt: serverTimestamp(),
-};
-
-/* ---- Завантаження / збереження ---- */
-let _pendingSave = {};
-let _saveTimer = null;
-
-async function ensureDocExists(){
-  const snap = await getDoc(userRef);
-  if (!snap.exists()) {
-    await setDoc(userRef, DEFAULT_DATA);
-    return DEFAULT_DATA;
-  }
-  return { ...DEFAULT_DATA, ...snap.data() };
-}
-
-function scheduleSave(partial){
-  _pendingSave = { ..._pendingSave, ...partial, updatedAt: serverTimestamp() };
-  if (_saveTimer) return;
-  _saveTimer = setTimeout(async () => {
-    const data = _pendingSave;
-    _pendingSave = {};
-    _saveTimer = null;
-    try { await setDoc(userRef, data, { merge: true }); }
-    catch(e){ console.warn("Firestore save error:", e); }
-  }, 800);
-}
-
-/* ===================================================== */
-/* Далі йде весь твій ігровий код (баланс, реклама, батли,
-   3D Stack логіка). Він лишається той самий, тільки там,
-   де раніше був localStorage, тепер виклики scheduleSave().
-   Я вже підставив це в попередній версії.               */
-/* ===================================================== */
-
-// ... тут йде той самий код, який я тобі давав раніше
-// (Game, Stage, Block, реклама, withdraw50ShareToGroup, updateHighscore тощо)
-// з усіма замінами localStorage → Firestore
-
-/* ====================== Гра/логіка з твого коду ====================== */
 
 /* ========= КОНСТАНТИ ========= */
 const TASK_AD_COOLDOWN_MS = 60_000;   // 1 реклама / хв у завданні (+0.15⭐)
@@ -129,7 +28,7 @@ const TASK_DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const ALPH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 
-/* ========= СТАН (замість localStorage) ========= */
+/* ========= СТАН ========= */
 let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
 let gamesPlayedSinceClaim = 0;
 let isPaused = false;
@@ -171,6 +70,34 @@ const $ = id => document.getElementById(id);
 const formatStars = v => Number.isInteger(Number(v)) ? String(Number(v)) : Number(v).toFixed(2);
 const setBalanceUI = () => $("balance").innerText = formatStars(balance);
 
+function saveData(){
+  localStorage.setItem("balance", String(balance));
+  localStorage.setItem("subscribed", subscribed ? "true" : "false");
+  localStorage.setItem("task50Completed", task50Completed ? "true" : "false");
+  localStorage.setItem("highscore", String(highscore));
+  localStorage.setItem("lastTaskAdAt", String(lastTaskAdAt));
+  localStorage.setItem("gamesPlayedSinceClaim", String(gamesPlayedSinceClaim));
+  localStorage.setItem("lastAnyAdAt", String(lastAnyAdAt));
+
+  localStorage.setItem("ad5Count", String(ad5Count));
+  localStorage.setItem("ad10Count", String(ad10Count));
+  localStorage.setItem("lastTask5RewardAt", String(lastTask5RewardAt));
+  localStorage.setItem("lastTask10RewardAt", String(lastTask10RewardAt));
+
+  // батл
+  localStorage.setItem("oppScorePending", oppScorePending==null ? "" : String(oppScorePending));
+  localStorage.setItem("challengeActive", challengeActive ? "true" : "false");
+  localStorage.setItem("challengeStartAt", String(challengeStartAt));
+  localStorage.setItem("challengeDeadline", String(challengeDeadline));
+  localStorage.setItem("challengeStake", String(challengeStake));
+  localStorage.setItem("challengeOpp", String(challengeOpp));
+}
+
+function getTelegramUser(){
+  const u = (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user) || null;
+  if (!u) return { id:"", username:"", first_name:"", last_name:"" };
+  return { id:u.id||"", username:u.username||"", first_name:u.first_name||"", last_name:u.last_name||"" };
+}
 function getUserTag(){
   const u = getTelegramUser();
   if (u.username) return "@"+u.username;
@@ -184,37 +111,33 @@ function getUserTag(){
 let dailyTasksTicker = null;
 let challengeTicker = null;
 
-window.onload = async function(){
-  // 1) переконаємось, що документ користувача існує та заберемо стан
-  const data = await ensureDocExists();
+window.onload = function(){
+  balance = parseFloat(localStorage.getItem("balance") || "0");
+  subscribed = localStorage.getItem("subscribed") === "true";
+  task50Completed = localStorage.getItem("task50Completed") === "true";
+  highscore = parseInt(localStorage.getItem("highscore") || "0", 10);
 
-  // 2) розкидаємо в локальні змінні
-  balance               = Number(data.balance||0);
-  subscribed            = !!data.subscribed;
-  task50Completed       = !!data.task50Completed;
-  highscore             = Number(data.highscore||0);
-  lastTaskAdAt          = Number(data.lastTaskAdAt||0);
-  lastAnyAdAt           = Number(data.lastAnyAdAt||0);
-  gamesPlayedSinceClaim = Number(data.gamesPlayedSinceClaim||0);
+  lastTaskAdAt     = parseInt(localStorage.getItem("lastTaskAdAt") || "0", 10);
+  lastAnyAdAt      = parseInt(localStorage.getItem("lastAnyAdAt")  || "0", 10);
+  gamesPlayedSinceClaim = parseInt(localStorage.getItem("gamesPlayedSinceClaim") || "0", 10);
 
-  ad5Count              = Number(data.ad5Count||0);
-  ad10Count             = Number(data.ad10Count||0);
-  lastTask5RewardAt     = Number(data.lastTask5RewardAt||0);
-  lastTask10RewardAt    = Number(data.lastTask10RewardAt||0);
+  ad5Count = parseInt(localStorage.getItem("ad5Count") || "0", 10);
+  ad10Count = parseInt(localStorage.getItem("ad10Count") || "0", 10);
+  lastTask5RewardAt = parseInt(localStorage.getItem("lastTask5RewardAt") || "0", 10);
+  lastTask10RewardAt = parseInt(localStorage.getItem("lastTask10RewardAt") || "0", 10);
 
   // батл
-  oppScorePending   = (data.oppScorePending===null || data.oppScorePending===undefined) ? null : Number(data.oppScorePending);
-  challengeActive   = !!data.challengeActive;
-  challengeStartAt  = Number(data.challengeStartAt||0);
-  challengeDeadline = Number(data.challengeDeadline||0);
-  challengeStake    = Number(data.challengeStake||0);
-  challengeOpp      = Number(data.challengeOpp||0);
+  oppScorePending   = parseInt(localStorage.getItem("oppScorePending") || "") || null;
+  challengeActive   = localStorage.getItem("challengeActive") === "true";
+  challengeStartAt  = parseInt(localStorage.getItem("challengeStartAt") || "0", 10);
+  challengeDeadline = parseInt(localStorage.getItem("challengeDeadline") || "0", 10);
+  challengeStake    = parseFloat(localStorage.getItem("challengeStake") || "0");
+  challengeOpp      = parseInt(localStorage.getItem("challengeOpp") || "0", 10);
 
-  // 3) UI
   setBalanceUI();
   $("highscore").innerText = "🏆 " + highscore;
   updateGamesTaskUI();
-  renderPayoutListFrom(data.payouts || []);
+  renderPayoutList();
 
   const subBtn = $("subscribeBtn");
   if (subBtn){
@@ -229,7 +152,7 @@ window.onload = async function(){
       if (highscore >= 75 && !task50Completed){
         addBalance(10);
         t50.innerText="Виконано"; t50.classList.add("done");
-        task50Completed = true; scheduleSave({ task50Completed });
+        task50Completed = true; saveData();
       } else {
         alert("❌ Твій рекорд замалий (потрібно 75+)");
       }
@@ -243,7 +166,7 @@ window.onload = async function(){
   const g100Btn = $("checkGames100Btn");
   if (g100Btn) g100Btn.addEventListener("click", onCheckGames100);
 
-  initLeaderboard(); // заглушка
+  initLeaderboard(); // заглушка, якщо таблиці нема — просто скіпаємо
 
   const link = "https://t.me/Stacktongame_bot";
   if ($("shareLink")) $("shareLink").value = link;
@@ -266,23 +189,7 @@ window.onload = async function(){
   updateAdTasksUI();
 };
 
-/* ---- Заміна localStorage.saveData → Firestore ---- */
-function saveData(){
-  scheduleSave({
-    balance, subscribed, task50Completed, highscore,
-    lastTaskAdAt, lastAnyAdAt, gamesPlayedSinceClaim,
-    ad5Count, ad10Count, lastTask5RewardAt, lastTask10RewardAt,
-    oppScorePending: (oppScorePending==null ? null : Number(oppScorePending)),
-    challengeActive, challengeStartAt, challengeDeadline, challengeStake, challengeOpp,
-  });
-}
-
-function addBalance(n){
-  balance = parseFloat((balance + n).toFixed(2));
-  setBalanceUI();
-  saveData();
-}
-
+function addBalance(n){ balance = parseFloat((balance + n).toFixed(2)); setBalanceUI(); saveData(); }
 function subscribe(){
   if (subscribed) return;
   const url = "https://t.me/stackofficialgame";
@@ -306,7 +213,7 @@ window.showPage = showPage;
 /* ========= Лідерборд-заглушка ========= */
 function initLeaderboard(){
   const tbody = document.querySelector("#leaderboard tbody");
-  if (!tbody) return;
+  if (!tbody) return; // таблиці може не бути — ок
   tbody.innerHTML = "";
   for (let i=1;i<=50;i++){
     const tr = document.createElement("tr");
@@ -639,7 +546,7 @@ function transformCodeHeavy(code){
 }
 
 /* ========= Вивід: 50⭐ + лог до списку ========= */
-async function withdraw50ShareToGroup(){
+function withdraw50ShareToGroup(){
   const statusEl = $("withdrawStatus");
 
   if (balance < WITHDRAW_CHUNK) {
@@ -663,17 +570,12 @@ async function withdraw50ShareToGroup(){
   balance = Number((balance - WITHDRAW_CHUNK).toFixed(2));
   setBalanceUI(); saveData();
 
-  // лог у Firestore (масив payouts)
+  // лог у список виводів
   const entry = { ts: Date.now(), amount: WITHDRAW_CHUNK, code1, code2 };
-  try {
-    await updateDoc(userRef, { payouts: arrayUnion(entry), updatedAt: serverTimestamp() });
-  } catch {
-    // якщо нема документа (дуже рідко) – створимо
-    await setDoc(userRef, { payouts: [entry], updatedAt: serverTimestamp() }, { merge: true });
-  }
-  // оновимо список у UI
-  const snap = await getDoc(userRef);
-  renderPayoutListFrom((snap.data()?.payouts)||[]);
+  const arr = JSON.parse(localStorage.getItem("payouts") || "[]");
+  arr.unshift(entry);
+  localStorage.setItem("payouts", JSON.stringify(arr));
+  renderPayoutList();
 
   if (OPEN_MODE === "group" && GROUP_LINK) {
     if (navigator.clipboard && window.isSecureContext) {
@@ -693,19 +595,18 @@ async function withdraw50ShareToGroup(){
   }
 }
 
-function renderPayoutListFrom(arr){
+function renderPayoutList(){
   const ul = $("payoutList");
   if (!ul) return;
+  const arr = JSON.parse(localStorage.getItem("payouts") || "[]");
   ul.innerHTML = "";
-  if (!arr || arr.length === 0){
+  if (arr.length === 0){
     const li = document.createElement("li");
     li.textContent = "Ще немає виводів.";
     ul.appendChild(li);
     return;
   }
-  // відсортуємо за часом (спадання)
-  const sorted = [...arr].sort((a,b)=>Number(b.ts||0)-Number(a.ts||0));
-  sorted.forEach(e=>{
+  arr.forEach(e=>{
     const d = new Date(e.ts);
     const li = document.createElement("li");
     li.innerHTML = `🗓 ${d.toLocaleString()} — 💸 ${e.amount}⭐<br><span class="muted">Код1: ${e.code1} • Код2: ${e.code2}</span>`;
@@ -726,6 +627,10 @@ function onCheckGames100(){
 }
 
 /* ========= БАТЛ: логіка ========= */
+/* НОВИЙ генератор:
+   - 15%: діапазон 83..100
+   - 85%: діапазон 101..150
+*/
 function weightedOppScore(){
   const r = Math.random();
   if (r < 0.15){
@@ -745,6 +650,7 @@ function setupChallengeUI(){
   const leftEl = $("challengeLeft");
   const statusEl = $("challengeStatus");
 
+  // Початковий стан
   if (oppScorePending != null){
     scoreBox.textContent = String(oppScorePending);
   }else{
@@ -807,7 +713,7 @@ function setupChallengeUI(){
     const expired = now > challengeDeadline;
 
     if (won){
-      addBalance(challengeStake * 1.5);
+      addBalance(challengeStake * 1.5); // виграш
       statusEl.textContent = "✅ Виконано! Нараховано " + (challengeStake*1.5).toFixed(2) + "⭐";
       checkBtn.disabled = true;
       finishChallenge();
@@ -820,6 +726,7 @@ function setupChallengeUI(){
     }
   };
 
+  // Якщо відновлювали зі сховища
   if (challengeActive){
     info.textContent = `Виклик активний! Твій суперник має рекорд ${challengeOpp}.`;
     checkBtn.disabled = false;
@@ -854,9 +761,10 @@ class Stage{
   constructor(){
     this.container = document.getElementById("container");
     this.scene = new THREE.Scene();
+    // ГОЛОВНЕ: прозорий рендерер, щоб CSS-фон було видно під грою
     this.renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setClearColor(0x000000, 0);
+    this.renderer.setClearColor(0x000000, 0); // повністю прозорий фон канваса
     this.container.appendChild(this.renderer.domElement);
 
     const aspect = window.innerWidth / window.innerHeight, d = 20;
@@ -1094,12 +1002,7 @@ class Game{
 function updateHighscore(currentScore){
   if(currentScore>highscore){
     highscore=currentScore;
-    scheduleSave({ highscore });
+    localStorage.setItem("highscore", String(highscore));
     $("highscore").innerText="🏆 "+highscore;
   }
-}
-
-/* ========= Допоміжне для виплат (рендер списку при старті) ========= */
-function renderPayoutList(){
-  // не використовується — замінив на renderPayoutListFrom(arr) вище
 }
