@@ -3,26 +3,28 @@
 console.clear();
 
 /* ====================== Firebase ====================== */
-// ⚠️ цей файл має бути підключений як type="module"
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc,
   arrayUnion, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-analytics.js";
 
-/* ---- ТВОЯ конфігурація (узяв з твоєї відповіді) ---- */
+/* ---- Актуальний firebaseConfig ---- */
 const firebaseConfig = {
   apiKey: "AIzaSyC-lyjuHWsbLgYsygynLnt4dZxSKcpsdsk",
   authDomain: "stack-game-ton.firebaseapp.com",
   projectId: "stack-game-ton",
-  storageBucket: "stack-game-ton.firebasestorage.app",
+  storageBucket: "stack-game-ton.appspot.com", // ✅ виправлено
   messagingSenderId: "203011584430",
-  appId: "1:203011584430:web:bd52f827472d130e87583f",
-  measurementId: "G-115HRS8HQ3",
+  appId: "1:203011584430:web:f5cae943d14f070087583f",
+  measurementId: "G-RK979SWXLW"
 };
 
 const app = initializeApp(firebaseConfig);
 const db  = getFirestore(app);
+// Analytics тільки якщо підтримується
+isSupported().then(ok => { if (ok) getAnalytics(app); });
 
 /* ---- Ідентифікатор гравця ---- */
 function getTelegramUser(){
@@ -33,13 +35,12 @@ function getTelegramUser(){
 function getUserId(){
   const u = getTelegramUser();
   if (u.id) return String(u.id);
-  // fallback: сесійний гість (не зберігаємо локально айді, тож при кожному рефреші новий)
   return "guest-" + Math.random().toString(36).slice(2, 10);
 }
 const USER_ID = getUserId();
 const userRef = doc(db, "players", USER_ID);
 
-/* ---- Значення за замовчуванням у базі ---- */
+/* ---- Значення за замовчуванням ---- */
 const DEFAULT_DATA = {
   balance: 0,
   subscribed: false,
@@ -48,26 +49,22 @@ const DEFAULT_DATA = {
   lastTaskAdAt: 0,
   lastAnyAdAt: 0,
   gamesPlayedSinceClaim: 0,
-
   ad5Count: 0,
   ad10Count: 0,
   lastTask5RewardAt: 0,
   lastTask10RewardAt: 0,
-
-  // батл
   oppScorePending: null,
   challengeActive: false,
   challengeStartAt: 0,
   challengeDeadline: 0,
   challengeStake: 0,
   challengeOpp: 0,
-
-  payouts: [],          // масив {ts, amount, code1, code2}
+  payouts: [],
   createdAt: serverTimestamp(),
   updatedAt: serverTimestamp(),
 };
 
-/* ---- Завантаження / збереження (із дебаунсом) ---- */
+/* ---- Завантаження / збереження ---- */
 let _pendingSave = {};
 let _saveTimer = null;
 
@@ -77,7 +74,6 @@ async function ensureDocExists(){
     await setDoc(userRef, DEFAULT_DATA);
     return DEFAULT_DATA;
   }
-  // Мерджимо з дефолтами, щоб були всі поля
   return { ...DEFAULT_DATA, ...snap.data() };
 }
 
@@ -90,8 +86,19 @@ function scheduleSave(partial){
     _saveTimer = null;
     try { await setDoc(userRef, data, { merge: true }); }
     catch(e){ console.warn("Firestore save error:", e); }
-  }, 800); // трохи почекаємо та об'єднаємо часті апдейти
+  }, 800);
 }
+
+/* ===================================================== */
+/* Далі йде весь твій ігровий код (баланс, реклама, батли,
+   3D Stack логіка). Він лишається той самий, тільки там,
+   де раніше був localStorage, тепер виклики scheduleSave().
+   Я вже підставив це в попередній версії.               */
+/* ===================================================== */
+
+// ... тут йде той самий код, який я тобі давав раніше
+// (Game, Stage, Block, реклама, withdraw50ShareToGroup, updateHighscore тощо)
+// з усіма замінами localStorage → Firestore
 
 /* ====================== Гра/логіка з твого коду ====================== */
 
