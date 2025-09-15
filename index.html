@@ -21,7 +21,6 @@
     #container{
       position:relative;width:100%;height:100%;overflow:hidden;
       background:
-        /* 1) Місяць (праворуч-угорі) */
         url('data:image/svg+xml;utf8,\
 <svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">\
   <defs>\
@@ -39,7 +38,6 @@
     <circle cx="68" cy="78" r="60" fill="url(%23g)"/>\
   </g>\
 </svg>') no-repeat 95% 8%,
-        /* 2) Зірки */
         url('data:image/svg+xml;utf8,\
 <svg xmlns="http://www.w3.org/2000/svg" width="140" height="140" viewBox="0 0 140 140">\
   <g fill="%23ffffff" opacity="0.7">\
@@ -48,12 +46,11 @@
     <circle cx="100" cy="78" r="1.1"/><circle cx="130" cy="92" r="0.9"/><circle cx="32" cy="110" r="1.2"/>\
     <circle cx="72" cy="118" r="0.9"/><circle cx="8" cy="126" r="1.0"/>\
   </g></svg>') repeat,
-        /* 3) Будинки (виправлені контури й вікна) */
         url('data:image/svg+xml;utf8,\
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="220" viewBox="0 0 800 220">\
   <rect width="800" height="220" fill="none"/>\
   <path d="M0 190 L20 170 L45 172 L45 190 L70 160 L95 162 L95 190 L130 150 L160 152 L160 190 L200 165 L230 167 L230 190 L270 155 L310 157 L310 190 L350 170 L380 172 L380 190 L420 160 L455 162 L455 190 L495 168 L530 170 L530 190 L570 156 L610 158 L610 190 L650 170 L690 172 L690 190 L730 160 L770 165 L770 190 L800 150 L800 220 L0 220 Z" fill="%23040a1c"/>\
-  <path d="M0 200 L30 180 L50 180 L50 200 L80 155 L110 155 L110 200 L150 140 L180 140 L180 200 L220 165 L250 165 L250 200 L300 145 L340 145 L340 200 L380 175 L420 175 L420 200 L460 150 L500 150 L500 200 L540 165 L580 165 L580 200 L620 145 L660 145 L660 200 L700 175 L740 175 L740 200 L800 160 L800 220 L0 220 Z" fill="%23000a1a"/>\
+  <path d="M0 200 L30 180 L50 180 L50 200 L80 155 L110 155 L110 200 Л150 140 L180 140 L180 200 L220 165 L250 165 L250 200 L300 145 L340 145 L340 200 L380 175 L420 175 L420 200 L460 150 L500 150 L500 200 L540 165 L580 165 L580 200 L620 145 L660 145 L660 200 L700 175 L740 175 L740 200 L800 160 L800 220 L0 220 Z" fill="%23000a1a"/>\
   <g fill="%23ffd34d">\
     <rect x="58" y="184" width="6" height="10"/><rect x="66" y="184" width="6" height="10" opacity="0.6"/>\
     <rect x="206" y="186" width="6" height="10"/><rect x="214" y="186" width="6" height="10" opacity="0.6"/>\
@@ -61,7 +58,6 @@
     <rect x="526" y="186" width="6" height="10"/><rect x="534" y="186" width="6" height="10" opacity="0.6"/>\
     <rect x="686" y="188" width="6" height="10"/><rect x="694" y="188" width="6" height="10" opacity="0.6"/>\
   </g></svg>') bottom repeat-x,
-        /* 4) Градієнт ночі */
         linear-gradient(180deg,#1e1b4b 0%, #0b1020 60%, #090f1a 100%);
       background-size:160px 160px,140px 140px,auto 220px,cover;
       background-position:95% 8%,center,bottom,center;
@@ -73,11 +69,9 @@
     .hide{display:none}
     .game-over,.ready{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;background:rgba(15,23,42,.95);color:#fff;padding:20px;border-radius:10px;display:none;z-index:3;min-width:260px;box-shadow:0 2px 5px rgba(0,0,0,.35)}
 
-    /* Кнопка UA/EN у грі */
     .lang-btn{position:absolute;top:10px;right:10px;z-index:3;background:rgba(255,255,255,.12);color:#eaf2ff;border:1px solid rgba(255,255,255,.25);padding:6px 10px;border-radius:10px;font-weight:800;letter-spacing:.5px;cursor:pointer;backdrop-filter:blur(6px)}
     .lang-btn:hover{filter:brightness(1.05)}
 
-    /* --- ДРУЗІ / ГАМАНЕЦЬ (базові картки) --- */
     .share-card{width:90%;margin:12px auto;background:#fff;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,.1);padding:16px}
     .share-row{display:flex;gap:8px;margin-top:8px}
     .share-row input{flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px}
@@ -88,7 +82,6 @@
     .payout-list{list-style:none;margin:8px 0 0;padding:0}
     .payout-list li{padding:6px 8px;border:1px solid #eee;border-radius:8px;margin-top:6px;font-size:14px}
 
-    /* ===== УНІВЕРСАЛЬНА ТЕМА для Tasks / Wallet / Shop ===== */
     .themed{
       position:relative;color:#eef;padding-bottom:84px;
       background:
@@ -124,12 +117,10 @@
     .themed .btn{background:#3b82f6;color:#fff;border:none}
     .themed .btn:hover{filter:brightness(1.05)}
 
-    /* Заголовки збільшені і баланс по центру */
     #tasksTitle{color:#eaf2ff;margin:6px 0 8px 14px;font-size:28px}
     #friends .balance{font-size:30px;font-weight:800;text-align:center;margin:16px 0;color:#eaf2ff}
     #friends h2.wallet-title{color:#eaf2ff;text-align:center;font-size:28px;margin:0 0 20px}
 
-    /* ========== BATTLES (редизайн) + патерн "BATTLES" по ВСІЙ сторінці ========== */
     #tournaments{
       position:relative;color:#eef;padding-bottom:84px;
       background-image:
@@ -151,7 +142,6 @@
     #tournaments .btn{background:#3b82f6;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
     #tournaments .btn:hover{filter:brightness(1.05)}
 
-    /* Нижній інфо-банер у батлах */
     .battle-panel{width:92%; margin:14px auto 96px;border-radius:16px; overflow:hidden;background:
       linear-gradient(135deg, rgba(30,27,75,.85), rgba(37,99,235,.85)),
       url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="280" height="280" viewBox="0 0 280 280"><g fill="none" stroke="%23ffffff22"><path d="M0 40h280M0 80h280M0 120h280M0 160h280M0 200h280M0 240h280"/><path d="M40 0v280M80 0v280M120 0v280M160 0v280M200 0v280M240 0v280"/></g></svg>') center/280px repeat;
@@ -164,7 +154,6 @@
     .battle-panel .cta{display:flex;gap:8px;align-items:center}
     .battle-panel .cta .btn{padding:10px 12px;border-radius:10px}
 
-    /* Магазин: картка з (i) */
     .shop-card{position:relative}
     .info-btn{position:absolute;top:10px;right:10px;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;cursor:pointer;background:rgba(255,255,255,.12);color:#eaf2ff;border:1px solid rgba(255,255,255,.25);font-weight:900;line-height:1;backdrop-filter:blur(6px)}
     .info-btn:hover{filter:brightness(1.05)}
@@ -178,7 +167,6 @@
   <!-- GAME -->
   <div id="game" class="page active">
     <div id="container">
-      <!-- Перемикач мови -->
       <button id="langToggle" class="lang-btn">UA</button>
 
       <div id="scoreboard">
@@ -197,7 +185,6 @@
         <div id="start-button" style="cursor:pointer;" data-i18n="start_btn">▶ Старт</div>
       </div>
 
-      <!-- 15-с таймер після реклами по Game Over -->
       <div class="game-over" id="postAdTimer" style="display:none;">
         <h2 data-i18n="pause_before_new_game">Пауза перед новою грою</h2>
         <p><span data-i18n="you_can_start_in">Можна буде почати через:</span> <b id="postAdCountdown">15</b> <span data-i18n="sec_suffix">с</span></p>
@@ -288,7 +275,6 @@
       </div>
     </div>
 
-    <!-- ЄДИНИЙ нижній інфо-банер -->
     <div class="battle-panel" aria-label="Правила батлу">
       <div class="inner">
         <div class="title">
@@ -345,7 +331,6 @@
     <h2 class="wallet-title" style="margin-top:12px">🛒 <span data-i18n="shop_announcements">Оголошення</span></h2>
 
     <div class="share-card shop-card" style="text-align:center">
-      <!-- (i) -->
       <button class="info-btn" id="shopInfoBtn" aria-label="Info">i</button>
 
       <div class="info-pop" id="shopInfoPop">
@@ -390,7 +375,6 @@
       else window.open(url,'_blank');
     }
     document.addEventListener('DOMContentLoaded', ()=>{
-      // Магазин — кнопки
       document.getElementById('dmOwnerBtn')?.addEventListener('click', ()=>openDMto('@yArOsUlAv'));
       const infoBtn = document.getElementById('shopInfoBtn');
       const infoPop = document.getElementById('shopInfoPop');
@@ -399,7 +383,6 @@
       infoClose?.addEventListener('click', ()=>infoPop.classList.remove('open'));
       document.addEventListener('click', (e)=>{ if (!infoPop.contains(e.target) && !infoBtn.contains(e.target)) infoPop.classList.remove('open'); });
 
-      // i18n — словники
       const I18N = {
         uk: {
           instructions: "Клік або пробіл — поставити блок. Після завершення — клікни/пробіл, щоб зіграти ще.",
@@ -537,6 +520,78 @@
         const cur=localStorage.getItem('lang')||'uk'; applyLang(cur==='uk'?'en':'uk');
       });
     });
+  </script>
+
+  <!-- Firebase (Firestore + анонімна автентифікація) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-analytics.js";
+    import {
+      getFirestore, doc, getDoc, setDoc, serverTimestamp, increment
+    } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+    import { getAuth, onAuthStateChanged, signInAnonymously } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyC-lyjuHWsbLgYsygynLnt4dZxSKcpsdsk",
+      authDomain: "stack-game-ton.firebaseapp.com",
+      projectId: "stack-game-ton",
+      storageBucket: "stack-game-ton.firebasestorage.app",
+      messagingSenderId: "203011584430",
+      appId: "1:203011584430:web:f5cae943d14f070087583f",
+      measurementId: "G-RK979SWXLW"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    try { getAnalytics(app); } catch(_) {}
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    const authReady = new Promise((resolve, reject) => {
+      onAuthStateChanged(auth, async (user) => {
+        try {
+          if (!user) { await signInAnonymously(auth); return; }
+          const ref = doc(db, "users", user.uid);
+          const snap = await getDoc(ref);
+          if (!snap.exists()) {
+            await setDoc(ref, {
+              bestScore: 0,
+              gamesPlayed: 0,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp()
+            });
+          }
+          resolve(user);
+        } catch (e) { reject(e); }
+      }, reject);
+    });
+
+    window.FirebaseStore = {
+      async uid(){ const u = auth.currentUser || await authReady; return u.uid; },
+
+      async loadBestScore(){
+        await authReady; const ref = doc(db, "users", await this.uid());
+        const s = await getDoc(ref); return s.exists() && typeof s.data().bestScore==="number" ? s.data().bestScore : 0;
+      },
+      async saveBestScore(score){
+        await authReady; const ref = doc(db, "users", await this.uid());
+        await setDoc(ref, { bestScore: score, updatedAt: serverTimestamp() }, { merge:true });
+      },
+
+      async getGamesPlayed(){
+        await authReady; const ref = doc(db, "users", await this.uid());
+        const s = await getDoc(ref); return s.exists() && typeof s.data().gamesPlayed==="number" ? s.data().gamesPlayed : 0;
+      },
+      async incrementGamesPlayed(n=1){
+        await authReady; const ref = doc(db, "users", await this.uid());
+        await setDoc(ref, { gamesPlayed: increment(n), updatedAt: serverTimestamp() }, { merge:true });
+        const s = await getDoc(ref); return (s.data().gamesPlayed)||0;
+      },
+      async resetGamesPlayed(){
+        await authReady; const ref = doc(db, "users", await this.uid());
+        await setDoc(ref, { gamesPlayed: 0, updatedAt: serverTimestamp() }, { merge:true });
+        return 0;
+      }
+    };
   </script>
 
   <!-- Основна логіка гри/завдань/батлів/ads -->
