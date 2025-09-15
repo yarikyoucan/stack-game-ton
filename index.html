@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Stack Game</title>
+  <meta name="theme-color" content="#0b1020" />
   <style>
     /* --- БАЗА ІНТЕРФЕЙСУ --- */
     body{margin:0;font-family:Arial,sans-serif;background:#0f172a;display:flex;flex-direction:column;height:100vh;padding-bottom:64px}
@@ -199,7 +200,7 @@
 
       <!-- 15-с таймер після реклами по Game Over -->
       <div class="game-over" id="postAdTimer" style="display:none;">
-        <h2 data-i18n="pause_before_new_game">Пауза перед новою грою</h2>
+        <h2 data-i18n="pause_before_new_game">Пауза перед новою гророю</h2>
         <p><span data-i18n="you_can_start_in">Можна буде почати через:</span> <b id="postAdCountdown">15</b> <span data-i18n="sec_suffix">с</span></p>
       </div>
     </div>
@@ -245,8 +246,6 @@
       <span>⌛ <span data-i18n="task_10ads_available_in">«10 реклам» доступне через:</span> <span id="ad10CooldownText">—</span></span>
       <button class="btn" disabled data-i18n="wait">Очікуй…</button>
     </div>
-
-
 
     <div class="task" id="taskGames100" style="justify-content:space-between;">
       <span data-i18n="task_100games_text">🎮 Зіграй 100 ігор (+10⭐) — зіграно: <b id="gamesPlayedCounter">0</b>/100</span>
@@ -370,11 +369,11 @@
     <button onclick="showPage('shop', this)">🛍️</button>
   </div>
 
-  <!-- Libs -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r83/three.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/latest/TweenMax.min.js"></script>
-  <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Libs (defer) -->
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r83/three.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/latest/TweenMax.min.js"></script>
+  <script defer src="https://sad.adsgram.ai/js/sad.min.js"></script>
+  <script defer src="https://telegram.org/js/telegram-web-app.js"></script>
 
   <!-- App helpers + i18n (мінімум логіки; сама гра в script.js) -->
   <script>
@@ -409,7 +408,7 @@
           nice_try: "Ти молодець 👍",
           restart_hint: "Клікни або натисни пробіл, щоб почати знову",
           start_btn: "▶ Старт",
-          pause_before_new_game: "Пауза перед новою грою",
+          pause_before_new_game: "Пауза перед новою гророю",
           you_can_start_in: "Можна буде почати через:",
           sec_suffix: "с",
 
@@ -544,7 +543,7 @@
   </script>
 
   <!-- RichAds SDK (окреме завдання) -->
-  <script src="https://richinfo.co/richpartners/telegram/js/tg-ob.js"></script>
+  <script defer src="https://richinfo.co/richpartners/telegram/js/tg-ob.js"></script>
   <script>
     // ініціалізація RichAds
     window.TelegramAdsController = new TelegramAdsController();
@@ -572,6 +571,15 @@
   </script>
 
   <!-- Основна логіка гри/завдань/батлів/ads -->
-  <script src="./script.js"></script>
+  <script defer src="./script.js"></script>
+
+  <!-- Бутстрап на випадок, якщо в script.js очікується явний старт -->
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      if (typeof window.initStackGame === 'function') {
+        window.initStackGame(document.getElementById('container'));
+      }
+    });
+  </script>
 </body>
 </html>
