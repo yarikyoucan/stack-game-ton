@@ -1,59 +1,6 @@
 "use strict";
 console.clear();
 
-/* ========= SUPABASE ========= */
-const SUPABASE_URL  = "https://xcsuieqrmtbjucqsdydg.supabase.co";
-const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhjc3VpZXFybXRianVjcXNkeWRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgwMjkwMTgsImV4cCI6MjA3MzYwNTAxOH0.rwKjLCSg5qbwPSz-tkii8iTEATl_5DCX9ray5BSBEBk";
-const TABLE_NAME = "стек"; // <- якщо треба інша, зміни тут
-
-// 1) lazy ініт клієнта (щоб не падало, якщо <script supabase-js> забули)
-const supa = (window.supabase)
-  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON)
-  : null;
-
-// 2) хелпер: ім’я гравця (Telegram -> username / full name / id / "Гравець")
-function getTelegramUser(){
-  const u = (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user) || null;
-  if (!u) return { id:"", username:"", first_name:"", last_name:"" };
-  return { id:u.id||"", username:u.username||"", first_name:u.first_name||"", last_name:u.last_name||"" };
-}
-function getUserTag(){
-  const u = getTelegramUser();
-  if (u.username) return "@"+u.username;
-  const name = [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
-  if (name) return name;
-  if (u.id) return "id"+u.id;
-  return "Гравець";
-}
-
-// 3) дебаунс-запис у Supabase, щоб не спамити
-let supaSyncTimer = null;
-function queueSupabaseSync(){
-  if (!supa) return; // бібліотека не підключена — тихо скипаємо
-  if (supaSyncTimer) clearTimeout(supaSyncTimer);
-  supaSyncTimer = setTimeout(supaSaveSnapshot, 600); // зібрати зміни протягом 0.6с
-}
-
-// 4) власне запис у таблицю: ім'я / запис / баланс / виклик
-async function supaSaveSnapshot(){
-  try{
-    const name  = getUserTag();
-    const row = {
-      ["ім'я"]: name,                  // текст
-      ["запис"]: Number(gamesPlayedSinceClaim|0), // int
-      ["баланс"]: Number(Math.round(balance*100)/100), // int/real — в тебе int4, тому округлю до цілих якщо треба
-      ["виклик"]: challengeActive ? 1 : 0          // int2
-      // Якщо у таблиці є інші поля з NOT NULL — додай їх тут
-    };
-
-    // простіше — завжди вставляємо новий знімок стану (INSERT)
-    const { error } = await supa.from(TABLE_NAME).insert([row]);
-    if (error) console.warn("[Supabase insert] error:", error);
-  }catch(err){
-    console.warn("[Supabase] exception:", err);
-  }
-}
-
 /* ========= КОНСТАНТИ ========= */
 const TASK_AD_COOLDOWN_MS = 60_000;   // 1 реклама / хв у завданні (+0.15⭐)
 const GAME_AD_COOLDOWN_MS = 15_000;
@@ -144,11 +91,13 @@ function saveData(){
   localStorage.setItem("challengeDeadline", String(challengeDeadline));
   localStorage.setItem("challengeStake", String(challengeStake));
   localStorage.setItem("challengeOpp", String(challengeOpp));
-
-  // 🔸 Ключове: пушим у Supabase знімок стану
-  queueSupabaseSync();
 }
 
+function getTelegramUser(){
+  const u = (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user) || null;
+  if (!u) return { id:"", username:"", first_name:"", last_name:"" };
+  return { id:u.id||"", username:u.username||"", first_name:u.first_name||"", last_name:u.last_name||"" };
+}
 function getUserTag(){
   const u = getTelegramUser();
   if (u.username) return "@"+u.username;
@@ -217,7 +166,7 @@ window.onload = function(){
   const g100Btn = $("checkGames100Btn");
   if (g100Btn) g100Btn.addEventListener("click", onCheckGames100);
 
-  initLeaderboard(); // заглушка
+  initLeaderboard(); // заглушка, якщо таблиці нема — просто скіпаємо
 
   const link = "https://t.me/Stacktongame_bot";
   if ($("shareLink")) $("shareLink").value = link;
@@ -238,9 +187,6 @@ window.onload = function(){
   window.stackGame = new Game();
 
   updateAdTasksUI();
-
-  // перший знімок у БД після завантаження
-  queueSupabaseSync();
 };
 
 function addBalance(n){ balance = parseFloat((balance + n).toFixed(2)); setBalanceUI(); saveData(); }
@@ -267,7 +213,7 @@ window.showPage = showPage;
 /* ========= Лідерборд-заглушка ========= */
 function initLeaderboard(){
   const tbody = document.querySelector("#leaderboard tbody");
-  if (!tbody) return;
+  if (!tbody) return; // таблиці може не бути — ок
   tbody.innerHTML = "";
   for (let i=1;i<=50;i++){
     const tr = document.createElement("tr");
@@ -624,7 +570,7 @@ function withdraw50ShareToGroup(){
   balance = Number((balance - WITHDRAW_CHUNK).toFixed(2));
   setBalanceUI(); saveData();
 
-  // лог у список виводів (локально)
+  // лог у список виводів
   const entry = { ts: Date.now(), amount: WITHDRAW_CHUNK, code1, code2 };
   const arr = JSON.parse(localStorage.getItem("payouts") || "[]");
   arr.unshift(entry);
@@ -681,6 +627,10 @@ function onCheckGames100(){
 }
 
 /* ========= БАТЛ: логіка ========= */
+/* НОВИЙ генератор:
+   - 15%: діапазон 83..100
+   - 85%: діапазон 101..150
+*/
 function weightedOppScore(){
   const r = Math.random();
   if (r < 0.15){
@@ -700,6 +650,7 @@ function setupChallengeUI(){
   const leftEl = $("challengeLeft");
   const statusEl = $("challengeStatus");
 
+  // Початковий стан
   if (oppScorePending != null){
     scoreBox.textContent = String(oppScorePending);
   }else{
@@ -762,7 +713,7 @@ function setupChallengeUI(){
     const expired = now > challengeDeadline;
 
     if (won){
-      addBalance(challengeStake * 1.5);
+      addBalance(challengeStake * 1.5); // виграш
       statusEl.textContent = "✅ Виконано! Нараховано " + (challengeStake*1.5).toFixed(2) + "⭐";
       checkBtn.disabled = true;
       finishChallenge();
@@ -775,6 +726,7 @@ function setupChallengeUI(){
     }
   };
 
+  // Якщо відновлювали зі сховища
   if (challengeActive){
     info.textContent = `Виклик активний! Твій суперник має рекорд ${challengeOpp}.`;
     checkBtn.disabled = false;
@@ -809,9 +761,10 @@ class Stage{
   constructor(){
     this.container = document.getElementById("container");
     this.scene = new THREE.Scene();
+    // ГОЛОВНЕ: прозорий рендерер, щоб CSS-фон було видно під грою
     this.renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setClearColor(0x000000, 0);
+    this.renderer.setClearColor(0x000000, 0); // повністю прозорий фон канваса
     this.container.appendChild(this.renderer.domElement);
 
     const aspect = window.innerWidth / window.innerHeight, d = 20;
@@ -1001,6 +954,15 @@ class Game{
     this.addBlock();
   }
 
+  addBlock(){
+    const last=this.blocks[this.blocks.length-1];
+    if(last && last.state===last.STATES.MISSED) return this.endGame();
+    this.scoreEl.innerHTML=String(this.blocks.length-1);
+    const b=new Block(last); this.newBlocks.add(b.mesh); this.blocks.push(b);
+    this.stage.setCamera(this.blocks.length*2);
+    if(this.blocks.length>=5) $("instructions").classList.add("hide");
+  }
+
   async endGame(){
     const currentScore=parseInt(this.scoreEl.innerText,10);
     updateHighscore(currentScore);
@@ -1044,4 +1006,3 @@ function updateHighscore(currentScore){
     $("highscore").innerText="🏆 "+highscore;
   }
 }
-
