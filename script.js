@@ -19,6 +19,9 @@ const ADSGRAM_BLOCK_ID_GAMEOVER = "int-13961";
 const OPEN_MODE = "group"; // "group" | "share"
 const GROUP_LINK = "https://t.me/+Z6PMT40dYClhOTQ6";
 
+/* ========= GOOGLE SHEETS HOOK ========= */
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyMHzHFfHRG7n2ew7zjkq_0bRL8miFm2MNca6nW_QDPc1sElb8TdCnXVnw47Me9eHcY/exec";
+
 /* --- Квести на рекламу --- */
 const TASK5_TARGET = 5;
 const TASK10_TARGET = 10;
@@ -105,6 +108,29 @@ function getUserTag(){
   if (name) return name;
   if (u.id) return "id"+u.id;
   return "Гравець";
+}
+
+/* ========= ВІДПРАВКА РЕКОРДУ В GOOGLE SHEETS ========= */
+async function sendRecordToSheets(finalScore){
+  try{
+    const u = getTelegramUser();
+    const payload = {
+      tg_id:   u.id || null,
+      username:u.username || null,
+      tag:     (u.username ? "@"+u.username : (u.first_name || u.last_name ? (u.first_name+" "+u.last_name).trim() : (u.id ? "id"+u.id : "Гравець"))),
+      record:  Number(finalScore||0)
+    };
+    const res = await fetch(SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    let json = {};
+    try { json = await res.json(); } catch {}
+    console.log("[Sheets]", res.status, json);
+  }catch(err){
+    console.warn("[Sheets] send error:", err);
+  }
 }
 
 /* ========= ІНІЦІАЛІЗАЦІЯ ========= */
@@ -438,7 +464,7 @@ async function onWatchAd5(){
 }
 async function onWatchAd10(){
   const now = Date.now();
-  if (now - lastTask10RewardAt < TASK_DAILY_COOLDOWN_MS) return;
+  if (now - lastTask10RewardAt < TASK_DAILY_COOLDОН_MS) return;
 
   const res = await showInterstitialOnce('task10', { bypassGlobal:true, touchGlobal:false });
   if (!res.shown) return;
@@ -968,6 +994,9 @@ class Game{
     updateHighscore(currentScore);
     gamesPlayedSinceClaim += 1; saveData(); updateGamesTaskUI();
 
+    // Запис у Google Sheets (не блокує гру, помилки ловимо всередині)
+    await sendRecordToSheets(currentScore);
+
     await showInterstitialOnce('gameover', { bypassGlobal:true, touchGlobal:false });
 
     this.startPostAdCountdown();
@@ -1006,3 +1035,4 @@ function updateHighscore(currentScore){
     $("highscore").innerText="🏆 "+highscore;
   }
 }
+
