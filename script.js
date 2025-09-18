@@ -20,7 +20,7 @@ const OPEN_MODE = "group"; // "group" | "share"
 const GROUP_LINK = "https://t.me/+Z6PMT40dYClhOTQ6";
 
 /* ========= GOOGLE SHEETS HOOK ========= */
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyMHzHFfHRG7n2ew7zjkq_0bRL8miFm2MNca6nW_QDPc1sElb8TdCnXVnw47Me9eHcY/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbws7kUF1Ty9v2s8sVzhjxl87YgNL-R7F8bUYHs9A75ainyZwrzQdzqaM4bjXPfSfpSg/exec";
 
 /* --- Квести на рекламу --- */
 const TASK5_TARGET = 5;
