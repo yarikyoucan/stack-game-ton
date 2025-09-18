@@ -110,26 +110,24 @@ function getUserTag(){
   return "Гравець";
 }
 
-/* ========= ВІДПРАВКА РЕЗУЛЬТАТУ В GOOGLE SHEETS ========= */
-async function sendRecordToSheet(score){
-  const u = (window.Telegram?.WebApp?.initDataUnsafe?.user) || {};
-  const payload = {
-    tg_id:    u.id ?? null,
-    username: u.username ?? null,
-    tag:      (u.username ? "@"+u.username : ([u.first_name, u.last_name].filter(Boolean).join(" ") || (u.id ? "id"+u.id : "Гравець"))),
-    record:   Number(score||0)
-  };
-
-  console.log("[Sheets] sending payload →", payload);
-
+/* ========= ВІДПРАВКА РЕКОРДУ В GOOGLE SHEETS ========= */
+async function sendRecordToSheets(finalScore){
   try{
-    const res  = await fetch(SCRIPT_URL, {
+    const u = getTelegramUser();
+    const payload = {
+      tg_id:   u.id || null,
+      username:u.username || null,
+      tag:     (u.username ? "@"+u.username : (u.first_name || u.last_name ? (u.first_name+" "+u.last_name).trim() : (u.id ? "id"+u.id : "Гравець"))),
+      record:  Number(finalScore||0)
+    };
+    const res = await fetch(SCRIPT_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    const text = await res.text(); // інколи повертає текст, інколи JSON
-    console.log("[Sheets] response:", res.status, text);
+    let json = {};
+    try { json = await res.json(); } catch {}
+    console.log("[Sheets]", res.status, json);
   }catch(err){
     console.warn("[Sheets] send error:", err);
   }
@@ -215,12 +213,6 @@ window.onload = function(){
   window.stackGame = new Game();
 
   updateAdTasksUI();
-
-  // (опційно) одноразово відправити існуючий highscore при першому запуску
-  // if (highscore > 0 && !localStorage.getItem("sentOnce")) {
-  //   sendRecordToSheet(highscore);
-  //   localStorage.setItem("sentOnce", "true");
-  // }
 };
 
 function addBalance(n){ balance = parseFloat((balance + n).toFixed(2)); setBalanceUI(); saveData(); }
@@ -472,7 +464,7 @@ async function onWatchAd5(){
 }
 async function onWatchAd10(){
   const now = Date.now();
-  if (now - lastTask10RewardAt < TASK_DAILY_COOLDOWN_MS) return;
+  if (now - lastTask10RewardAt < TASK_DAILY_COOLDОН_MS) return;
 
   const res = await showInterstitialOnce('task10', { bypassGlobal:true, touchGlobal:false });
   if (!res.shown) return;
@@ -873,8 +865,8 @@ class Block{
       const choppedDim={width:this.dimension.width,height:this.dimension.height,depth:this.dimension.depth};
       choppedDim[this.workingDimension]-=overlap; this.dimension[this.workingDimension]=overlap;
 
-      const placedG=new THREE.BoxGeometry(this.dimension.width,this.dimension.height	this.dimension.depth);
-      placedG.translate(this.dimension.width/2,this.dimension.height/2	this.dimension.depth/2);
+      const placedG=new THREE.BoxGeometry(this.dimension.width,this.dimension.height,this.dimension.depth);
+      placedG.translate(this.dimension.width/2,this.dimension.height/2,this.dimension.depth/2);
       const placed=new THREE.Mesh(placedG,this.material);
 
       const choppedG=new THREE.BoxGeometry(choppedDim.width,choppedDim.height,choppedDim.depth);
@@ -888,8 +880,8 @@ class Block{
         choppedPos[this.workingPlane] += overlap;
       }
 
-      placed.position.set(this.position.x,this.position.y	this.position.z);
-      chopped.position.set(choppedPos.x	choppedPos.y	choppedPos.z);
+      placed.position.set(this.position.x,this.position.y,this.position.z);
+      chopped.position.set(choppedPos.x,choppedPos.y,choppedPos.z);
       ret.placed=placed;
       if(!ret.bonus) ret.chopped=chopped;
     } else {
@@ -1002,8 +994,8 @@ class Game{
     updateHighscore(currentScore);
     gamesPlayedSinceClaim += 1; saveData(); updateGamesTaskUI();
 
-    // Запис у Google Sheets
-    await sendRecordToSheet(currentScore);
+    // Запис у Google Sheets (не блокує гру, помилки ловимо всередині)
+    await sendRecordToSheets(currentScore);
 
     await showInterstitialOnce('gameover', { bypassGlobal:true, touchGlobal:false });
 
@@ -1043,3 +1035,4 @@ function updateHighscore(currentScore){
     $("highscore").innerText="🏆 "+highscore;
   }
 }
+
