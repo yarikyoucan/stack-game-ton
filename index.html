@@ -33,7 +33,7 @@
         url('data:image/svg+xml;utf8,\
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="220" viewBox="0 0 800 220">\
   <rect width="800" height="220" fill="none"/>\
-  <path d="M0 190 L20 170 L45 172 L45 190 L70 160 L95 162 L95 190 L130 150 L160 152 L160 190 L200 165 L230 167 L230 190 L270 155 L310 157 L310 190 L350 170 L380 172 Л380 190 L420 160 Л455 162 Л455 190 Л495 168 Л530 170 Л530 190 Л570 156 Л610 158 Л610 190 Л650 170 Л690 172 Л690 190 Л730 160 Л770 165 Л770 190 Л800 150 Л800 220 Л0 220 Z" fill="%23040a1c"/>\
+  <path d="M0 190 L20 170 L45 172 L45 190 L70 160 L95 162 L95 190 L130 150 L160 152 Л160 190 L200 165 Л230 167 Л230 190 Л270 155 Л310 157 Л310 190 Л350 170 Л380 172 Л380 190 Л420 160 Л455 162 Л455 190 Л495 168 Л530 170 Л530 190 Л570 156 Л610 158 Л610 190 Л650 170 Л690 172 Л690 190 Л730 160 Л770 165 Л770 190 Л800 150 Л800 220 Л0 220 Z" fill="%23040a1c"/>\
   <path d="M0 200 L30 180 L50 180 L50 200 Л80 155 Л110 155 Л110 200 Л150 140 Л180 140 Л180 200 Л220 165 Л250 165 Л250 200 Л300 145 Л340 145 Л340 200 Л380 175 Л420 175 Л420 200 Л460 150 Л500 150 Л500 200 Л540 165 Л580 165 Л580 200 Л620 145 Л660 145 Л660 200 Л700 175 Л740 175 Л740 200 Л800 160 Л800 220 Л0 220 Z" fill="%23000a1a"/>\
   <g fill="%23ffd34d">\
     <rect x="58" y="184" width="6" height="10"/><rect x="66" y="184" width="6" height="10" opacity="0.6"/>\
@@ -254,7 +254,7 @@
     </div>
 
     <div class="task" id="taskGames100" style="justify-content:space-between;">
-      <span data-i18n="task_100games_text">🎮 Зіграй 100 ігор (+10⭐) — зіграно: <b id="gamesPlayedCounter">0</b>/100</span>
+      <span data-i18n="task_100games_text">🎮 Зіграй 100 ігор (+10⭐) — зіграно: <b id='gamesPlayedCounter'>0</b>/100</span>
       <button id="checkGames100Btn" class="btn" style="margin-left:auto;" data-i18n="check">Перевірити</button>
     </div>
   </div>
@@ -390,7 +390,7 @@
   <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-  <!-- App helpers + i18n (мінімум логіки; сама гра в script.js) -->
+  <!-- App helpers + i18n -->
   <script>
     function showPage(id, btn){
       document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id===id));
@@ -563,9 +563,8 @@
 
   <!-- Лідерборд: читання з GitHub (або порожній шаблон 1..50) -->
   <script>
-    /* ВСТАВ СВІЙ URL або лиши '' для шаблону
-       приклад RAW: https://raw.githubusercontent.com/<user>/<repo>/main/leaderboard.json */
-    const LB_URL = '';
+    /* Твій RAW URL до leaderboard.json */
+    const LB_URL = 'https://raw.githubusercontent.com/yarikyoucan/stack-game-ton/main/leaderboard.json';
 
     function _avatarSvg(){
       return 'data:image/svg+xml;utf8,'+encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28'><rect width='28' height='28' rx='14' fill='#1f2a44'/><text x='14' y='18' text-anchor='middle' font-size='14' fill='#9fb3ff'>👤</text></svg>");
@@ -606,7 +605,7 @@
         `;
         list.appendChild(row);
       }
-      if(note) note.textContent = LB_URL ? 'Оновлено з GitHub.' : 'Порожній шаблон ТОП-50.';
+      if(note) note.textContent = 'Оновлено з GitHub.';
     }
 
     async function loadLeaderboard(){
@@ -617,6 +616,7 @@
         renderLeaderboard([]);
         const note = document.getElementById('lbNote');
         if(note) note.textContent = 'Не вдалось завантажити лідерборд.';
+        console.warn('LB load error:', e);
       }
     }
     window.loadLeaderboard = loadLeaderboard;
@@ -632,4 +632,3 @@
   <script src="./script.js"></script>
 </body>
 </html>
-
