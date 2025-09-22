@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html lang="uk">
 <head>
   <meta charset="UTF-8" />
@@ -110,7 +110,7 @@
       background-image:
         radial-gradient(1200px 500px at 15% 0%, rgba(99,102,241,.35), transparent 60%),
         radial-gradient(1000px 600px at 85% 100%, rgba(56,189,248,.25), transparent 60%),
-        linear-gradient(135deg,#0f172a 0%, #1e1b4b 45%, #3b82f6 100%),
+        linear-gradient(135deg,#0f172a 0%, #1e1e4b 45%, #3b82f6 100%),
         url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="760" height="200" viewBox="0 0 760 200"><g fill="%23ffffff15" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="800" transform="rotate(-18 380 100)"><text x="-60" y="40">BATTLES • BATTLES • BATTLES • BATTLES • BATTLES •</text><text x="-60" y="100">BATTLES • BATTLES • BATTLES • BATTLES • BATTLES •</text><text x="-60" y="160">BATTLES • BATTLES • BATTLES • BATTLES • BATTLES •</text></g></svg>');
       background-size:auto,auto,auto,760px 200px;background-repeat:no-repeat,no-repeat,no-repeat,repeat;
     }
@@ -389,6 +389,16 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/latest/TweenMax.min.js"></script>
   <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <!-- RichAds (додано) -->
+  <script src="https://richinfo.co/richpartners/telegram/js/tg-ob.js"></script>
+  <script>
+    window.TelegramAdsController = new TelegramAdsController();
+    window.TelegramAdsController.initialize({
+      pubId: "965326",
+      appId: "3592",
+    });
+  </script>
 
   <!-- App helpers + i18n -->
   <script>
