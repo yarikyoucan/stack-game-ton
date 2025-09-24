@@ -13,8 +13,10 @@ const GAMES_TARGET = 100;
 const GAMES_REWARD = 10;
 const WITHDRAW_CHUNK = 50;
 
-const ADSGRAM_BLOCK_ID_TASK     = "int-13961";
-const ADSGRAM_BLOCK_ID_GAMEOVER = "int-13961";
+/* --- РОЗДІЛЕНІ БЛОКИ РЕКЛАМИ --- */
+const ADSGRAM_BLOCK_ID_TASK_MINUTE = "int-13961"; // 1 реклама / хв (+0.15⭐)
+const ADSGRAM_BLOCK_ID_TASK_510    = "int-15276"; // завдання на 5 і 10 реклам
+const ADSGRAM_BLOCK_ID_GAMEOVER    = "int-15275"; // після завершення гри
 
 const OPEN_MODE = "group"; // "group" | "share"
 const GROUP_LINK = "https://t.me/+Z6PMT40dYClhOTQ6";
@@ -42,8 +44,9 @@ let postAdTimerActive = false;
 let postAdInterval = null;
 
 /* ========= РЕКЛАМА ========= */
-let AdTask = null;
-let AdGameover = null;
+let AdTaskMinute = null;   // controller для 1/хв (+0.15⭐)
+let AdTask510    = null;   // controller для 5 і 10 реклам
+let AdGameover   = null;   // controller для «gameover»
 
 let lastTaskAdAt = 0;
 let lastGameoverAdAt = 0;
@@ -166,7 +169,7 @@ window.onload = function(){
   const g100Btn = $("checkGames100Btn");
   if (g100Btn) g100Btn.addEventListener("click", onCheckGames100);
 
-  initLeaderboard(); // заглушка, якщо таблиці нема — просто скіпаємо
+  initLeaderboard(); // заглушка
 
   const link = "https://t.me/Stacktongame_bot";
   if ($("shareLink")) $("shareLink").value = link;
@@ -213,7 +216,7 @@ window.showPage = showPage;
 /* ========= Лідерборд-заглушка ========= */
 function initLeaderboard(){
   const tbody = document.querySelector("#leaderboard tbody");
-  if (!tbody) return; // таблиці може не бути — ок
+  if (!tbody) return;
   tbody.innerHTML = "";
   for (let i=1;i<=50;i++){
     const tr = document.createElement("tr");
@@ -228,21 +231,31 @@ function initAds(){
     console.warn("Adsgram SDK не завантажився");
     return;
   }
-  try { AdTask = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID_TASK }); }
-  catch (e) { console.warn("Adsgram init (task) error:", e); }
+  try { AdTaskMinute = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID_TASK_MINUTE }); }
+  catch (e) { console.warn("Adsgram init (task-minute) error:", e); }
+
+  try { AdTask510 = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID_TASK_510 }); }
+  catch (e) { console.warn("Adsgram init (task-5/10) error:", e); }
+
   try { AdGameover = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID_GAMEOVER }); }
   catch (e) { console.warn("Adsgram init (gameover) error:", e); }
 }
 function inTelegramWebApp(){ return !!(window.Telegram && window.Telegram.WebApp); }
 
-/** Показ реклами */
+/** Показ реклами (жорстке розділення контролерів за контекстом) */
 async function showInterstitialOnce(ctx, opts = {}){
   const isTaskMinute = (ctx === 'task');
   const isTask5 = (ctx === 'task5');
   const isTask10 = (ctx === 'task10');
   const isGameover = (ctx === 'gameover');
 
-  const controller = (isGameover ? (AdGameover || AdTask) : (AdTask || AdGameover));
+  // суворо: без фолбеків між блоками
+  const controller =
+    isGameover ? AdGameover
+    : isTaskMinute ? AdTaskMinute
+    : (isTask5 || isTask10) ? AdTask510
+    : null;
+
   if (!controller) return { shown:false, reason:"no_controller" };
   if (!inTelegramWebApp()) return { shown:false, reason:"not_telegram" };
 
@@ -761,10 +774,10 @@ class Stage{
   constructor(){
     this.container = document.getElementById("container");
     this.scene = new THREE.Scene();
-    // ГОЛОВНЕ: прозорий рендерер, щоб CSS-фон було видно під грою
+    // прозорий рендерер, щоб CSS-фон було видно під грою
     this.renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setClearColor(0x000000, 0); // повністю прозорий фон канваса
+    this.renderer.setClearColor(0x000000, 0);
     this.container.appendChild(this.renderer.domElement);
 
     const aspect = window.innerWidth / window.innerHeight, d = 20;
@@ -968,6 +981,7 @@ class Game{
     updateHighscore(currentScore);
     gamesPlayedSinceClaim += 1; saveData(); updateGamesTaskUI();
 
+    // Показати саме «gameover»-блок без фолбеків
     await showInterstitialOnce('gameover', { bypassGlobal:true, touchGlobal:false });
 
     this.startPostAdCountdown();
