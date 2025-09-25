@@ -173,7 +173,7 @@ window.onload = function(){
   const g100Btn = $("checkGames100Btn");
   if (g100Btn) g100Btn.addEventListener("click", onCheckGames100);
 
-  initLeaderboard(); // заглушка
+  
 
   const link = "https://t.me/Stacktongame_bot";
   if ($("shareLink")) $("shareLink").value = link;
