@@ -40,6 +40,10 @@ const TASK_DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const ALPH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 
+/* ========= ADEXIUM ========= */
+const ADEXIUM_WID = "c3d8d1aa-64df-4d23-a839-0b9177ba156f";
+const ADEXIUM_FORMAT = "interstitial";
+
 /* ========= СТАН ========= */
 let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
 let gamesPlayedSinceClaim = 0;
@@ -198,7 +202,9 @@ window.onload = function(){
   // батл UI
   setupChallengeUI();
 
-  initAds(); // ініціалізуємо Adsgram контролери
+  // Ініт SDK Adsgram + Adexium
+  initAds();
+  setupAdexiumBridge();
 
   // 3D гра
   window.stackGame = new Game();
@@ -227,28 +233,99 @@ function showPage(id, btn){
 }
 window.showPage = showPage;
 
-/* ========= Лідерборд-заглушка (HTML-таблиці тут немає, тому просто no-op) ========= */
-function initLeaderboard(){ /* залишено порожнім навмисне */ }
+/* ========= Лідерборд-заглушка ========= */
+function initLeaderboard(){ /* no-op */ }
 
 /* ========= Реклама: SDK Adsgram ========= */
 function initAds(){
-  if (!window.Adsgram){
+  // Підтримка кількох імен просторів: Adsgram | SAD
+  const sdk = window.Adsgram || window.SAD || null;
+  if (!sdk){
     console.warn("Adsgram SDK не завантажився");
     return;
   }
-  try { AdTaskMinute = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID_TASK_MINUTE }); }
+  try { AdTaskMinute = (sdk.init ? sdk.init({ blockId: ADSGRAM_BLOCK_ID_TASK_MINUTE }) : sdk.AdController?.create({blockId: ADSGRAM_BLOCK_ID_TASK_MINUTE})); }
   catch (e) { console.warn("Adsgram init (task-minute) error:", e); }
 
-  try { AdTask510 = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID_TASK_510 }); }
+  try { AdTask510 = (sdk.init ? sdk.init({ blockId: ADSGRAM_BLOCK_ID_TASK_510 }) : sdk.AdController?.create({blockId: ADSGRAM_BLOCK_ID_TASK_510})); }
   catch (e) { console.warn("Adsgram init (task-5/10) error:", e); }
 
-  try { AdGameover = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID_GAMEOVER }); }
+  try { AdGameover = (sdk.init ? sdk.init({ blockId: ADSGRAM_BLOCK_ID_GAMEOVER }) : sdk.AdController?.create({blockId: ADSGRAM_BLOCK_ID_GAMEOVER})); }
   catch (e) { console.warn("Adsgram init (gameover) error:", e); }
 }
 
 function inTelegramWebApp(){ return !!(window.Telegram && Telegram.WebApp); }
 
-/** Показ Adexium interstitial через місток з index.html. Має фіксований таймаут і повертає {shown, reason}. */
+/* ========= Adexium: місток window.__adexiumWidget.show() ========= */
+function setupAdexiumBridge(){
+  // Якщо вже є — не чіпаємо
+  if (window.__adexiumWidget && typeof window.__adexiumWidget.show === "function") return;
+
+  // Створюємо лайт-адаптер поверх офіційного класу, якщо він завантажений
+  if (typeof window.AdexiumWidget === "function") {
+    window.__adexiumWidget = {
+      show: () => new Promise((resolve, reject) => {
+        try{
+          // Кожен показ — новий інстанс (так SDK найстабільніший)
+          const w = new window.AdexiumWidget({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT });
+
+          let finished = false;
+          const done = (ok) => {
+            if (finished) return;
+            finished = true;
+            cleanup();
+            ok ? resolve(true) : reject(new Error("adexium_closed"));
+          };
+
+          // Пробуємо «autoMode» — в їх SDK це одразу відкриває інтерстішіал
+          try { w.autoMode(); } catch(e){ /* якщо метод змінився — все одно дамо таймаут */ }
+
+          // Страхувальні гачки (деякі збірки шлють події у window)
+          function onMsg(ev){
+            try{
+              const data = ev?.data;
+              if (data && typeof data === "object" && data.source === "adexium"){
+                if (data.type === "open" || data.type === "shown") done(true);
+                if (data.type === "close" || data.type === "dismiss") done(true); // вважаємо перегляд зарахованим
+                if (data.type === "error" || data.type === "no_fill") done(false);
+              }
+            }catch{}
+          }
+          window.addEventListener("message", onMsg);
+
+          // Safety timeout: якщо немає подій, вважаємо, що показалося
+          const tm = setTimeout(()=>done(true), 7000);
+
+          function cleanup(){
+            clearTimeout(tm);
+            window.removeEventListener("message", onMsg);
+          }
+        } catch(e){
+          reject(e);
+        }
+      })
+    };
+  } else {
+    // Якщо SDK ще не готовий — поставимо ліниву обгортку з ретраєм
+    window.__adexiumWidget = {
+      show: () => new Promise((resolve, reject)=>{
+        const started = Date.now();
+        const poll = setInterval(()=>{
+          if (typeof window.AdexiumWidget === "function"){
+            clearInterval(poll);
+            setupAdexiumBridge();
+            window.__adexiumWidget.show().then(()=>resolve(true)).catch(reject);
+          } else if (Date.now() - started > 5000){
+            clearInterval(poll);
+            reject(new Error("adexium_not_ready"));
+          }
+        }, 200);
+      })
+    };
+  }
+}
+
+/** Показ Adexium interstitial. */
 function showAdexiumInterstitial() {
   return new Promise(async (resolve) => {
     try {
@@ -256,7 +333,7 @@ function showAdexiumInterstitial() {
         return resolve({ shown:false, reason:'adexium_not_ready' });
       }
       try {
-        await window.__adexiumWidget.show(); // місток сам має таймаут/події
+        await window.__adexiumWidget.show();
         return resolve({ shown:true });
       } catch (err) {
         return resolve({ shown:false, reason: err?.message || 'adexium_show_error' });
@@ -1069,3 +1146,4 @@ function updateHighscore(currentScore){
     $("highscore").innerText="🏆 "+highscore;
   }
 }
+
