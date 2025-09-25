@@ -173,7 +173,7 @@ window.onload = function(){
   const g100Btn = $("checkGames100Btn");
   if (g100Btn) g100Btn.addEventListener("click", onCheckGames100);
 
-  
+  initLeaderboard(); // заглушка
 
   const link = "https://t.me/Stacktongame_bot";
   if ($("shareLink")) $("shareLink").value = link;
@@ -410,7 +410,7 @@ async function onWatchAdTaskClick(){
 
   const res = await showInterstitialOnce('task');
   if (res.shown){
-    addBalance(0.15);
+    addBalance(0.1);
     updateTaskCooldownUI();
   }
 }
@@ -509,7 +509,7 @@ async function onWatchAd10(){
 
   ad10Count += 1;
   if (ad10Count >= TASK10_TARGET){
-    addBalance(1.5);
+    addBalance(1.85);
     ad10Count = 0;
     lastTask10RewardAt = Date.now();
   }
