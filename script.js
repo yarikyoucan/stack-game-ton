@@ -1,13 +1,15 @@
-// script.js — ПОВНА версія: гра, завдання, батли, коди, ротація Adsgram/Adexium
+// script.js — ПОВНА версія: гра, завдання, батли, коди, ротація Adsgram/Adexium (працюючі 2 реклами +0.1⭐)
 "use strict";
 console.clear();
 
 /* ========= КОНСТАНТИ ========= */
-// Таск «реклама раз на пів хвилини» (+0.1⭐)
-const TASK_AD_COOLDOWN_MS = 30_000;   // 0.5 хв
-// Після гри можна показати рекламу (якщо хочеш окремо)
+// Таск «реклама раз на пів хвилини» (+0.1⭐) — окремо для кожного щоденного таску
+const DAILY_COOLDOWN_MS = 30_000; // 30с між показами у межах одного провайдера
+const DAILY_CAP = 25;             // максимум переглядів/день на кожен провайдер
+
+// Після гри можна показати рекламу (локальний антиспам)
 const GAME_AD_COOLDOWN_MS = 15_000;
-// Загальний захист від спаму рекламою (не обов'язково чіпати)
+// Загальний глобальний антиспам — НЕ використовуємо для щоденних +0.1⭐ (щоб не блокувати другий провайдер)
 const ANY_AD_COOLDOWN_MS  = 60_000;
 // Мінімальна пауза між двома показами в одному контексті
 const MIN_BETWEEN_SAME_CTX_MS = 10_000;
@@ -17,13 +19,13 @@ const POST_AD_TIMER_MS = 15_000;
 
 // Завдання «зіграй 100 ігор»
 const GAMES_TARGET = 100;
-const GAMES_REWARD = 5;  // у тебе в індексі було +5⭐ за 100 ігор
+const GAMES_REWARD = 5;  // +5⭐ за 100 ігор
 
 // Вивід (рівно 50⭐)
 const WITHDRAW_CHUNK = 50;
 
-/* --- Adsgram блоки (заміни на свої, якщо потрібно) --- */
-const ADSGRAM_BLOCK_ID_TASK_MINUTE = "int-13961"; // таск раз на 30с (+0.1⭐)
+/* --- Adsgram блоки --- */
+const ADSGRAM_BLOCK_ID_TASK_MINUTE = "int-13961"; // щоденний таск +0.1⭐ (Adsgram)
 const ADSGRAM_BLOCK_ID_TASK_510    = "int-15276"; // завдання 5 і 10 реклам
 const ADSGRAM_BLOCK_ID_GAMEOVER    = "int-15275"; // після завершення гри
 
@@ -49,33 +51,32 @@ let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
 let gamesPlayedSinceClaim = 0;
 let isPaused = false;
 
-/* --- лічильники квестів --- */
+/* --- лічильники квестів 5/10 --- */
 let ad5Count = 0, ad10Count = 0;
 let lastTask5RewardAt = 0, lastTask10RewardAt = 0;
+
+/* --- щоденні лічильники +0.1⭐ окремо для провайдерів --- */
+let gramCount = 0, exCount = 0;     // перегляди за сьогодні
+let lastGramAt = 0, lastExAt = 0;   // індивідуальні кулдауни 30с
+let dailyStamp = "";                // 'YYYY-MM-DD' для авто-ресету
 
 /* --- пострекламний таймер --- */
 let postAdTimerActive = false;
 let postAdInterval = null;
 
 /* ========= РЕКЛАМА ========= */
-let AdTaskMinute = null;   // Adsgram controller: 1/півхв (+0.1⭐)
+let AdTaskMinute = null;   // Adsgram controller: daily +0.1⭐
 let AdTask510    = null;   // Adsgram controller: 5/10 реклам
 let AdGameover   = null;   // Adsgram controller: game over
 
-let lastTaskAdAt = 0;
 let lastGameoverAdAt = 0;
 let lastAnyAdAt = 0;
 
-let lastTask5AdAt = 0;
-let lastTask10AdAt = 0;
-
-let adInFlightTask = false;
 let adInFlightGameover = false;
 let adInFlightTask5 = false;
 let adInFlightTask10 = false;
 
-/* --- Ротація провайдерів для таску (+0.1⭐): Adsgram ⇄ Adexium --- */
-let taskAdProviderToggle = 0; // 0 -> Adsgram, 1 -> Adexium, 2 -> Adsgram ...
+/* --- Ротація для старого «task» більше не потрібна — дві окремі кнопки --- */
 
 /* ========= БАТЛ (виклик суперника) ========= */
 let oppScorePending = null;
@@ -88,21 +89,28 @@ let challengeOpp = 0;
 /* ========= ХЕЛПЕРИ ========= */
 const $ = id => document.getElementById(id);
 const formatStars = v => Number.isInteger(Number(v)) ? String(Number(v)) : Number(v).toFixed(2);
-const setBalanceUI = () => $("balance").innerText = formatStars(balance);
+const setBalanceUI = () => $("balance") && ($("balance").innerText = formatStars(balance));
 
 function saveData(){
   localStorage.setItem("balance", String(balance));
   localStorage.setItem("subscribed", subscribed ? "true" : "false");
   localStorage.setItem("task50Completed", task50Completed ? "true" : "false");
   localStorage.setItem("highscore", String(highscore));
-  localStorage.setItem("lastTaskAdAt", String(lastTaskAdAt));
   localStorage.setItem("gamesPlayedSinceClaim", String(gamesPlayedSinceClaim));
   localStorage.setItem("lastAnyAdAt", String(lastAnyAdAt));
 
+  // 5/10
   localStorage.setItem("ad5Count", String(ad5Count));
   localStorage.setItem("ad10Count", String(ad10Count));
   localStorage.setItem("lastTask5RewardAt", String(lastTask5RewardAt));
   localStorage.setItem("lastTask10RewardAt", String(lastTask10RewardAt));
+
+  // daily +0.1
+  localStorage.setItem("dailyGramCount", String(gramCount));
+  localStorage.setItem("dailyExCount", String(exCount));
+  localStorage.setItem("lastGramAt", String(lastGramAt));
+  localStorage.setItem("lastExAt", String(lastExAt));
+  localStorage.setItem("dailyStamp", dailyStamp);
 
   // батл
   localStorage.setItem("oppScorePending", oppScorePending==null ? "" : String(oppScorePending));
@@ -127,32 +135,46 @@ function getUserTag(){
   return "Гравець";
 }
 
+function _todayStamp(){
+  const d = new Date();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
 /* ========= ІНІЦІАЛІЗАЦІЯ ========= */
-let dailyTasksTicker = null;
+let dailyUiTicker = null;
 let challengeTicker = null;
 
 window.onload = function(){
+  // базові стейти
   balance = parseFloat(localStorage.getItem("balance") || "0");
   subscribed = localStorage.getItem("subscribed") === "true";
   task50Completed = localStorage.getItem("task50Completed") === "true";
   highscore = parseInt(localStorage.getItem("highscore") || "0", 10);
-
-  lastTaskAdAt     = parseInt(localStorage.getItem("lastTaskAdAt") || "0", 10);
   lastAnyAdAt      = parseInt(localStorage.getItem("lastAnyAdAt")  || "0", 10);
   gamesPlayedSinceClaim = parseInt(localStorage.getItem("gamesPlayedSinceClaim") || "0", 10);
 
+  // 5/10
   ad5Count = parseInt(localStorage.getItem("ad5Count") || "0", 10);
   ad10Count = parseInt(localStorage.getItem("ad10Count") || "0", 10);
   lastTask5RewardAt = parseInt(localStorage.getItem("lastTask5RewardAt") || "0", 10);
   lastTask10RewardAt = parseInt(localStorage.getItem("lastTask10RewardAt") || "0", 10);
 
-  // батл
-  oppScorePending   = parseInt(localStorage.getItem("oppScorePending") || "") || null;
-  challengeActive   = localStorage.getItem("challengeActive") === "true";
-  challengeStartAt  = parseInt(localStorage.getItem("challengeStartAt") || "0", 10);
-  challengeDeadline = parseInt(localStorage.getItem("challengeDeadline") || "0", 10);
-  challengeStake    = parseFloat(localStorage.getItem("challengeStake") || "0");
-  challengeOpp      = parseInt(localStorage.getItem("challengeOpp") || "0", 10);
+  // daily +0.1
+  gramCount  = parseInt(localStorage.getItem('dailyGramCount')||'0',10);
+  exCount    = parseInt(localStorage.getItem('dailyExCount')||'0',10);
+  lastGramAt = parseInt(localStorage.getItem('lastGramAt')||'0',10);
+  lastExAt   = parseInt(localStorage.getItem('lastExAt')||'0',10);
+  dailyStamp = localStorage.getItem('dailyStamp') || _todayStamp();
+
+  // авто-ресет на новий день
+  const t = _todayStamp();
+  if (dailyStamp !== t){
+    gramCount = 0; exCount = 0;
+    lastGramAt = 0; lastExAt = 0;
+    dailyStamp = t;
+  }
 
   setBalanceUI();
   $("highscore").innerText = "🏆 " + highscore;
@@ -161,27 +183,23 @@ window.onload = function(){
 
   const subBtn = $("subscribeBtn");
   if (subBtn){
-    if (subscribed){ subBtn.innerText = "Виконано"; subBtn.classList.add("done"); }
+    if (subscribed){ subBtn.innerText = (document.documentElement.lang==='en'?"Done":"Виконано"); subBtn.classList.add("done"); }
     subBtn.addEventListener("click", subscribe);
   }
 
   const t50 = $("checkTask50");
   if (t50){
-    if (task50Completed){ t50.innerText="Виконано"; t50.classList.add("done"); }
+    if (task50Completed){ t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); t50.classList.add("done"); }
     t50.addEventListener("click", ()=>{
       if (highscore >= 75 && !task50Completed){
         addBalance(5.15);
-        t50.innerText="Виконано"; t50.classList.add("done");
+        t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); t50.classList.add("done");
         task50Completed = true; saveData();
       } else {
-        alert("❌ Твій рекорд замалий (потрібно 75+)");
+        alert(document.documentElement.lang==='en' ? "❌ Highscore is too low (need 75+)" : "❌ Твій рекорд замалий (потрібно 75+)");
       }
     });
   }
-
-  const watchBtn = $("watchAdMinuteBtn");
-  if (watchBtn) watchBtn.addEventListener("click", onWatchAdTaskClick);
-  startTaskCooldownTicker();
 
   const g100Btn = $("checkGames100Btn");
   if (g100Btn) g100Btn.addEventListener("click", onCheckGames100);
@@ -195,9 +213,13 @@ window.onload = function(){
   const withdrawBtn = $("withdrawBtn");
   if (withdrawBtn) withdrawBtn.addEventListener("click", withdraw50ShareToGroup);
 
+  // таски 5/10
   if ($("watchAd5Btn"))  $("watchAd5Btn").addEventListener("click", onWatchAd5);
   if ($("watchAd10Btn")) $("watchAd10Btn").addEventListener("click", onWatchAd10);
-  startDailyTasksTicker();
+
+  // ЩОДЕННІ +0.1⭐ — прив’язка до кнопок з HTML
+  $("watchAdsgramDailyBtn")?.addEventListener("click", onWatchGramDaily);
+  $("watchAdexiumDailyBtn")?.addEventListener("click", onWatchExDaily);
 
   // батл UI
   setupChallengeUI();
@@ -209,7 +231,10 @@ window.onload = function(){
   // 3D гра
   window.stackGame = new Game();
 
-  updateAdTasksUI();
+  // UI тікер
+  startDailyPlusTicker();
+  updateAdTasksUI(); // 5/10
+  updateDailyUI();   // +0.1
 };
 
 function addBalance(n){ balance = parseFloat((balance + n).toFixed(2)); setBalanceUI(); saveData(); }
@@ -219,17 +244,18 @@ function subscribe(){
   if (window.Telegram?.WebApp?.openTelegramLink) Telegram.WebApp.openTelegramLink(url);
   else window.open(url, "_blank");
   subscribed = true; addBalance(1);
-  const btn = $("subscribeBtn"); if (btn){ btn.innerText="Виконано"; btn.classList.add("done"); }
+  const btn = $("subscribeBtn"); if (btn){ btn.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); btn.classList.add("done"); }
   saveData();
 }
 
-/* ========= Навігація (дубль для кнопок меню) ========= */
+/* ========= Навігація (дубль для кнопок меню у твоєму HTML) ========= */
 function showPage(id, btn){
   document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
   $(id).classList.add("active");
   document.querySelectorAll(".menu button").forEach(b=>b.classList.remove("active"));
   btn.classList.add("active");
   isPaused = (id !== "game");
+  if (id==='leaderboard'){ loadLeaderboard?.(); }
 }
 window.showPage = showPage;
 
@@ -238,17 +264,16 @@ function initLeaderboard(){ /* no-op */ }
 
 /* ========= Реклама: SDK Adsgram ========= */
 function initAds(){
-  // Підтримка кількох імен просторів: Adsgram | SAD
   const sdk = window.Adsgram || window.SAD || null;
   if (!sdk){
     console.warn("Adsgram SDK не завантажився");
     return;
   }
   try { AdTaskMinute = (sdk.init ? sdk.init({ blockId: ADSGRAM_BLOCK_ID_TASK_MINUTE }) : sdk.AdController?.create({blockId: ADSGRAM_BLOCK_ID_TASK_MINUTE})); }
-  catch (e) { console.warn("Adsgram init (task-minute) error:", e); }
+  catch (e) { console.warn("Adsgram init (daily +0.1) error:", e); }
 
   try { AdTask510 = (sdk.init ? sdk.init({ blockId: ADSGRAM_BLOCK_ID_TASK_510 }) : sdk.AdController?.create({blockId: ADSGRAM_BLOCK_ID_TASK_510})); }
-  catch (e) { console.warn("Adsgram init (task-5/10) error:", e); }
+  catch (e) { console.warn("Adsgram init (5/10) error:", e); }
 
   try { AdGameover = (sdk.init ? sdk.init({ blockId: ADSGRAM_BLOCK_ID_GAMEOVER }) : sdk.AdController?.create({blockId: ADSGRAM_BLOCK_ID_GAMEOVER})); }
   catch (e) { console.warn("Adsgram init (gameover) error:", e); }
@@ -256,57 +281,46 @@ function initAds(){
 
 function inTelegramWebApp(){ return !!(window.Telegram && Telegram.WebApp); }
 
+async function showAdsgram(controller){
+  if (!controller) return { shown:false, reason:'adsgram_no_controller' };
+  try{
+    await controller.show();
+    return { shown:true };
+  }catch(err){
+    return { shown:false, reason: err?.description || err?.state || "no_fill_or_error" };
+  }
+}
+
 /* ========= Adexium: місток window.__adexiumWidget.show() ========= */
 function setupAdexiumBridge(){
-  // Якщо вже є — не чіпаємо
   if (window.__adexiumWidget && typeof window.__adexiumWidget.show === "function") return;
 
-  // Створюємо лайт-адаптер поверх офіційного класу, якщо він завантажений
   if (typeof window.AdexiumWidget === "function") {
     window.__adexiumWidget = {
       show: () => new Promise((resolve, reject) => {
         try{
-          // Кожен показ — новий інстанс (так SDK найстабільніший)
           const w = new window.AdexiumWidget({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT });
-
           let finished = false;
-          const done = (ok) => {
-            if (finished) return;
-            finished = true;
-            cleanup();
-            ok ? resolve(true) : reject(new Error("adexium_closed"));
-          };
+          const done = (ok) => { if (finished) return; finished = true; cleanup(); ok ? resolve(true) : reject(new Error("adexium_closed")); };
+          try { w.autoMode(); } catch(e){ /* fallback таймер нижче */ }
 
-          // Пробуємо «autoMode» — в їх SDK це одразу відкриває інтерстішіал
-          try { w.autoMode(); } catch(e){ /* якщо метод змінився — все одно дамо таймаут */ }
-
-          // Страхувальні гачки (деякі збірки шлють події у window)
           function onMsg(ev){
             try{
               const data = ev?.data;
               if (data && typeof data === "object" && data.source === "adexium"){
                 if (data.type === "open" || data.type === "shown") done(true);
-                if (data.type === "close" || data.type === "dismiss") done(true); // вважаємо перегляд зарахованим
+                if (data.type === "close" || data.type === "dismiss") done(true); // рахуємо як перегляд
                 if (data.type === "error" || data.type === "no_fill") done(false);
               }
             }catch{}
           }
           window.addEventListener("message", onMsg);
-
-          // Safety timeout: якщо немає подій, вважаємо, що показалося
           const tm = setTimeout(()=>done(true), 7000);
-
-          function cleanup(){
-            clearTimeout(tm);
-            window.removeEventListener("message", onMsg);
-          }
-        } catch(e){
-          reject(e);
-        }
+          function cleanup(){ clearTimeout(tm); window.removeEventListener("message", onMsg); }
+        } catch(e){ reject(e); }
       })
     };
   } else {
-    // Якщо SDK ще не готовий — поставимо ліниву обгортку з ретраєм
     window.__adexiumWidget = {
       show: () => new Promise((resolve, reject)=>{
         const started = Date.now();
@@ -325,7 +339,6 @@ function setupAdexiumBridge(){
   }
 }
 
-/** Показ Adexium interstitial. */
 function showAdexiumInterstitial() {
   return new Promise(async (resolve) => {
     try {
@@ -344,167 +357,60 @@ function showAdexiumInterstitial() {
   });
 }
 
-/** Показ реклами (розділено на контексти) + ротація для task */
-async function showInterstitialOnce(ctx, opts = {}){
-  const isTaskMinute = (ctx === 'task');
-  const isTask5 = (ctx === 'task5');
-  const isTask10 = (ctx === 'task10');
-  const isGameover = (ctx === 'gameover');
+/* ========= ЩОДЕННІ +0.1⭐ (дві кнопки) ========= */
+function startDailyPlusTicker(){
+  if (dailyUiTicker) clearInterval(dailyUiTicker);
+  dailyUiTicker = setInterval(()=>{
+    updateDailyUI();
+    updateAdTasksUI();
+  }, 1000);
+  updateDailyUI();
+}
 
-  // суворо: без фолбеків між Adsgram-блоками (крім провайдерів всередині 'task')
-  const controller =
-    isGameover ? AdGameover
-    : isTaskMinute ? AdTaskMinute
-    : (isTask5 || isTask10) ? AdTask510
-    : null;
+function updateDailyUI(){
+  const g = $("adGramCounter");
+  const e = $("adExCounter");
+  if (g) g.textContent = String(Math.min(gramCount, DAILY_CAP));
+  if (e) e.textContent = String(Math.min(exCount, DAILY_CAP));
 
-  if (!inTelegramWebApp()) return { shown:false, reason:"not_telegram" };
+  const gBtn = $("watchAdsgramDailyBtn");
+  const eBtn = $("watchAdexiumDailyBtn");
+  if (gBtn) gBtn.disabled = (gramCount >= DAILY_CAP) || (Date.now()-lastGramAt < DAILY_COOLDOWN_MS);
+  if (eBtn) eBtn.disabled = (exCount >= DAILY_CAP) || (Date.now()-lastExAt < DAILY_COOLDOWN_MS);
+}
 
+async function onWatchGramDaily(){
+  // окремий кулдаун тільки для Adsgram daily
   const now = Date.now();
-  const bypassGlobal = !!opts.bypassGlobal;
-  const touchGlobal  = (opts.touchGlobal !== false);
+  // ліміт дня
+  if (gramCount >= DAILY_CAP) return;
+  // індивідуальний кулдаун
+  if (now - lastGramAt < DAILY_COOLDOWN_MS) return;
+  // не використовуємо глобальний ANY_AD_COOLDOWN_MS — щоб не блокувати другу кнопку
 
-  if (!bypassGlobal){
-    if (now - lastAnyAdAt < ANY_AD_COOLDOWN_MS) {
-      return { shown:false, reason:"global_1min_cooldown" };
-    }
-  }
+  const res = await showAdsgram(AdTaskMinute);
+  if (!res.shown) return;
 
-  // ===== контекст TASK (+0.1⭐) з ротацією Adsgram/Adexium =====
-  if (isTaskMinute){
-    if (adInFlightTask) return { shown:false, reason:"task_busy" };
-    if (now - lastTaskAdAt < Math.max(MIN_BETWEEN_SAME_CTX_MS, TASK_AD_COOLDOWN_MS)) {
-      return { shown:false, reason:"task_ctx_cooldown" };
-    }
-    adInFlightTask = true;
-
-    // черга: парний — Adsgram, непарний — Adexium
-    const useAdexiumFirst = (taskAdProviderToggle++ % 2) === 1;
-
-    const tryAdsgram = async () => {
-      if (!controller) return { shown:false, reason:'adsgram_no_controller' };
-      try {
-        await controller.show();
-        return { shown:true };
-      } catch (err) {
-        return { shown:false, reason: err?.description || err?.state || 'no_fill_or_error' };
-      }
-    };
-    const tryAdexium = async () => await showAdexiumInterstitial();
-
-    let res = useAdexiumFirst ? await tryAdexium() : await tryAdsgram();
-    if (!res.shown) {
-      const fallback = useAdexiumFirst ? await tryAdsgram() : await tryAdexium();
-      if (fallback.shown) res = fallback;
-    }
-
-    if (res.shown){
-      lastTaskAdAt = Date.now();
-      if (touchGlobal) lastAnyAdAt = lastTaskAdAt;
-      saveData();
-    }
-
-    adInFlightTask = false;
-    return res;
-  }
-
-  // ===== контекст TASK5 =====
-  if (isTask5){
-    if (adInFlightTask5) return { shown:false, reason:"task5_busy" };
-    if (now - lastTask5AdAt < MIN_BETWEEN_SAME_CTX_MS) {
-      return { shown:false, reason:"task5_ctx_cooldown" };
-    }
-    adInFlightTask5 = true;
-    try{
-      if (!controller) return { shown:false, reason:'adsgram_no_controller' };
-      await controller.show();
-      lastTask5AdAt = Date.now();
-      if (touchGlobal) lastAnyAdAt = lastTask5AdAt;
-      saveData();
-      return { shown:true };
-    }catch(err){
-      return { shown:false, reason: err?.description || err?.state || "no_fill_or_error" };
-    }finally{
-      adInFlightTask5 = false;
-    }
-  }
-
-  // ===== контекст TASK10 =====
-  if (isTask10){
-    if (adInFlightTask10) return { shown:false, reason:"task10_busy" };
-    if (now - lastTask10AdAt < MIN_BETWEEN_SAME_CTX_MS) {
-      return { shown:false, reason:"task10_ctx_cooldown" };
-    }
-    adInFlightTask10 = true;
-    try{
-      if (!controller) return { shown:false, reason:'adsgram_no_controller' };
-      await controller.show();
-      lastTask10AdAt = Date.now();
-      if (touchGlobal) lastAnyAdAt = lastTask10AdAt;
-      saveData();
-      return { shown:true };
-    }catch(err){
-      return { shown:false, reason: err?.description || err?.state || "no_fill_or_error" };
-    }finally{
-      adInFlightTask10 = false;
-    }
-  }
-
-  // ===== контекст GAMEOVER =====
-  if (isGameover){
-    if (adInFlightGameover) return { shown:false, reason:"gameover_busy" };
-    if (now - lastGameoverAdAt < Math.max(MIN_BETWEEN_SAME_CTX_MS, GAME_AD_COOLDOWN_MS)) {
-      return { shown:false, reason:"gameover_ctx_cooldown" };
-    }
-    adInFlightGameover = true;
-    try{
-      if (!controller) return { shown:false, reason:'adsgram_no_controller' };
-      await controller.show();
-      lastGameoverAdAt = Date.now();
-      if (touchGlobal) lastAnyAdAt = lastGameoverAdAt;
-      saveData();
-      return { shown:true };
-    }catch(err){
-      return { shown:false, reason: err?.description || err?.state || "no_fill_or_error" };
-    }finally{
-      adInFlightGameover = false;
-    }
-  }
-
-  return { shown:false, reason:"unknown_ctx" };
+  lastGramAt = Date.now();
+  gramCount += 1;
+  addBalance(0.1);
+  saveData();
+  updateDailyUI();
 }
 
-/* ========= Таск «реклама раз на пів хвилини» ========= */
-async function onWatchAdTaskClick(){
+async function onWatchExDaily(){
   const now = Date.now();
-  const remainingGlobal = ANY_AD_COOLDOWN_MS - (now - lastAnyAdAt);
-  if (remainingGlobal > 0) return;
+  if (exCount >= DAILY_CAP) return;
+  if (now - lastExAt < DAILY_COOLDOWN_MS) return;
 
-  const remainingTask = TASK_AD_COOLDOWN_MS - (now - lastTaskAdAt);
-  if (remainingTask > 0) return;
+  const res = await showAdexiumInterstitial();
+  if (!res.shown) return;
 
-  const res = await showInterstitialOnce('task');
-  if (res.shown){
-    addBalance(0.1);
-    updateTaskCooldownUI();
-  }
-}
-let taskCooldownTimer = null;
-function startTaskCooldownTicker(){
-  if (taskCooldownTimer) clearInterval(taskCooldownTimer);
-  taskCooldownTimer = setInterval(updateTaskCooldownUI, 1000);
-  updateTaskCooldownUI();
-}
-function updateTaskCooldownUI(){
-  const btnWrap=$("taskAdOncePerMinute"), btn=$("watchAdMinuteBtn"), cdBox=$("taskAdStatus"), cdText=$("adCooldownText");
-  if (!btnWrap||!btn||!cdBox||!cdText) return;
-
-  const now=Date.now();
-  const last = Math.max(lastAnyAdAt, lastTaskAdAt);
-  const remaining = Math.max(0, TASK_AD_COOLDOWN_MS - (now - last));
-
-  if (remaining>0){ btn.disabled=true; btnWrap.style.display="none"; cdBox.style.display="flex"; cdText.innerText=Math.ceil(remaining/1000)+"с"; }
-  else { btn.disabled=false; btnWrap.style.display="flex"; cdBox.style.display="none"; }
+  lastExAt = Date.now();
+  exCount += 1;
+  addBalance(0.1);
+  saveData();
+  updateDailyUI();
 }
 
 /* ========= 5 і 10 реклам ========= */
@@ -515,11 +421,6 @@ function formatHMS(ms){
   const mm = Math.floor((s%3600)/60);
   const ss = s%60;
   return (hh>0 ? String(hh).padStart(2,'0')+":" : "") + String(mm).padStart(2,'0')+":"+String(ss).padStart(2,'0');
-}
-function startDailyTasksTicker(){
-  if (dailyTasksTicker) clearInterval(dailyTasksTicker);
-  dailyTasksTicker = setInterval(updateAdTasksUI, 1000);
-  updateAdTasksUI();
 }
 function updateAdTasksUI(){
   const fiveWrap = $("taskWatch5");
@@ -563,33 +464,42 @@ async function onWatchAd5(){
   const now = Date.now();
   if (now - lastTask5RewardAt < TASK_DAILY_COOLDOWN_MS) return;
 
-  const res = await showInterstitialOnce('task5', { bypassGlobal:true, touchGlobal:false });
-  if (!res.shown) return;
+  // суто Adsgram блок 5/10
+  if (adInFlightTask5) return;
+  adInFlightTask5 = true;
+  try{
+    const res = await showAdsgram(AdTask510);
+    if (!res.shown) return;
 
-  ad5Count += 1;
-  if (ad5Count >= TASK5_TARGET){
-    addBalance(1);
-    ad5Count = 0;
-    lastTask5RewardAt = Date.now();
-  }
-  saveData();
-  updateAdTasksUI();
+    ad5Count += 1;
+    if (ad5Count >= TASK5_TARGET){
+      addBalance(1);
+      ad5Count = 0;
+      lastTask5RewardAt = Date.now();
+    }
+    saveData();
+    updateAdTasksUI();
+  } finally { adInFlightTask5 = false; }
 }
 async function onWatchAd10(){
   const now = Date.now();
   if (now - lastTask10RewardAt < TASK_DAILY_COOLDOWN_MS) return;
 
-  const res = await showInterstitialOnce('task10', { bypassGlobal:true, touchGlobal:false });
-  if (!res.shown) return;
+  if (adInFlightTask10) return;
+  adInFlightTask10 = true;
+  try{
+    const res = await showAdsgram(AdTask510);
+    if (!res.shown) return;
 
-  ad10Count += 1;
-  if (ad10Count >= TASK10_TARGET){
-    addBalance(1.85);
-    ad10Count = 0;
-    lastTask10RewardAt = Date.now();
-  }
-  saveData();
-  updateAdTasksUI();
+    ad10Count += 1;
+    if (ad10Count >= TASK10_TARGET){
+      addBalance(1.85);
+      ad10Count = 0;
+      lastTask10RewardAt = Date.now();
+    }
+    saveData();
+    updateAdTasksUI();
+  } finally { adInFlightTask10 = false; }
 }
 
 /* ========= Друзі / копіювання ========= */
@@ -718,7 +628,7 @@ function withdraw50ShareToGroup(){
 
   if (OPEN_MODE === "group" && GROUP_LINK) {
     if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text).catch(()=>{});
+      navigator.clipboard.writeText(text).catch(()=>{}); // зручно вставити
     }
     if (window.Telegram?.WebApp?.openTelegramLink) {
       Telegram.WebApp.openTelegramLink(GROUP_LINK);
@@ -766,10 +676,6 @@ function onCheckGames100(){
 }
 
 /* ========= БАТЛ: логіка ========= */
-/* НОВИЙ генератор:
-   - 15%: діапазон 83..100
-   - 85%: діапазон 101..150
-*/
 function weightedOppScore(){
   const r = Math.random();
   if (r < 0.15){
@@ -900,7 +806,6 @@ class Stage{
   constructor(){
     this.container = document.getElementById("container");
     this.scene = new THREE.Scene();
-    // прозорий рендерер, щоб CSS-фон було видно під грою
     this.renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setClearColor(0x000000, 0);
@@ -1107,8 +1012,19 @@ class Game{
     updateHighscore(currentScore);
     gamesPlayedSinceClaim += 1; saveData(); updateGamesTaskUI();
 
-    // Локальний показ реклами «gameover»: тільки Adsgram-блок для gameover, без фолбеків
-    await showInterstitialOnce('gameover', { bypassGlobal:true, touchGlobal:false });
+    // показ реклами «gameover»: тільки Adsgram-блок для gameover
+    const now = Date.now();
+    if (!adInFlightGameover && (now - lastGameoverAdAt >= Math.max(MIN_BETWEEN_SAME_CTX_MS, GAME_AD_COOLDOWN_MS))){
+      adInFlightGameover = true;
+      try{
+        const r = await showAdsgram(AdGameover);
+        if (r.shown){
+          lastGameoverAdAt = Date.now();
+          lastAnyAdAt = lastGameoverAdAt;
+          saveData();
+        }
+      } finally { adInFlightGameover = false; }
+    }
 
     this.startPostAdCountdown();
   }
