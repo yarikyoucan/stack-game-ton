@@ -8,13 +8,16 @@
     /* --- БАЗА ІНТЕРФЕЙСУ --- */
     body{margin:0;font-family:Arial,sans-serif;background:#0f172a;display:flex;flex-direction:column;height:100vh;padding-bottom:64px}
     .page{flex:1;display:none;overflow:auto;padding:10px}.page.active{display:block}
+
+    /* Нижнє меню — напівпрозоре */
     .menu{display:flex;justify-content:space-around;border-top:1px solid rgba(255,255,255,.15);background:rgba(15,23,42,.75);padding:10px 0;position:fixed;left:0;right:0;bottom:0;z-index:9999;backdrop-filter:blur(6px)}
     .menu button{flex:1;background:none;border:none;font-size:22px;cursor:pointer;color:#fff}.menu button.active{color:#3b82f6;font-weight:bold}
+
     .task{display:flex;justify-content:space-between;align-items:center;background:#fff;padding:15px;margin:10px auto;border-radius:10px;width:90%;box-shadow:0 2px 5px rgba(0,0,0,.1)}
     .task button{background:#007bff;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}.task button.done{background:#28a745}.task button:disabled{opacity:.6;cursor:not-allowed}
     .balance{font-size:20px;margin-bottom:20px;text-align:center}
 
-    /* --- ГРА: небо + місяць + зірки + будинки, прозорий canvas --- */
+    /* --- ГРА: нічне небо + місяць + зірки + будинки, прозорий canvas --- */
     #container{
       position:relative;width:100%;height:100%;overflow:hidden;
       background:
@@ -30,8 +33,8 @@
         url('data:image/svg+xml;utf8,\
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="220" viewBox="0 0 800 220">\
   <rect width="800" height="220" fill="none"/>\
-  <path d="M0 190 L20 170 L45 172 L45 190 L70 160 L95 162 L95 190 L130 150 L160 152 L160 190 L200 165 L230 167 L230 190 L270 155 L310 157 L310 190 L350 170 L380 172 L380 190 L420 160 L455 162 L455 190 L495 168 L530 170 L530 190 L570 156 L610 158 L610 190 L650 170 L690 172 L690 190 L730 160 L770 165 L770 190 L800 150 L800 220 L0 220 Z" fill="%23040a1c"/>\
-  <path d="M0 200 L30 180 L50 180 L50 200 L80 155 L110 155 L110 200 L150 140 L180 140 L180 200 L220 165 L250 165 L250 200 L300 145 L340 145 L340 200 L380 175 L420 175 L420 200 L460 150 L500 150 L500 200 L540 165 L580 165 Л580 200 Л620 145 Л660 145 Л660 200 Л700 175 Л740 175 Л740 200 Л800 160 Л800 220 Л0 220 Z" fill="%23000a1a"/>\
+  <path d="M0 190 L20 170 L45 172 L45 190 L70 160 L95 162 L95 190 L130 150 L160 152 Л160 190 Л200 165 Л230 167 Л230 190 Л270 155 Л310 157 Л310 190 Л350 170 Л380 172 Л380 190 Л420 160 Л455 162 Л455 190 Л495 168 Л530 170 Л530 190 Л570 156 Л610 158 Л610 190 Л650 170 Л690 172 Л690 190 Л730 160 Л770 165 Л770 190 Л800 150 Л800 220 Л0 220 Z" fill="%23040a1c"/>\
+  <path d="M0 200 L30 180 L50 180 L50 200 Л80 155 Л110 155 Л110 200 Л150 140 Л180 140 Л180 200 Л220 165 Л250 165 Л250 200 Л300 145 Л340 145 Л340 200 Л380 175 Л420 175 Л420 200 Л460 150 Л500 150 Л500 200 Л540 165 Л580 165 Л580 200 Л620 145 Л660 145 Л660 200 Л700 175 Л740 175 Л740 200 Л800 160 Л800 220 Л0 220 Z" fill="%23000a1a"/>\
   <g fill="%23ffd34d">\
     <rect x="58" y="184" width="6" height="10"/><rect x="66" y="184" width="6" height="10" opacity="0.6"/>\
     <rect x="206" y="186" width="6" height="10"/><rect x="214" y="186" width="6" height="10" opacity="0.6"/>\
@@ -68,7 +71,7 @@
       background:
         radial-gradient(1200px 500px at 15% 0%, rgba(99,102,241,.35), transparent 60%),
         radial-gradient(1000px 600px at 85% 100%, rgba(56,189,248,.25), transparent 60%),
-        linear-gradient(135deg,#0f172a 0%, #1e1b4b 45%, #3b82f6 100%);
+        linear-gradient(135deg,#0f172a 0%, #1e1б4b 45%, #3b82f6 100%);
     }
     #tasks.themed{
       background-image:
@@ -102,6 +105,46 @@
     #friends .balance{font-size:30px;font-weight:800;text-align:center;margin:16px 0;color:#eaf2ff}
     #friends h2.wallet-title{color:#eaf2ff;text-align:center;font-size:28px;margin:0 0 20px}
 
+    #tournaments{
+      position:relative;color:#eef;padding-bottom:84px;
+      background-image:
+        radial-gradient(1200px 500px at 15% 0%, rgba(99,102,241,.35), transparent 60%),
+        radial-gradient(1000px 600px at 85% 100%, rgba(56,189,248,.25), transparent 60%),
+        linear-gradient(135deg,#0f172a 0%, #1e1e4b 45%, #3b82f6 100%),
+        url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="760" height="200" viewBox="0 0 760 200"><g fill="%23ffffff15" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="800" transform="rotate(-18 380 100)"><text x="-60" y="40">BATTLES • BATTLES • BATTLES • BATTLES • BATTLES •</text><text x="-60" y="100">BATTLES • BATTLES • BATTLES • BATTLES • BATTLES •</text><text x="-60" y="160">BATTLES • BATTLES • BATTLES • BATTLES • BATTLES •</text></g></svg>');
+      background-size:auto,auto,auto,760px 200px;background-repeat:no-repeat,no-repeat,no-repeat,repeat;
+    }
+    #tournaments .tour-hero{width:90%;margin:12px auto;padding:16px;border-radius:14px;color:#fff;background:linear-gradient(135deg, rgba(99,102,241,.9), rgba(90,200,250,.9));box-shadow:0 10px 30px rgba(0,0,0,.15)}
+    .tour-hero-title{font-size:20px;font-weight:700}.tour-hero-sub{opacity:.95;margin-top:4px}
+    #tournaments .challenge-card{width:90%;margin:12px auto;background:rgba(255,255,255,.06);border-radius:12px;border:1px solid rgba(255,255,255,.15);padding:14px;color:#eef;backdrop-filter:blur(6px);box-shadow:0 10px 30px rgba(0,0,0,.15)}
+    #tournaments .challenge-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:10px 0}
+    #tournaments .opponent-score{font-weight:700;font-size:20px}
+    #stakeInput{flex:0 0 110px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px}
+    .stake-wrap{display:flex;gap:8px;align-items:center;flex:1}
+    .challenge-countdown{margin-top:6px;font-weight:600}
+    .challenge-actions{display:flex;align-items:center;gap:8px;margin-top:10px}
+    #tournaments .btn{background:#3b82f6;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
+    #tournaments .btn:hover{filter:brightness(1.05)}
+
+    .battle-panel{width:92%; margin:14px auto 96px;border-radius:16px; overflow:hidden;background:
+      linear-gradient(135deg, rgba(30,27,75,.85), rgba(37,99,235,.85)),
+      url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="280" height="280" viewBox="0 0 280 280"><g fill="none" stroke="%23ffffff22"><path d="M0 40h280M0 80h280M0 120h280M0 160h280M0 200h280M0 240h280"/><path d="M40 0v280M80 0v280M120 0v280M160 0v280M200 0v280M240 0v280"/></g></svg>') center/280px repeat;
+      border:1px solid rgba(255,255,255,.18);color:#eaf2ff; box-shadow:0 10px 30px rgba(0,0,0,.2)}
+    .battle-panel .inner{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:14px 16px}
+    .battle-panel .title{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
+    .battle-panel .title .logo{width:38px;height:38px;border-radius:12px;background:radial-gradient(circle at 30% 30%, #93c5fd, #6366f1);box-shadow:inset 0 1px 0 rgba(255,255,255,.35), 0 6px 16px rgba(99,102,241,.35);display:grid;place-items:center;font-size:20px}
+    .battle-panel .rules{display:flex;gap:10px;flex:1;min-width:220px;justify-content:center;flex-wrap:wrap}
+    .battle-panel .pill{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);padding:6px 10px;border-radius:999px;font-weight:700;font-size:13px}
+    .battle-panel .cta{display:flex;gap:8px;align-items:center}
+    .battle-panel .cta .btn{padding:10px 12px;border-radius:10px}
+
+    .shop-card{position:relative}
+    .info-btn{position:absolute;top:10px;right:10px;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;cursor:pointer;background:rgba(255,255,255,.12);color:#eaf2ff;border:1px solid rgba(255,255,255,.25);font-weight:900;line-height:1;backdrop-filter:blur(6px)}
+    .info-btn:hover{filter:brightness(1.05)}
+    .info-pop{position:absolute;top:54px;right:12px;z-index:5;max-width:280px;background:rgba(15,23,42,.96); color:#eaf2ff; border:1px solid rgba(255,255,255,.18);border-radius:12px; padding:12px; box-shadow:0 10px 26px rgba(0,0,0,.35); display:none}
+    .info-pop.open{display:block}
+    .info-pop p{margin:0 0 10px;font-size:14px;line-height:1.35}
+
     /* ======= ЛІДЕРБОРД ======= */
     #leaderboard.themed{
       background-image:
@@ -116,10 +159,10 @@
     .lb-title{font-size:26px;margin:0 0 4px}
     .lb-sub{opacity:.9;margin:0 0 10px}
     .lb-note{width:92%;margin:4px auto 16px;font-size:13px;opacity:.9}
-    #lbList{width:92%;margin:0 auto 18px}
+    #lbList{width:92%;margin:0 авто 18px}
     .lb-row{
       display:grid;
-      grid-template-columns:56px 1fr 70px 90px;
+      grid-template-columns:56px 1fr 70px 90px; /* rank | name | ?⭐ | рекорд */
       align-items:center;gap:10px;
       background:rgba(255,255,255,.06);
       border:1px solid rgba(255,255,255,.15);
@@ -183,19 +226,18 @@
       <button id="checkTask50" class="btn" style="margin-left:auto;" data-i18n="check">Перевірити</button>
     </div>
 
-    <!-- NEW: Adsgram — 25 разів/день, +0.1⭐ за кожен -->
+    <!-- НОВІ: окремі денні кнопки 25/день -->
     <div class="task" id="taskAdsgramDaily">
       <span>🎬 Adsgram: +0.1⭐ (<b id="adGramCounter">0</b>/25 сьогодні)</span>
       <button id="watchAdsgramDailyBtn" class="btn">Дивитись</button>
     </div>
 
-    <!-- NEW: Adexium — 25 разів/день, +0.1⭐ за кожен -->
     <div class="task" id="taskAdexiumDaily">
       <span>🎬 Adexium: +0.1⭐ (<b id="adExCounter">0</b>/25 сьогодні)</span>
       <button id="watchAdexiumDailyBtn" class="btn">Дивитись</button>
     </div>
 
-    <!-- Існуючі завдання -->
+    <!-- Інші завдання, як було -->
     <div class="task" id="taskWatch5">
       <span><span data-i18n="task_5ads_text">🎬 Переглянь 5 реклам (+1⭐)</span> — <b id="ad5Counter">0/5</b></span>
       <button id="watchAd5Btn" class="btn" data-i18n="watch">Дивитися</button>
@@ -351,7 +393,7 @@
   <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-  <!-- RichAds (якщо потрібно; не критично) -->
+  <!-- RichAds (додано) -->
   <script src="https://richinfo.co/richpartners/telegram/js/tg-ob.js"></script>
   <script>
     window.TelegramAdsController = new TelegramAdsController();
@@ -361,7 +403,7 @@
     });
   </script>
 
-  <!-- i18n + дрібні хелпери: мова, відкриття DM, і т.д. -->
+  <!-- App helpers + i18n (залишено як у тебе) -->
   <script>
     function showPage(id, btn){
       document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id===id));
@@ -384,7 +426,7 @@
       const infoClose = document.getElementById('shopInfoClose');
       infoBtn?.addEventListener('click', ()=>infoPop.classList.toggle('open'));
       infoClose?.addEventListener('click', ()=>infoPop.classList.remove('open'));
-      document.addEventListener('click', (e)=>{ if (infoPop && !infoPop.contains(e.target) && !infoBtn.contains(e.target)) infoPop.classList.remove('open'); });
+      document.addEventListener('click', (e)=>{ if (!infoPop.contains(e.target) && !infoBtn.contains(e.target)) infoPop.classList.remove('open'); });
 
       const I18N = {
         uk: {
@@ -396,12 +438,27 @@
           pause_before_new_game: "Пауза перед новою грою",
           you_can_start_in: "Можна буде почати через:",
           sec_suffix: "с",
+
           tasks_title: "Завдання",
           task_subscribe_text: "Підпишись на канал +1⭐",
           open: "Перейти",
           done: "Виконано",
           task_75_text: "🎯 Досягни рекорду 75 (+5.15⭐)",
           check: "Перевірити",
+
+          b_tour_title: "⚔️ Виклик суперника",
+          b_tour_sub: "Згенеруй рекорд, зроби ставку ⭐ і побий його за 3 години",
+          opponent: "Суперник",
+          generate: "Згенерувати",
+          stake: "Ставка ⭐",
+          start_challenge: "Почати виклик (3 год)",
+          no_active_challenge: "Немає активного виклику.",
+          time_left_prefix: "Залишилось:",
+          rule_goal: "🎯 Мета: побий рекорд за 3 год",
+          rule_prize: "💎 Виграш: ×1.5 від ставки",
+          rule_risk: "⚠️ Якщо не встигаєш — ставка згорає",
+          make_bet: "Зробити ставку",
+
           balance: "Баланс",
           wallet: "Гаманець",
           invite_friends: "Запроси друзів",
@@ -413,20 +470,16 @@
           withdraw_hint: "За натискання списується рівно 50⭐, решта лишається. Далі відкриється група/«Поділитися» з готовим повідомленням і двома кодами.",
           withdraw_btn: "Вивести",
           payout_list_title: "Список виводів",
+
           shop_announcements: "Оголошення",
           post_announcement: "Виставити оголошення",
           write_dm: "Написати в лс",
           shop_info_text: "Якщо бажаєте продати NFT, зірки чи інші подарунки — пишіть у лс.",
           close: "Закрити",
+
+          /* Leaderboard */
           lb_title: "Лідерборд",
-          lb_sub: "Попадай у ТОП — отримуй більше ⭐ за місце!",
-          b_tour_title: "⚔️ Виклик суперника",
-          b_tour_sub: "Згенеруй рекорд, зроби ставку ⭐ і побий його за 3 години",
-          opponent: "Суперник", generate: "Згенерувати", stake: "Ставка ⭐",
-          start_challenge: "Почати виклик (3 год)", no_active_challenge: "Немає активного виклику.",
-          time_left_prefix: "Залишилось:",
-          rule_goal: "🎯 Мета: побий рекорд за 3 год", rule_prize: "💎 Виграш: ×1.5 від ставки", rule_risk: "⚠️ Якщо не встигаєш — ставка згорає",
-          make_bet: "Зробити ставку"
+          lb_sub: "Попадай у ТОП — отримуй більше ⭐ за місце!"
         },
         en: {
           instructions: "Click or Space — drop the block. After game over, click/space to play again.",
@@ -434,15 +487,30 @@
           nice_try: "Nice try 👍",
           restart_hint: "Click or press Space to start again",
           start_btn: "▶ Start",
-          pause_before_new_game: "Pause before new game",
+          pause_before_new game: "Pause before new game",
           you_can_start_in: "You can start in:",
           sec_suffix: "s",
+
           tasks_title: "Tasks",
           task_subscribe_text: "Subscribe to channel +1⭐",
           open: "Open",
           done: "Done",
           task_75_text: "🎯 Reach 75 highscore (+5.15⭐)",
           check: "Check",
+
+          b_tour_title: "⚔️ Challenge an opponent",
+          b_tour_sub: "Generate a target, place a ⭐ bet and beat it within 3 hours",
+          opponent: "Opponent",
+          generate: "Generate",
+          stake: "Stake ⭐",
+          start_challenge: "Start challenge (3h)",
+          no_active_challenge: "No active challenge.",
+          time_left_prefix: "Time left:",
+          rule_goal: "🎯 Goal: beat the score in 3 hours",
+          rule_prize: "💎 Prize: ×1.5 of your stake",
+          rule_risk: "⚠️ If you fail — you lose the stake",
+          make_bet: "Make a bet",
+
           balance: "Balance",
           wallet: "Wallet",
           invite_friends: "Invite friends",
@@ -454,20 +522,15 @@
           withdraw_hint: "Clicking deducts exactly 50⭐, the rest stays. You’ll then open a group/Share with a ready message and two codes.",
           withdraw_btn: "Withdraw",
           payout_list_title: "Payouts",
+
           shop_announcements: "Announcements",
           post_announcement: "Post an announcement",
           write_dm: "Message in DM",
           shop_info_text: "If you want to sell NFTs, stars or other gifts — message me in DM.",
           close: "Close",
+
           lb_title: "Leaderboard",
-          lb_sub: "Climb the TOP — earn more ⭐ for your rank!",
-          b_tour_title: "⚔️ Challenge an opponent",
-          b_tour_sub: "Generate a target, place a ⭐ bet and beat it within 3 hours",
-          opponent: "Opponent", generate: "Generate", stake: "Stake ⭐",
-          start_challenge: "Start challenge (3h)", no_active_challenge: "No active challenge.",
-          time_left_prefix: "Time left:",
-          rule_goal: "🎯 Goal: beat the score in 3 hours", rule_prize: "💎 Prize: ×1.5 of your stake", rule_risk: "⚠️ If you fail — you lose the stake",
-          make_bet: "Make a bet"
+          lb_sub: "Climb the TOP — earn more ⭐ for your rank!"
         }
       };
 
@@ -493,12 +556,14 @@
     });
   </script>
 
-  <!-- Лідерборд з GitHub (не критично для логіки реклами) -->
+  <!-- Лідерборд: читання з GitHub (або порожній шаблон 1..50) -->
   <script>
     const LB_URL = 'https://raw.githubusercontent.com/yarikyoucan/stack-game-ton/main/leaderboard.json';
+
     function _avatarSvg(){
       return 'data:image/svg+xml;utf8,'+encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28'><rect width='28' height='28' rx='14' fill='#1f2a44'/><text x='14' y='18' text-anchor='middle' font-size='14' fill='#9fb3ff'>👤</text></svg>");
     }
+
     async function fetchLeaderboard(){
       if(!LB_URL) return null;
       const url = LB_URL + (LB_URL.includes('?')?'&':'?') + 'v=' + Date.now();
@@ -508,18 +573,22 @@
       if(!Array.isArray(data)) throw new Error('Bad JSON format');
       return data;
     }
+
     function renderLeaderboard(rows){
       const list = document.getElementById('lbList');
       const note = document.getElementById('lbNote');
       if(!list) return;
+
       rows = Array.isArray(rows)? rows.slice(): [];
       rows.sort((a,b)=> (b?.score||0)-(a?.score||0));
+
       list.innerHTML='';
       for(let i=0;i<50;i++){
         const r = rows[i];
         const rank = i+1;
         const name = r ? (r.name || 'Player') : '—';
         const score = (r && typeof r.score==='number') ? r.score : '—';
+
         const row = document.createElement('div');
         row.className = 'lb-row ' + (rank===1?'rank-1':rank===2?'rank-2':rank===3?'rank-3':'');
         row.innerHTML = `
@@ -532,35 +601,43 @@
       }
       if(note) note.textContent = 'Оновлено з GitHub.';
     }
+
     async function loadLeaderboard(){
-      try{ const data = await fetchLeaderboard(); renderLeaderboard(data||[]); }
-      catch(e){ renderLeaderboard([]); const note = document.getElementById('lbNote'); if(note) note.textContent = 'Не вдалось завантажити лідерборд.'; console.warn('LB load error:', e); }
+      try{
+        const data = await fetchLeaderboard();
+        renderLeaderboard(data||[]);
+      }catch(e){
+        renderLeaderboard([]);
+        const note = document.getElementById('lbNote');
+        if(note) note.textContent = 'Не вдалось завантажити лідерборд.';
+        console.warn('LB load error:', e);
+      }
     }
     window.loadLeaderboard = loadLeaderboard;
-    document.addEventListener('DOMContentLoaded', ()=>{ if(document.getElementById('leaderboard')?.classList.contains('active')) loadLeaderboard(); });
+
+    document.addEventListener('DOMContentLoaded', ()=>{
+      if(document.getElementById('leaderboard')?.classList.contains('active')){
+        loadLeaderboard();
+      }
+    });
   </script>
 
-  <!-- Adsgram SDK вже підключено вище sad.min.js -->
-
-  <!-- Adexium SDK (без autoMode) та місток -->
-  <script src="https://cdn.tgads.space/assets/js/adexium-widget.min.js" type="text/javascript"></script>
+  <!-- Adexium SDK (твій CDN) + місток без autoMode -->
+  <script src="https://cdn.tgads.space/assets/js/adexium-widget.min.js"></script>
   <script type="text/javascript">
     document.addEventListener('DOMContentLoaded', () => {
       try {
-        const adexiumWidget = new AdexiumWidget({
-          wid: 'c3d8d1aa-64df-4d23-a839-0b9177ba156f',
-          adFormat: 'interstitial'
-        });
+        const adexiumWidget = new AdexiumWidget({wid: 'c3d8d1aa-64df-4d23-a839-0b9177ba156f', adFormat: 'interstitial'});
         window.__adexiumWidget = {
           show: () => new Promise((resolve, reject) => {
-            const offAll = () => {
+            const off = () => {
               adexiumWidget.off('adClosed', onClosed);
               adexiumWidget.off('adPlaybackCompleted', onDone);
               adexiumWidget.off('noAdFound', onNoAd);
             };
-            const onClosed = () => { offAll(); resolve(); };
-            const onDone   = () => { offAll(); resolve(); };
-            const onNoAd   = () => { offAll(); reject(new Error('no_ad')); };
+            const onClosed = () => { off(); resolve(); };
+            const onDone   = () => { off(); resolve(); };
+            const onNoAd   = () => { off(); reject(new Error('no_ad')); };
             adexiumWidget.on('adClosed', onClosed);
             adexiumWidget.on('adPlaybackCompleted', onDone);
             adexiumWidget.on('noAdFound', onNoAd);
