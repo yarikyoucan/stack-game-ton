@@ -1,28 +1,37 @@
-// script.js — ПОВНА ВЕРСІЯ з ротацією Adsgram/Adexium для завдання +0.1⭐
+// script.js — ПОВНА версія: гра, завдання, батли, коди, ротація Adsgram/Adexium
 "use strict";
 console.clear();
 
 /* ========= КОНСТАНТИ ========= */
-const TASK_AD_COOLDOWN_MS = 30_000;   // 1 реклама / 30с у завданні (+0.1⭐)
+// Таск «реклама раз на пів хвилини» (+0.1⭐)
+const TASK_AD_COOLDOWN_MS = 30_000;   // 0.5 хв
+// Після гри можна показати рекламу (якщо хочеш окремо)
 const GAME_AD_COOLDOWN_MS = 15_000;
+// Загальний захист від спаму рекламою (не обов'язково чіпати)
 const ANY_AD_COOLDOWN_MS  = 60_000;
+// Мінімальна пауза між двома показами в одному контексті
 const MIN_BETWEEN_SAME_CTX_MS = 10_000;
 
+// Пауза перед новою грою після реклами на екрані Game Over
 const POST_AD_TIMER_MS = 15_000;
 
+// Завдання «зіграй 100 ігор»
 const GAMES_TARGET = 100;
-const GAMES_REWARD = 10;
+const GAMES_REWARD = 5;  // у тебе в індексі було +5⭐ за 100 ігор
+
+// Вивід (рівно 50⭐)
 const WITHDRAW_CHUNK = 50;
 
-/* --- РОЗДІЛЕНІ БЛОКИ РЕКЛАМИ --- */
-const ADSGRAM_BLOCK_ID_TASK_MINUTE = "int-13961"; // 1 реклама / хв (+0.1⭐)
-const ADSGRAM_BLOCK_ID_TASK_510    = "int-15276"; // завдання на 5 і 10 реклам
+/* --- Adsgram блоки (заміни на свої, якщо потрібно) --- */
+const ADSGRAM_BLOCK_ID_TASK_MINUTE = "int-13961"; // таск раз на 30с (+0.1⭐)
+const ADSGRAM_BLOCK_ID_TASK_510    = "int-15276"; // завдання 5 і 10 реклам
 const ADSGRAM_BLOCK_ID_GAMEOVER    = "int-15275"; // після завершення гри
 
+/* --- Відкриття при виводі --- */
 const OPEN_MODE = "group"; // "group" | "share"
 const GROUP_LINK = "https://t.me/+Z6PMT40dYClhOTQ6";
 
-/* --- Квести на рекламу --- */
+/* --- Квести на рекламу 5 і 10 --- */
 const TASK5_TARGET = 5;
 const TASK10_TARGET = 10;
 const TASK_DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
@@ -40,14 +49,14 @@ let isPaused = false;
 let ad5Count = 0, ad10Count = 0;
 let lastTask5RewardAt = 0, lastTask10RewardAt = 0;
 
-/* --- таймер після реклами --- */
+/* --- пострекламний таймер --- */
 let postAdTimerActive = false;
 let postAdInterval = null;
 
 /* ========= РЕКЛАМА ========= */
-let AdTaskMinute = null;   // controller для 1/30с (+0.1⭐)
-let AdTask510    = null;   // controller для 5 і 10 реклам
-let AdGameover   = null;   // controller для «gameover»
+let AdTaskMinute = null;   // Adsgram controller: 1/півхв (+0.1⭐)
+let AdTask510    = null;   // Adsgram controller: 5/10 реклам
+let AdGameover   = null;   // Adsgram controller: game over
 
 let lastTaskAdAt = 0;
 let lastGameoverAdAt = 0;
@@ -61,11 +70,11 @@ let adInFlightGameover = false;
 let adInFlightTask5 = false;
 let adInFlightTask10 = false;
 
-/* --- Ротація провайдерів для task (+0.1⭐) --- */
-let taskAdProviderToggle = 0; // 0 -> Adsgram, 1 -> Adexium, 2 -> Adsgram, ...
+/* --- Ротація провайдерів для таску (+0.1⭐): Adsgram ⇄ Adexium --- */
+let taskAdProviderToggle = 0; // 0 -> Adsgram, 1 -> Adexium, 2 -> Adsgram ...
 
 /* ========= БАТЛ (виклик суперника) ========= */
-let oppScorePending = null;   // згенерований, але ще не запущений
+let oppScorePending = null;
 let challengeActive = false;
 let challengeStartAt = 0;
 let challengeDeadline = 0;
@@ -157,7 +166,7 @@ window.onload = function(){
     if (task50Completed){ t50.innerText="Виконано"; t50.classList.add("done"); }
     t50.addEventListener("click", ()=>{
       if (highscore >= 75 && !task50Completed){
-        addBalance(10);
+        addBalance(5.15);
         t50.innerText="Виконано"; t50.classList.add("done");
         task50Completed = true; saveData();
       } else {
@@ -189,8 +198,9 @@ window.onload = function(){
   // батл UI
   setupChallengeUI();
 
-  initAds();
+  initAds(); // ініціалізуємо Adsgram контролери
 
+  // 3D гра
   window.stackGame = new Game();
 
   updateAdTasksUI();
@@ -207,7 +217,7 @@ function subscribe(){
   saveData();
 }
 
-/* ========= Навігація ========= */
+/* ========= Навігація (дубль для кнопок меню) ========= */
 function showPage(id, btn){
   document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
   $(id).classList.add("active");
@@ -217,19 +227,10 @@ function showPage(id, btn){
 }
 window.showPage = showPage;
 
-/* ========= Лідерборд-заглушка ========= */
-function initLeaderboard(){
-  const tbody = document.querySelector("#leaderboard tbody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-  for (let i=1;i<=50;i++){
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${i}</td><td>—</td><td>—</td>`;
-    tbody.appendChild(tr);
-  }
-}
+/* ========= Лідерборд-заглушка (HTML-таблиці тут немає, тому просто no-op) ========= */
+function initLeaderboard(){ /* залишено порожнім навмисне */ }
 
-/* ========= Реклама Adsgram ========= */
+/* ========= Реклама: SDK Adsgram ========= */
 function initAds(){
   if (!window.Adsgram){
     console.warn("Adsgram SDK не завантажився");
@@ -244,39 +245,36 @@ function initAds(){
   try { AdGameover = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID_GAMEOVER }); }
   catch (e) { console.warn("Adsgram init (gameover) error:", e); }
 }
-function inTelegramWebApp(){ return !!(window.Telegram && window.Telegram.WebApp); }
 
-/** Показ Adexium interstitial (якщо SDK дозволяє). */
+function inTelegramWebApp(){ return !!(window.Telegram && Telegram.WebApp); }
+
+/** Показ Adexium interstitial через місток з index.html. Має фіксований таймаут і повертає {shown, reason}. */
 function showAdexiumInterstitial() {
   return new Promise(async (resolve) => {
     try {
-      if (!window.__adexiumReady || !window.__adexiumWidget) {
+      if (!window.__adexiumWidget || typeof window.__adexiumWidget.show !== 'function') {
         return resolve({ shown:false, reason:'adexium_not_ready' });
       }
-      if (typeof window.__adexiumWidget.show === 'function') {
-        try {
-          await window.__adexiumWidget.show();
-          return resolve({ shown:true });
-        } catch (err) {
-          return resolve({ shown:false, reason: err?.message || 'adexium_show_error' });
-        }
+      try {
+        await window.__adexiumWidget.show(); // місток сам має таймаут/події
+        return resolve({ shown:true });
+      } catch (err) {
+        return resolve({ shown:false, reason: err?.message || 'adexium_show_error' });
       }
-      // fallback, коли лише autoMode доступний
-      setTimeout(()=> resolve({ shown:true }), 1200);
     } catch (e) {
       resolve({ shown:false, reason:'adexium_unknown' });
     }
   });
 }
 
-/** Показ реклами (жорстке розділення контролерів за контекстом) + ротація для task */
+/** Показ реклами (розділено на контексти) + ротація для task */
 async function showInterstitialOnce(ctx, opts = {}){
   const isTaskMinute = (ctx === 'task');
   const isTask5 = (ctx === 'task5');
   const isTask10 = (ctx === 'task10');
   const isGameover = (ctx === 'gameover');
 
-  // суворо: без фолбеків між блоками (крім провайдерів всередині 'task')
+  // суворо: без фолбеків між Adsgram-блоками (крім провайдерів всередині 'task')
   const controller =
     isGameover ? AdGameover
     : isTaskMinute ? AdTaskMinute
@@ -303,7 +301,7 @@ async function showInterstitialOnce(ctx, opts = {}){
     }
     adInFlightTask = true;
 
-    // вибір порядку: парний — Adsgram, непарний — Adexium
+    // черга: парний — Adsgram, непарний — Adexium
     const useAdexiumFirst = (taskAdProviderToggle++ % 2) === 1;
 
     const tryAdsgram = async () => {
@@ -399,7 +397,7 @@ async function showInterstitialOnce(ctx, opts = {}){
   return { shown:false, reason:"unknown_ctx" };
 }
 
-/* ========= Реклама / 30с ========= */
+/* ========= Таск «реклама раз на пів хвилини» ========= */
 async function onWatchAdTaskClick(){
   const now = Date.now();
   const remainingGlobal = ANY_AD_COOLDOWN_MS - (now - lastAnyAdAt);
@@ -1018,7 +1016,7 @@ class Game{
     this.addBlock();
   }
 
-  addBlock(){
+  async addBlock(){
     const last=this.blocks[this.blocks.length-1];
     if(last && last.state===last.STATES.MISSED) return this.endGame();
     this.scoreEl.innerHTML=String(this.blocks.length-1);
@@ -1032,7 +1030,7 @@ class Game{
     updateHighscore(currentScore);
     gamesPlayedSinceClaim += 1; saveData(); updateGamesTaskUI();
 
-    // Показати саме «gameover»-блок без фолбеків
+    // Локальний показ реклами «gameover»: тільки Adsgram-блок для gameover, без фолбеків
     await showInterstitialOnce('gameover', { bypassGlobal:true, touchGlobal:false });
 
     this.startPostAdCountdown();
