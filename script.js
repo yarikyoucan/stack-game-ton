@@ -1,9 +1,9 @@
-// script.js — ПОВНА ВЕРСІЯ з ротацією Adsgram/Adexium для завдання +0.15⭐
+// script.js — ПОВНА ВЕРСІЯ з ротацією Adsgram/Adexium для завдання +0.1⭐
 "use strict";
 console.clear();
 
 /* ========= КОНСТАНТИ ========= */
-const TASK_AD_COOLDOWN_MS = 30_000;   // 1 реклама / хв у завданні (+0.15⭐)
+const TASK_AD_COOLDOWN_MS = 30_000;   // 1 реклама / 30с у завданні (+0.1⭐)
 const GAME_AD_COOLDOWN_MS = 15_000;
 const ANY_AD_COOLDOWN_MS  = 60_000;
 const MIN_BETWEEN_SAME_CTX_MS = 10_000;
@@ -15,7 +15,7 @@ const GAMES_REWARD = 10;
 const WITHDRAW_CHUNK = 50;
 
 /* --- РОЗДІЛЕНІ БЛОКИ РЕКЛАМИ --- */
-const ADSGRAM_BLOCK_ID_TASK_MINUTE = "int-13961"; // 1 реклама / хв (+0.15⭐)
+const ADSGRAM_BLOCK_ID_TASK_MINUTE = "int-13961"; // 1 реклама / хв (+0.1⭐)
 const ADSGRAM_BLOCK_ID_TASK_510    = "int-15276"; // завдання на 5 і 10 реклам
 const ADSGRAM_BLOCK_ID_GAMEOVER    = "int-15275"; // після завершення гри
 
@@ -45,7 +45,7 @@ let postAdTimerActive = false;
 let postAdInterval = null;
 
 /* ========= РЕКЛАМА ========= */
-let AdTaskMinute = null;   // controller для 1/хв (+0.15⭐)
+let AdTaskMinute = null;   // controller для 1/30с (+0.1⭐)
 let AdTask510    = null;   // controller для 5 і 10 реклам
 let AdGameover   = null;   // controller для «gameover»
 
@@ -61,7 +61,7 @@ let adInFlightGameover = false;
 let adInFlightTask5 = false;
 let adInFlightTask10 = false;
 
-/* --- Ротація провайдерів для task (+0.15⭐) --- */
+/* --- Ротація провайдерів для task (+0.1⭐) --- */
 let taskAdProviderToggle = 0; // 0 -> Adsgram, 1 -> Adexium, 2 -> Adsgram, ...
 
 /* ========= БАТЛ (виклик суперника) ========= */
@@ -295,7 +295,7 @@ async function showInterstitialOnce(ctx, opts = {}){
     }
   }
 
-  // ===== контекст TASK (+0.15⭐) з ротацією Adsgram/Adexium =====
+  // ===== контекст TASK (+0.1⭐) з ротацією Adsgram/Adexium =====
   if (isTaskMinute){
     if (adInFlightTask) return { shown:false, reason:"task_busy" };
     if (now - lastTaskAdAt < Math.max(MIN_BETWEEN_SAME_CTX_MS, TASK_AD_COOLDOWN_MS)) {
@@ -399,7 +399,7 @@ async function showInterstitialOnce(ctx, opts = {}){
   return { shown:false, reason:"unknown_ctx" };
 }
 
-/* ========= Реклама / хв ========= */
+/* ========= Реклама / 30с ========= */
 async function onWatchAdTaskClick(){
   const now = Date.now();
   const remainingGlobal = ANY_AD_COOLDOWN_MS - (now - lastAnyAdAt);
@@ -1071,4 +1071,3 @@ function updateHighscore(currentScore){
     $("highscore").innerText="🏆 "+highscore;
   }
 }
-
