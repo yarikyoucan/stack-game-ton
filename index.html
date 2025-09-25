@@ -33,8 +33,8 @@
         url('data:image/svg+xml;utf8,\
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="220" viewBox="0 0 800 220">\
   <rect width="800" height="220" fill="none"/>\
-  <path d="M0 190 L20 170 L45 172 L45 190 L70 160 L95 162 L95 190 L130 150 L160 152 Л160 190 Л200 165 Л230 167 Л230 190 Л270 155 Л310 157 Л310 190 Л350 170 Л380 172 Л380 190 Л420 160 Л455 162 Л455 190 Л495 168 Л530 170 Л530 190 Л570 156 Л610 158 Л610 190 Л650 170 Л690 172 Л690 190 Л730 160 Л770 165 Л770 190 Л800 150 Л800 220 Л0 220 Z" fill="%23040a1c"/>\
-  <path d="M0 200 L30 180 L50 180 L50 200 Л80 155 Л110 155 Л110 200 Л150 140 Л180 140 Л180 200 Л220 165 Л250 165 Л250 200 Л300 145 Л340 145 Л340 200 Л380 175 Л420 175 Л420 200 Л460 150 Л500 150 Л500 200 Л540 165 Л580 165 Л580 200 Л620 145 Л660 145 Л660 200 Л700 175 Л740 175 Л740 200 Л800 160 Л800 220 Л0 220 Z" fill="%23000a1a"/>\
+  <path d="M0 190 L20 170 L45 172 L45 190 L70 160 L95 162 L95 190 L130 150 L160 152 L160 190 L200 165 L230 167 L230 190 L270 155 L310 157 L310 190 L350 170 L380 172 L380 190 L420 160 L455 162 L455 190 L495 168 L530 170 L530 190 L570 156 L610 158 L610 190 L650 170 L690 172 L690 190 L730 160 L770 165 L770 190 L800 150 L800 220 L0 220 Z" fill="%23040a1c"/>\
+  <path d="M0 200 L30 180 L50 180 L50 200 L80 155 L110 155 L110 200 L150 140 L180 140 L180 200 L220 165 L250 165 L250 200 L300 145 L340 145 L340 200 L380 175 L420 175 L420 200 L460 150 L500 150 L500 200 L540 165 L580 165 L580 200 L620 145 L660 145 Л660 200 Л700 175 Л740 175 Л740 200 Л800 160 Л800 220 Л0 220 Z" fill="%23000a1a"/>\
   <g fill="%23ffd34d">\
     <rect x="58" y="184" width="6" height="10"/><rect x="66" y="184" width="6" height="10" opacity="0.6"/>\
     <rect x="206" y="186" width="6" height="10"/><rect x="214" y="186" width="6" height="10" opacity="0.6"/>\
@@ -227,11 +227,11 @@
     </div>
 
     <div class="task" id="taskAdOncePerMinute">
-      <span data-i18n="task_ad_minute_text">🎬 Переглянь рекламу +0.1⭐ <small>(раз на 1 хв)</small></span>
+      <span data-i18n="task_ad_minute_text">🎬 Переглянь рекламу +0.1⭐ <small>(раз на 30 с)</small></span>
       <button id="watchAdMinuteBtn" class="btn" data-i18n="watch">Дивитись</button>
     </div>
     <div class="task" id="taskAdStatus" style="display:none;">
-      <span><span data-i18n="next_available_in">⌛ Наступний перегляд доступний через:</span> <span id="adCooldownText">60с</span></span>
+      <span><span data-i18n="next_available_in">⌛ Наступний перегляд доступний через:</span> <span id="adCooldownText">30с</span></span>
       <button class="btn" disabled data-i18n="wait">Очікуй…</button>
     </div>
 
@@ -394,10 +394,7 @@
   <script src="https://richinfo.co/richpartners/telegram/js/tg-ob.js"></script>
   <script>
     window.TelegramAdsController = new TelegramAdsController();
-    window.TelegramAdsController.initialize({
-      pubId: "965326",
-      appId: "3592",
-    });
+    window.TelegramAdsController.initialize({ pubId: "965326", appId: "3592" });
   </script>
 
   <!-- App helpers + i18n -->
@@ -442,7 +439,7 @@
           done: "Виконано",
           task_75_text: "🎯 Досягни рекорду 75 (+5.15⭐)",
           check: "Перевірити",
-          task_ad_minute_text: "🎬 Переглянь рекламу +0.1⭐ <small>(раз на 1 хв)</small>",
+          task_ad_minute_text: "🎬 Переглянь рекламу +0.1⭐ <small>(раз на 30 с)</small>",
           watch: "Дивитись",
           next_available_in: "⌛ Наступний перегляд доступний через:",
           wait: "Очікуй…",
@@ -503,7 +500,7 @@
           done: "Done",
           task_75_text: "🎯 Reach 75 highscore (+5.15⭐)",
           check: "Check",
-          task_ad_minute_text: "🎬 Watch an ad +0.1⭐ <small>(once per minute)</small>",
+          task_ad_minute_text: "🎬 Watch an ad +0.1⭐ <small>(every 30 s)</small>",
           watch: "Watch",
           next_available_in: "⌛ Next available in:",
           wait: "Wait…",
@@ -571,15 +568,12 @@
     });
   </script>
 
-  <!-- Лідерборд: читання з GitHub (або порожній шаблон 1..50) -->
+  <!-- Лідерборд: читання з GitHub -->
   <script>
-    /* Твій RAW URL до leaderboard.json */
     const LB_URL = 'https://raw.githubusercontent.com/yarikyoucan/stack-game-ton/main/leaderboard.json';
-
     function _avatarSvg(){
       return 'data:image/svg+xml;utf8,'+encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28'><rect width='28' height='28' rx='14' fill='#1f2a44'/><text x='14' y='18' text-anchor='middle' font-size='14' fill='#9fb3ff'>👤</text></svg>");
     }
-
     async function fetchLeaderboard(){
       if(!LB_URL) return null;
       const url = LB_URL + (LB_URL.includes('?')?'&':'?') + 'v=' + Date.now();
@@ -589,22 +583,18 @@
       if(!Array.isArray(data)) throw new Error('Bad JSON format');
       return data;
     }
-
     function renderLeaderboard(rows){
       const list = document.getElementById('lbList');
       const note = document.getElementById('lbNote');
       if(!list) return;
-
       rows = Array.isArray(rows)? rows.slice(): [];
       rows.sort((a,b)=> (b?.score||0)-(a?.score||0));
-
       list.innerHTML='';
       for(let i=0;i<50;i++){
         const r = rows[i];
         const rank = i+1;
         const name = r ? (r.name || 'Player') : '—';
         const score = (r && typeof r.score==='number') ? r.score : '—';
-
         const row = document.createElement('div');
         row.className = 'lb-row ' + (rank===1?'rank-1':rank===2?'rank-2':rank===3?'rank-3':'');
         row.innerHTML = `
@@ -617,38 +607,21 @@
       }
       if(note) note.textContent = 'Оновлено з GitHub.';
     }
-
     async function loadLeaderboard(){
-      try{
-        const data = await fetchLeaderboard();
-        renderLeaderboard(data||[]);
-      }catch(e){
-        renderLeaderboard([]);
-        const note = document.getElementById('lbNote');
-        if(note) note.textContent = 'Не вдалось завантажити лідерборд.';
-        console.warn('LB load error:', e);
-      }
+      try{ renderLeaderboard(await fetchLeaderboard()||[]); }
+      catch(e){ renderLeaderboard([]); const note = document.getElementById('lbNote'); if(note) note.textContent = 'Не вдалось завантажити лідерборд.'; console.warn('LB load error:', e); }
     }
     window.loadLeaderboard = loadLeaderboard;
-
-    document.addEventListener('DOMContentLoaded', ()=>{
-      if(document.getElementById('leaderboard')?.classList.contains('active')){
-        loadLeaderboard();
-      }
-    });
+    document.addEventListener('DOMContentLoaded', ()=>{ if(document.getElementById('leaderboard')?.classList.contains('active')){ loadLeaderboard(); } });
   </script>
 
-  <!-- Adexium SDK (правильний CDN) -->
+  <!-- Adexium SDK -->
   <script src="https://cdn.adexium.tech/assets/js/adexium-widget.min.js"></script>
-
-  <!-- Місток для інтеграції Adexium з існуючим script.js (ротація з Adsgram у +0.15⭐) -->
+  <!-- Місток Adexium -->
   <script>
     (function () {
       document.addEventListener('DOMContentLoaded', function () {
-        if (!window.AdexiumWidget) {
-          console.warn('AdexiumWidget не завантажився');
-          return;
-        }
+        if (!window.AdexiumWidget) { console.warn('AdexiumWidget не завантажився'); return; }
         var adex = new window.AdexiumWidget({
           wid: '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae',
           adFormat: 'interstitial',
