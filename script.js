@@ -1,3 +1,4 @@
+// script.js — ПОВНА ВЕРСІЯ з ротацією Adsgram/Adexium для завдання +0.15⭐
 "use strict";
 console.clear();
 
@@ -59,6 +60,9 @@ let adInFlightTask = false;
 let adInFlightGameover = false;
 let adInFlightTask5 = false;
 let adInFlightTask10 = false;
+
+/* --- Ротація провайдерів для task (+0.15⭐) --- */
+let taskAdProviderToggle = 0; // 0 -> Adsgram, 1 -> Adexium, 2 -> Adsgram, ...
 
 /* ========= БАТЛ (виклик суперника) ========= */
 let oppScorePending = null;   // згенерований, але ще не запущений
@@ -242,21 +246,43 @@ function initAds(){
 }
 function inTelegramWebApp(){ return !!(window.Telegram && window.Telegram.WebApp); }
 
-/** Показ реклами (жорстке розділення контролерів за контекстом) */
+/** Показ Adexium interstitial (якщо SDK дозволяє). */
+function showAdexiumInterstitial() {
+  return new Promise(async (resolve) => {
+    try {
+      if (!window.__adexiumReady || !window.__adexiumWidget) {
+        return resolve({ shown:false, reason:'adexium_not_ready' });
+      }
+      if (typeof window.__adexiumWidget.show === 'function') {
+        try {
+          await window.__adexiumWidget.show();
+          return resolve({ shown:true });
+        } catch (err) {
+          return resolve({ shown:false, reason: err?.message || 'adexium_show_error' });
+        }
+      }
+      // fallback, коли лише autoMode доступний
+      setTimeout(()=> resolve({ shown:true }), 1200);
+    } catch (e) {
+      resolve({ shown:false, reason:'adexium_unknown' });
+    }
+  });
+}
+
+/** Показ реклами (жорстке розділення контролерів за контекстом) + ротація для task */
 async function showInterstitialOnce(ctx, opts = {}){
   const isTaskMinute = (ctx === 'task');
   const isTask5 = (ctx === 'task5');
   const isTask10 = (ctx === 'task10');
   const isGameover = (ctx === 'gameover');
 
-  // суворо: без фолбеків між блоками
+  // суворо: без фолбеків між блоками (крім провайдерів всередині 'task')
   const controller =
     isGameover ? AdGameover
     : isTaskMinute ? AdTaskMinute
     : (isTask5 || isTask10) ? AdTask510
     : null;
 
-  if (!controller) return { shown:false, reason:"no_controller" };
   if (!inTelegramWebApp()) return { shown:false, reason:"not_telegram" };
 
   const now = Date.now();
@@ -269,25 +295,45 @@ async function showInterstitialOnce(ctx, opts = {}){
     }
   }
 
+  // ===== контекст TASK (+0.15⭐) з ротацією Adsgram/Adexium =====
   if (isTaskMinute){
     if (adInFlightTask) return { shown:false, reason:"task_busy" };
     if (now - lastTaskAdAt < Math.max(MIN_BETWEEN_SAME_CTX_MS, TASK_AD_COOLDOWN_MS)) {
       return { shown:false, reason:"task_ctx_cooldown" };
     }
     adInFlightTask = true;
-    try {
-      await controller.show();
+
+    // вибір порядку: парний — Adsgram, непарний — Adexium
+    const useAdexiumFirst = (taskAdProviderToggle++ % 2) === 1;
+
+    const tryAdsgram = async () => {
+      if (!controller) return { shown:false, reason:'adsgram_no_controller' };
+      try {
+        await controller.show();
+        return { shown:true };
+      } catch (err) {
+        return { shown:false, reason: err?.description || err?.state || 'no_fill_or_error' };
+      }
+    };
+    const tryAdexium = async () => await showAdexiumInterstitial();
+
+    let res = useAdexiumFirst ? await tryAdexium() : await tryAdsgram();
+    if (!res.shown) {
+      const fallback = useAdexiumFirst ? await tryAdsgram() : await tryAdexium();
+      if (fallback.shown) res = fallback;
+    }
+
+    if (res.shown){
       lastTaskAdAt = Date.now();
       if (touchGlobal) lastAnyAdAt = lastTaskAdAt;
       saveData();
-      return { shown:true };
-    } catch (err) {
-      return { shown:false, reason: err?.description || err?.state || "no_fill_or_error" };
-    } finally {
-      adInFlightTask = false;
     }
+
+    adInFlightTask = false;
+    return res;
   }
 
+  // ===== контекст TASK5 =====
   if (isTask5){
     if (adInFlightTask5) return { shown:false, reason:"task5_busy" };
     if (now - lastTask5AdAt < MIN_BETWEEN_SAME_CTX_MS) {
@@ -295,6 +341,7 @@ async function showInterstitialOnce(ctx, opts = {}){
     }
     adInFlightTask5 = true;
     try{
+      if (!controller) return { shown:false, reason:'adsgram_no_controller' };
       await controller.show();
       lastTask5AdAt = Date.now();
       if (touchGlobal) lastAnyAdAt = lastTask5AdAt;
@@ -307,6 +354,7 @@ async function showInterstitialOnce(ctx, opts = {}){
     }
   }
 
+  // ===== контекст TASK10 =====
   if (isTask10){
     if (adInFlightTask10) return { shown:false, reason:"task10_busy" };
     if (now - lastTask10AdAt < MIN_BETWEEN_SAME_CTX_MS) {
@@ -314,6 +362,7 @@ async function showInterstitialOnce(ctx, opts = {}){
     }
     adInFlightTask10 = true;
     try{
+      if (!controller) return { shown:false, reason:'adsgram_no_controller' };
       await controller.show();
       lastTask10AdAt = Date.now();
       if (touchGlobal) lastAnyAdAt = lastTask10AdAt;
@@ -326,6 +375,7 @@ async function showInterstitialOnce(ctx, opts = {}){
     }
   }
 
+  // ===== контекст GAMEOVER =====
   if (isGameover){
     if (adInFlightGameover) return { shown:false, reason:"gameover_busy" };
     if (now - lastGameoverAdAt < Math.max(MIN_BETWEEN_SAME_CTX_MS, GAME_AD_COOLDOWN_MS)) {
@@ -333,6 +383,7 @@ async function showInterstitialOnce(ctx, opts = {}){
     }
     adInFlightGameover = true;
     try{
+      if (!controller) return { shown:false, reason:'adsgram_no_controller' };
       await controller.show();
       lastGameoverAdAt = Date.now();
       if (touchGlobal) lastAnyAdAt = lastGameoverAdAt;
@@ -1020,3 +1071,4 @@ function updateHighscore(currentScore){
     $("highscore").innerText="🏆 "+highscore;
   }
 }
+
