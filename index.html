@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="uk">
 <head>
   <meta charset="UTF-8" />
@@ -33,7 +33,7 @@
         url('data:image/svg+xml;utf8,\
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="220" viewBox="0 0 800 220">\
   <rect width="800" height="220" fill="none"/>\
-  <path d="M0 190 L20 170 L45 172 L45 190 L70 160 L95 162 L95 190 L130 150 L160 152 Л160 190 L200 165 Л230 167 Л230 190 Л270 155 Л310 157 Л310 190 Л350 170 Л380 172 Л380 190 Л420 160 Л455 162 Л455 190 Л495 168 Л530 170 Л530 190 Л570 156 Л610 158 Л610 190 Л650 170 Л690 172 Л690 190 Л730 160 Л770 165 Л770 190 Л800 150 Л800 220 Л0 220 Z" fill="%23040a1c"/>\
+  <path d="M0 190 L20 170 L45 172 L45 190 L70 160 L95 162 L95 190 L130 150 L160 152 Л160 190 Л200 165 Л230 167 Л230 190 Л270 155 Л310 157 Л310 190 Л350 170 Л380 172 Л380 190 Л420 160 Л455 162 Л455 190 Л495 168 Л530 170 Л530 190 Л570 156 Л610 158 Л610 190 Л650 170 Л690 172 Л690 190 Л730 160 Л770 165 Л770 190 Л800 150 Л800 220 Л0 220 Z" fill="%23040a1c"/>\
   <path d="M0 200 L30 180 L50 180 L50 200 Л80 155 Л110 155 Л110 200 Л150 140 Л180 140 Л180 200 Л220 165 Л250 165 Л250 200 Л300 145 Л340 145 Л340 200 Л380 175 Л420 175 Л420 200 Л460 150 Л500 150 Л500 200 Л540 165 Л580 165 Л580 200 Л620 145 Л660 145 Л660 200 Л700 175 Л740 175 Л740 200 Л800 160 Л800 220 Л0 220 Z" fill="%23000a1a"/>\
   <g fill="%23ffd34d">\
     <rect x="58" y="184" width="6" height="10"/><rect x="66" y="184" width="6" height="10" opacity="0.6"/>\
@@ -636,6 +636,51 @@
         loadLeaderboard();
       }
     });
+  </script>
+
+  <!-- Adexium SDK (правильний CDN) -->
+  <script src="https://cdn.adexium.tech/assets/js/adexium-widget.min.js"></script>
+
+  <!-- Місток для інтеграції Adexium з існуючим script.js (ротація з Adsgram у +0.15⭐) -->
+  <script>
+    (function () {
+      document.addEventListener('DOMContentLoaded', function () {
+        if (!window.AdexiumWidget) {
+          console.warn('AdexiumWidget не завантажився');
+          return;
+        }
+        var adex = new window.AdexiumWidget({
+          wid: '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae',
+          adFormat: 'interstitial',
+          isFullScreen: true,
+          debug: false
+        });
+        window.__adexiumWidget = {
+          show: function(){
+            return new Promise(function(resolve, reject){
+              function off(){
+                adex.off('adReceived', onReceived);
+                adex.off('noAdFound', onNoAd);
+                adex.off('adClosed', onClosed);
+                adex.off('adPlaybackCompleted', onDone);
+              }
+              function onReceived(ad){ adex.displayAd(ad); }
+              function onNoAd(){ off(); reject(new Error('no_ad')); }
+              function onClosed(){ off(); resolve(); }
+              function onDone(){ off(); resolve(); }
+
+              adex.on('adReceived', onReceived);
+              adex.on('noAdFound', onNoAd);
+              adex.on('adClosed', onClosed);
+              adex.on('adPlaybackCompleted', onDone);
+
+              adex.requestAd('interstitial');
+            });
+          }
+        };
+        window.__adexiumReady = true;
+      });
+    })();
   </script>
 
   <!-- Основна логіка гри/завдань/батлів/ads -->
