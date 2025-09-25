@@ -3,7 +3,7 @@
 console.clear();
 
 /* ========= КОНСТАНТИ ========= */
-const TASK_AD_COOLDOWN_MS = 60_000;   // 1 реклама / хв у завданні (+0.15⭐)
+const TASK_AD_COOLDOWN_MS = 30_000;   // 1 реклама / хв у завданні (+0.15⭐)
 const GAME_AD_COOLDOWN_MS = 15_000;
 const ANY_AD_COOLDOWN_MS  = 60_000;
 const MIN_BETWEEN_SAME_CTX_MS = 10_000;
