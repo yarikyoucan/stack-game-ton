@@ -188,24 +188,13 @@
   </style>
 
   <!-- 2) Adexium SDK (за документацією) -->
-  <script src="https://cdn.tgads.space/assets/js/adexium-widget.min.js"></script>
-  <script>
-    // Мінімальна інтеграція: створюємо віджет і вмикаємо autoMode після DOMContentLoaded
+ <script type="text/javascript" src="https://cdn.tgads.space/assets/js/adexium-widget.min.js"></script>
+<script type="text/javascript">
     document.addEventListener('DOMContentLoaded', () => {
-      try{
-        const adexiumWidget = new AdexiumWidget({
-          wid: '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae',
-          adFormat: 'interstitial'
-        });
+        const adexiumWidget = new AdexiumWidget({wid: 'c3d8d1aa-64df-4d23-a839-0b9177ba156f', adFormat: 'interstitial'});
         adexiumWidget.autoMode();
-        // Позначка готовності для script.js (не обовʼязково, але корисно)
-        window.__adexiumReady = true;
-      }catch(e){
-        console.warn('Adexium init error', e);
-        window.__adexiumReady = false;
-      }
     });
-  </script>
+</script>
 </head>
 <body>
 
