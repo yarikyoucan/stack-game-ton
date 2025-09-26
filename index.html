@@ -188,20 +188,14 @@
   </style>
 
   <!-- ====== Adexium SDK (без автопоказів) ====== -->
-  <script src="https://cdn.tgads.space/assets/js/adexium-widget.min.js"></script>
-  <script>
+ <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
+  <script type="text/javascript" src="https://cdn.tgads.space/assets/js/adexium-widget.min.js"></script>
+<script type="text/javascript">
     document.addEventListener('DOMContentLoaded', () => {
-      try {
-        const WID = '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae'; // ВАЖЛИВО: той самий, що в script.js
-        window.__adexiumReady = (typeof AdexiumWidget === 'function');
-        window.__getAdexium = () => new AdexiumWidget({ wid: WID, adFormat: 'interstitial' });
-      } catch (e) {
-        console.warn('Adexium prepare error', e);
-        window.__adexiumReady = false;
-        window.__getAdexium = null;
-      }
+        const adexiumWidget = new AdexiumWidget({wid: '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae', adFormat: 'interstitial'});
+        adexiumWidget.autoMode();
     });
-  </script>
+</script>
 </head>
 <body>
 
