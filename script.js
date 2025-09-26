@@ -1,4 +1,4 @@
-// script.js — ПОВНА версія: гра, завдання, батли, коди, Adsgram/Adexium
+// script.js — ПОВНА версія: гра, завдання, батли, коди, Adsgram/Adexium 
 "use strict";
 console.clear();
 
@@ -43,7 +43,8 @@ const ALPH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 
 /* ========= ADEXIUM ========= */
-const ADEXIUM_WID = "c3d8d1aa-64df-4d23-a839-0b9177ba156f";
+// Вирівняно з index.html
+const ADEXIUM_WID = "8d2ce1f1-ae64-4fc3-ac46-41bc92683fae";
 const ADEXIUM_FORMAT = "interstitial";
 
 /* ========= СТАН ========= */
@@ -57,7 +58,7 @@ let lastTask5RewardAt = 0, lastTask10RewardAt = 0;
 
 /* --- щоденні лічильники +0.1⭐ окремо для провайдерів --- */
 let gramCount = 0, exCount = 0;     // перегляди за сьогодні
-let lastGramAt = 0, lastExAt = 0;   // не блокують покази (DAILY_COOLDOWN_MS = 0), лишаємо для статистики
+let lastGramAt = 0, lastExAt = 0;   // не блокують покази (DAILY_COOLDOWN_MS = 0)
 let dailyStamp = "";                // 'YYYY-MM-DD' для авто-ресету
 
 /* --- пострекламний таймер --- */
@@ -223,7 +224,7 @@ window.onload = function(){
 
   // Ініт SDK Adsgram + Adexium
   initAds();
-  setupAdexiumBridge();
+  setupAdexiumBridge(); // підключаємо стабільний показ Adexium по кліку
 
   // 3D гра
   window.stackGame = new Game();
@@ -276,8 +277,6 @@ function initAds(){
   catch (e) { console.warn("Adsgram init (gameover) error:", e); }
 }
 
-function inTelegramWebApp(){ return !!(window.Telegram && Telegram.WebApp); }
-
 async function showAdsgram(controller){
   if (!controller) return { shown:false, reason:'adsgram_no_controller' };
   try{
@@ -288,53 +287,66 @@ async function showAdsgram(controller){
   }
 }
 
-/* ========= Adexium: стабільний місток без кулдаунів ========= */
-/*
-  - Ініціюємо новий AdexiumWidget на кожний показ.
-  - Слухаємо window.message для {source:'adexium', type:'open|shown|close|dismiss|error|no_fill'}.
-  - Якщо SDK ще не готовий — чекаємо до 6с.
-  - Якщо подій немає — safety-таймер 8с вважає показ успішним.
+/* ========= Adexium: стабільний місток без автопоказів =========
+   Пріоритет:
+   1) Якщо index.html надав window.__getAdexium — використовуємо його (ручний показ).
+   2) Інакше створюємо AdexiumWidget локально за ADEXIUM_WID і показуємо.
 */
 function setupAdexiumBridge(){
-  if (window.__adexiumWidget && typeof window.__adexiumWidget.show === "function") return;
-
   window.__adexiumWidget = {
     show: () => new Promise((resolve, reject)=>{
+      // 1) фабрика з index.html (бажаний шлях)
+      if (typeof window.__getAdexium === "function"){
+        try{
+          const w = window.__getAdexium();
+          const tryShow = async () => {
+            try {
+              if (typeof w.show === "function") { await w.show(); resolve(true); return; }
+              if (typeof w.open === "function") { await w.open(); resolve(true); return; }
+              if (typeof w.start === "function"){ await w.start(); resolve(true); return; }
+              if (typeof w.autoMode === "function"){ w.autoMode(); resolve(true); return; }
+              resolve(true); // fallback: вважаємо показаним
+            } catch (e) { reject(e); }
+          };
+          tryShow();
+          return;
+        }catch(e){ /* падаємо в локальний режим */ }
+      }
+
+      // 2) локальне створення віджета
       const startWait = Date.now();
       const maxWaitSDK = 6000;
-
       const poll = setInterval(()=>{
         if (typeof window.AdexiumWidget === "function"){
           clearInterval(poll);
           try{
             const w = new window.AdexiumWidget({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT });
             let finished = false;
+            const cleanup = () => window.removeEventListener("message", onMsg);
+            const done = (ok, why) => { if (finished) return; finished = true; cleanup(); ok ? resolve(true) : reject(new Error(why||"adexium_failed")); };
 
-            const done = (ok, why) => {
-              if (finished) return;
-              finished = true;
-              cleanup();
-              ok ? resolve(true) : reject(new Error(why || "adexium_failed"));
-            };
-
-            // деякі білди мають autoMode, інші — show()
-            try { typeof w.autoMode === "function" ? w.autoMode() : (typeof w.show==="function" && w.show()); }
-            catch(e){ /* ігноруємо, є safety таймер */ }
+            // показ (без авто у head!)
+            try { typeof w.show === "function" ? w.show() :
+                  typeof w.open === "function" ? w.open() :
+                  typeof w.start === "function" ? w.start() :
+                  typeof w.autoMode === "function" ? w.autoMode() : null; }
+            catch(e){ /* ігноруємо */ }
 
             function onMsg(ev){
               try{
                 const d = ev?.data;
                 if (!d || typeof d!=="object") return;
                 if (d.source === "adexium"){
+                  // для інтерстішала вважаємо будь-яку взаємодію як успіх
                   if (d.type === "open" || d.type === "shown" || d.type === "close" || d.type === "dismiss") done(true);
                   if (d.type === "error" || d.type === "no_fill") done(false, d.type);
                 }
               }catch{}
             }
             window.addEventListener("message", onMsg);
-            const tm = setTimeout(()=>done(true, "timeout_succeed"), 8000);
 
-            function cleanup(){ clearTimeout(tm); window.removeEventListener("message", onMsg); }
+            // safety таймер (8с) — якщо подій немає, вважаємо показаним
+            setTimeout(()=>done(true, "timeout_succeed"), 8000);
           }catch(e){ reject(e); }
         } else if (Date.now()-startWait > maxWaitSDK){
           clearInterval(poll);
@@ -387,7 +399,6 @@ function updateDailyUI(){
 }
 
 async function onWatchGramDaily(){
-  // денний ліміт
   if (gramCount >= DAILY_CAP) return;
 
   const res = await showAdsgram(AdTaskMinute);
@@ -403,7 +414,7 @@ async function onWatchGramDaily(){
 async function onWatchExDaily(){
   if (exCount >= DAILY_CAP) return;
 
-  const res = await showAdexiumInterstitial();
+  const res = await showAdexiumInterstitial(); // ← показ саме Adexium
   if (!res.shown) return;
 
   lastExAt = Date.now(); // статистика
@@ -674,7 +685,7 @@ function onCheckGames100(){
   }
 }
 
-/* ========= БАТЛ: логіка (повний UI, oppScorePending зберігається) ========= */
+/* ========= БАТЛ: логіка ========= */
 function weightedOppScore(){
   const r = Math.random();
   if (r < 0.15){
@@ -694,7 +705,6 @@ function setupChallengeUI(){
   const leftEl = $("challengeLeft");
   const statusEl = $("challengeStatus");
 
-  // Початковий стан (oppScorePending з localStorage)
   const storedOpp = localStorage.getItem("oppScorePending");
   if (storedOpp && !isNaN(+storedOpp)) oppScorePending = +storedOpp;
   scoreBox.textContent = oppScorePending!=null ? String(oppScorePending) : "—";
@@ -727,7 +737,7 @@ function setupChallengeUI(){
     challengeStartAt = Date.now();
     challengeDeadline = challengeStartAt + 3*60*60*1000; // 3 години
     challengeStake = stake;
-    challengeOpp = oppScorePending; // фіксуємо поточного суперника
+    challengeOpp = oppScorePending;
 
     info.textContent = `Виклик активний! Твій суперник має рекорд ${challengeOpp}. Побий його до завершення таймера.`;
     checkBtn.disabled = false;
@@ -755,7 +765,7 @@ function setupChallengeUI(){
     const expired = now > challengeDeadline;
 
     if (won){
-      addBalance(challengeStake * 1.5); // виграш
+      addBalance(challengeStake * 1.5);
       statusEl.textContent = "✅ Виконано! Нараховано " + (challengeStake*1.5).toFixed(2) + "⭐";
       checkBtn.disabled = true;
       finishChallenge();
@@ -768,7 +778,6 @@ function setupChallengeUI(){
     }
   };
 
-  // Якщо відновлювали зі сховища (активний виклик)
   const storedActive = localStorage.getItem("challengeActive")==="true";
   if (storedActive){
     challengeActive = true;
@@ -796,7 +805,7 @@ function finishChallenge(){
   challengeDeadline = 0;
   challengeStake = 0;
   challengeOpp = 0;
-  oppScorePending = null; // очищаємо «рекорд суперника» після завершення
+  oppScorePending = null;
   const scoreBox = $("opponentScore");
   if (scoreBox) scoreBox.textContent = "—";
   $("challengeCountdown").style.display = "none";
@@ -809,7 +818,6 @@ class Stage{
   constructor(){
     this.container = document.getElementById("container");
     this.scene = new THREE.Scene();
-    // прозорий рендерер, щоб CSS-фон було видно під грою
     this.renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setClearColor(0x000000, 0);
