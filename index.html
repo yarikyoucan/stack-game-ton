@@ -5,14 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Stack Game</title>
 
-  <!-- Telegram Mini Apps SDK -->
+  <!-- 1) Telegram Mini Apps SDK (має бути у <head>) -->
   <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
 
   <!-- ====== СТИЛІ ====== -->
   <style>
+    /* --- БАЗА ІНТЕРФЕЙСУ --- */
     body{margin:0;font-family:Arial,sans-serif;background:#0f172a;display:flex;flex-direction:column;height:100vh;padding-bottom:64px}
     .page{flex:1;display:none;overflow:auto;padding:10px}.page.active{display:block}
 
+    /* Нижнє меню — напівпрозоре */
     .menu{display:flex;justify-content:space-around;border-top:1px solid rgba(255,255,255,.15);background:rgba(15,23,42,.75);padding:10px 0;position:fixed;left:0;right:0;bottom:0;z-index:9999;backdrop-filter:blur(6px)}
     .menu button{flex:1;background:none;border:none;font-size:22px;cursor:pointer;color:#fff}.menu button.active{color:#3b82f6;font-weight:bold}
 
@@ -20,7 +22,7 @@
     .task button{background:#007bff;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}.task button.done{background:#28a745}.task button:disabled{opacity:.6;cursor:not-allowed}
     .balance{font-size:20px;margin-bottom:20px;text-align:center}
 
-    /* ГРА: фон + прозорий canvas */
+    /* --- ГРА: нічне небо + місяць + зірки + будинки, прозорий canvas --- */
     #container{
       position:relative;width:100%;height:100%;overflow:hidden;
       background:
@@ -37,7 +39,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="220" viewBox="0 0 800 220">\
   <rect width="800" height="220" fill="none"/>\
   <path d="M0 190 L20 170 L45 172 L45 190 L70 160 L95 162 L95 190 L130 150 L160 152 L160 190 L200 165 L230 167 L230 190 L270 155 L310 157 L310 190 L350 170 L380 172 L380 190 L420 160 L455 162 L455 190 L495 168 L530 170 Л530 190 Л570 156 Л610 158 Л610 190 Л650 170 Л690 172 Л690 190 Л730 160 Л770 165 Л770 190 Л800 150 Л800 220 Л0 220 Z" fill="%23040a1c"/>\
-  <path d="M0 200 L30 180 L50 180 L50 200 L80 155 L110 155 Л110 200 Л150 140 Л180 140 Л180 200 Л220 165 Л250 165 Л250 200 Л300 145 Л340 145 Л340 200 Л380 175 Л420 175 Л420 200 Л460 150 Л500 150 Л500 200 Л540 165 Л580 165 Л580 200 Л620 145 Л660 145 Л660 200 Л700 175 Л740 175 Л740 200 Л800 160 Л800 220 Л0 220 Z" fill="%23000a1a"/>\
+  <path d="M0 200 L30 180 L50 180 L50 200 Л80 155 Л110 155 Л110 200 Л150 140 Л180 140 Л180 200 Л220 165 Л250 165 Л250 200 Л300 145 Л340 145 Л340 200 Л380 175 Л420 175 Л420 200 Л460 150 Л500 150 Л500 200 Л540 165 Л580 165 Л580 200 Л620 145 Л660 145 Л660 200 Л700 175 Л740 175 Л740 200 Л800 160 Л800 220 Л0 220 Z" fill="%23000a1a"/>\
   <g fill="%23ffd34d">\
     <rect x="58" y="184" width="6" height="10"/><rect x="66" y="184" width="6" height="10" opacity="0.6"/>\
     <rect x="206" y="186" width="6" height="10"/><rect x="214" y="186" width="6" height="10" opacity="0.6"/>\
@@ -141,7 +143,14 @@
     .battle-panel .cta{display:flex;gap:8px;align-items:center}
     .battle-panel .cta .btn{padding:10px 12px;border-radius:10px}
 
-    /* Лідерборд */
+    .shop-card{position:relative}
+    .info-btn{position:absolute;top:10px;right:10px;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;cursor:pointer;background:rgba(255,255,255,.12);color:#eaf2ff;border:1px solid rgba(255,255,255,.25);font-weight:900;line-height:1;backdrop-filter:blur(6px)}
+    .info-btn:hover{filter:brightness(1.05)}
+    .info-pop{position:absolute;top:54px;right:12px;z-index:5;max-width:280px;background:rgba(15,23,42,.96); color:#eaf2ff; border:1px solid rgba(255,255,255,.18);border-radius:12px; padding:12px; box-shadow:0 10px 26px rgba(0,0,0,.35); display:none}
+    .info-pop.open{display:block}
+    .info-pop p{margin:0 0 10px;font-size:14px;line-height:1.35}
+
+    /* ======= ЛІДЕРБОРД ======= */
     #leaderboard.themed{
       background-image:
         radial-gradient(1200px 500px at 15% 0%, rgba(99,102,241,.35), transparent 60%),
@@ -158,7 +167,7 @@
     #lbList{width:92%;margin:0 auto 18px}
     .lb-row{
       display:grid;
-      grid-template-columns:56px 1fr 70px 90px;
+      grid-template-columns:56px 1fr 70px 90px; /* rank | name | ?⭐ | рекорд */
       align-items:center;gap:10px;
       background:rgba(255,255,255,.06);
       border:1px solid rgba(255,255,255,.15);
@@ -178,8 +187,25 @@
     .rank-3{background:linear-gradient(135deg,rgba(244,114,182,.25),rgba(255,255,255,.06));border-color:rgba(244,114,182,.6)}
   </style>
 
-  <!-- Adexium SDK (твій первинний скрипт; якщо не віддасть клас — підстрахуємося нижче) -->
+  <!-- 2) Adexium SDK (за документацією) -->
   <script src="https://cdn.tgads.space/assets/js/adexium-widget.min.js"></script>
+  <script>
+    // Мінімальна інтеграція: створюємо віджет і вмикаємо autoMode після DOMContentLoaded
+    document.addEventListener('DOMContentLoaded', () => {
+      try{
+        const adexiumWidget = new AdexiumWidget({
+          wid: '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae',
+          adFormat: 'interstitial'
+        });
+        adexiumWidget.autoMode();
+        // Позначка готовності для script.js (не обовʼязково, але корисно)
+        window.__adexiumReady = true;
+      }catch(e){
+        console.warn('Adexium init error', e);
+        window.__adexiumReady = false;
+      }
+    });
+  </script>
 </head>
 <body>
 
@@ -207,7 +233,7 @@
       </div>
 
       <div class="game-over" id="postAdTimer" style="display:none;">
-        <h2 data-i18n="pause_before_new_game">Пауза перед новою гророю</h2>
+        <h2 data-i18n="pause_before_new_game">Пауза перед новою грою</h2>
         <p><span data-i18n="you_can_start_in">Можна буде почати через:</span>
           <b id="postAdCountdown">15</b> <span data-i18n="sec_suffix">с</span></p>
       </div>
@@ -350,270 +376,297 @@
       <div class="muted" data-i18n="one_link">Це одна силка для всіх 👍</div>
     </div>
 
-    <div class="share-card"></div>
+    <div class="share-card">
+      <div><strong data-i18n="withdraw_title">Вивід зірок</strong></div>
+      <div class="muted" data-i18n="withdraw_hint">
+        За натискання списується рівно 50⭐, решта лишається. Далі відкриється група/«Поділитися» з готовим повідомленням і двома кодами.
+      </div>
+      <div class="share-actions">
+        <button class="btn" id="withdrawBtn" data-i18n="withdraw_btn">Вивести</button>
+        <span id="withdrawStatus" class="muted"></span>
+      </div>
+    </div>
+
+    <div class="share-card">
+      <div><strong data-i18n="payout_list_title">Список виводів</strong></div>
+      <ul id="payoutList" class="payout-list"></ul>
+    </div>
+  </div>
+
+  <!-- SHOP -->
+  <div id="shop" class="page themed">
+    <h2 class="wallet-title" style="margin-top:12px">🛒 <span data-i18n="shop_announcements">Оголошення</span></h2>
+
+    <div class="share-card shop-card" style="text-align:center">
+      <button class="info-btn" id="shopInfoBtn" aria-label="Info">i</button>
+
+      <div class="info-pop" id="shopInfoPop">
+        <p data-i18n="shop_info_text">Якщо бажаєте продати NFT, зірки чи інші подарунки — пишіть у лс.</p>
+        <button class="btn" id="shopInfoClose" data-i18n="close">Закрити</button>
+      </div>
+
+      <p style="margin:6px 0 14px" class="muted"><span data-i18n="post_announcement">Виставити оголошення</span></p>
+      <button class="btn" id="dmOwnerBtn" data-i18n="write_dm">Написати в лс</button>
+      <div class="muted" style="margin-top:8px">@yArOsUlAv</div>
+    </div>
   </div>
 
   <!-- ====== НИЖНЄ МЕНЮ ====== -->
   <div class="menu">
-    <button onclick="showPage('game')" class="active">Гра</button>
-    <button onclick="showPage('tasks')">Завдання</button>
-    <button onclick="showPage('leaderboard')">Топ</button>
-    <button onclick="showPage('tournaments')">Батли</button>
-    <button onclick="showPage('friends')">Гаманець</button>
+    <button onclick="showPage('game', this)" class="active">🎮</button>
+    <button onclick="showPage('tasks', this)">📝</button>
+    <button onclick="showPage('leaderboard', this)">🏆</button>
+    <button onclick="showPage('tournaments', this)">⚔️</button>
+    <button onclick="showPage('friends', this)">👛</button>
+    <button onclick="showPage('shop', this)">🛍️</button>
   </div>
 
-  <!-- ====== РОУТІНГ ВКЛАДОК ====== -->
+  <!-- ====== БІБЛІОТЕКИ ====== -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r83/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/latest/TweenMax.min.js"></script>
+  <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
+
+  <!-- RichAds (як було) -->
+  <script src="https://richinfo.co/richpartners/telegram/js/tg-ob.js"></script>
   <script>
-    function showPage(id){
-      document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-      document.getElementById(id).classList.add('active');
-      const labelsUa = ["Гра","Завдання","Топ","Батли","Гаманець"];
-      const labelsEn = ["Game","Tasks","Top","Battles","Wallet"];
-      const lang = localStorage.getItem('lang')==='en' ? 'en' : 'ua';
-      const labels = lang==='en' ? labelsEn : labelsUa;
-      document.querySelectorAll('.menu button').forEach((b,i)=>{
-        b.classList.remove('active');
-        if(b.textContent.trim()===labels[
-          id==='game'?0:id==='tasks'?1:id==='leaderboard'?2:id==='tournaments'?3:4
-        ]) b.classList.add('active');
-      });
-    }
+    window.TelegramAdsController = new TelegramAdsController();
+    window.TelegramAdsController.initialize({ pubId: "965326", appId: "3592" });
   </script>
 
-  <!-- ====== ADEXIUM інтеграція для кнопки +0.1⭐ ====== -->
+  <!-- App helpers + i18n -->
   <script>
-    const ADEXIUM_WIDGET_ID = 'YOUR_WIDGET_ID';   // ← ВСТАВ СВІЙ WID
-    const ADEXIUM_DAILY_LIMIT = 25;
-    const ADEXIUM_REWARD = 0.1;
-    const ADEXIUM_DEBUG = false;
-
-    const store = {
-      get(key, def){ try{ return JSON.parse(localStorage.getItem(key)) ?? def; }catch(e){ return def; } },
-      set(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
-    };
-    function todayKey(base){
-      const d = new Date();
-      const day = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-      return `${base}:${day}`;
+    function showPage(id, btn){
+      document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id===id));
+      document.querySelectorAll('.menu button').forEach(b => b.classList.toggle('active', b===btn));
+      window.isPaused = (id !== 'game');
+      if(id==='leaderboard'){ loadLeaderboard?.(); }
     }
-    function getBalance(){ return Number(store.get('balance', 0)); }
-    function addBalance(delta){
-      const v = Math.max(0, Number(getBalance() + delta));
-      store.set('balance', v);
-      const el = document.getElementById('balance');
-      if(el) el.textContent = v.toFixed(2).replace('.', ',');
+    function openBotLink(e){
+      if (window.Telegram && Telegram.WebApp) {
+        Telegram.WebApp.openTelegramLink('https://t.me/Stacktongame_bot');
+        e.preventDefault();
+      }
     }
-    function incDailyCounter(keyId){
-      const k = todayKey(keyId);
-      const v = Number(store.get(k, 0)) + 1;
-      store.set(k, v);
-      return v;
-    }
-    function getDailyCounter(keyId){
-      const k = todayKey(keyId);
-      return Number(store.get(k, 0));
-    }
-    function refreshAdexiumUi(){
-      const cnt = getDailyCounter('adexiumDaily');
-      const el  = document.getElementById('adExCounter');
-      if(el) el.textContent = cnt;
-      const btn = document.getElementById('watchAdexiumDailyBtn');
-      if(btn) btn.disabled = cnt >= ADEXIUM_DAILY_LIMIT;
+    function openDMto(username){
+      const url = 'https://t.me/' + username.replace(/^@/,'');
+      if (window.Telegram && Telegram.WebApp) Telegram.WebApp.openTelegramLink(url);
+      else window.open(url,'_blank');
     }
     document.addEventListener('DOMContentLoaded', ()=>{
-      refreshAdexiumUi();
-      addBalance(0);
+      document.getElementById('dmOwnerBtn')?.addEventListener('click', ()=>openDMto('@yArOsUlAv'));
+      const infoBtn = document.getElementById('shopInfoBtn');
+      const infoPop = document.getElementById('shopInfoPop');
+      const infoClose = document.getElementById('shopInfoClose');
+      infoBtn?.addEventListener('click', ()=>infoPop.classList.toggle('open'));
+      infoClose?.addEventListener('click', ()=>infoPop.classList.remove('open'));
+      document.addEventListener('click', (e)=>{ if (!infoPop.contains(e.target) && !infoBtn.contains(e.target)) infoPop.classList.remove('open'); });
     });
+  </script>
 
-    function ensureAdexiumReady(){
-      return new Promise((resolve) => {
-        if (window.AdexiumWidget) return resolve(true);
-        const s = document.createElement('script');
-        s.src = 'https://cdn.adexium.tech/assets/js/adexium-widget.min.js';
-        s.onload = () => resolve(true);
-        s.onerror = () => resolve(false);
-        document.head.appendChild(s);
-      });
+  <!-- Лідерборд: читання з GitHub -->
+  <script>
+    const LB_URL = 'https://raw.githubusercontent.com/yarikyoucan/stack-game-ton/main/leaderboard.json';
+
+    function _avatarSvg(){
+      return 'data:image/svg+xml;utf8,'+encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28'><rect width='28' height='28' rx='14' fill='#1f2a44'/><text x='14' y='18' text-anchor='middle' font-size='14' fill='#9fb3ff'>👤</text></svg>");
     }
 
-    let adexiumInstance = null;
-    let adexiumBound = false;
+    async function fetchLeaderboard(){
+      if(!LB_URL) return null;
+      const url = LB_URL + (LB_URL.includes('?')?'&':'?') + 'v=' + Date.now();
+      const r = await fetch(url,{headers:{'accept':'application/json'}});
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const data = await r.json();
+      if(!Array.isArray(data)) throw new Error('Bad JSON format');
+      return data;
+    }
 
-    async function onAdexiumDailyClick(){
-      const btn = document.getElementById('watchAdexiumDailyBtn');
-      if (!btn) return;
+    function renderLeaderboard(rows){
+      const list = document.getElementById('lbList');
+      const note = document.getElementById('lbNote');
+      if(!list) return;
 
-      const used = getDailyCounter('adexiumDaily');
-      if (used >= ADEXIUM_DAILY_LIMIT){
-        btn.disabled = true;
-        return;
+      rows = Array.isArray(rows)? rows.slice(): [];
+      rows.sort((a,b)=> (b?.score||0)-(a?.score||0));
+
+      list.innerHTML='';
+      for(let i=0;i<50;i++){
+        const r = rows[i];
+        const rank = i+1;
+        const name = r ? (r.name || 'Player') : '—';
+        const score = (r && typeof r.score==='number') ? r.score : '—';
+
+        const row = document.createElement('div');
+        row.className = 'lb-row ' + (rank===1?'rank-1':rank===2?'rank-2':rank===3?'rank-3':'');
+        row.innerHTML = `
+          <div class="lb-rank">${rank}</div>
+          <div class="lb-name"><img src="${_avatarSvg()}" alt=""><span class="txt">${name}</span></div>
+          <div class="lb-bonus">?⭐</div>
+          <div class="lb-score">${score}</div>
+        `;
+        list.appendChild(row);
       }
+      if(note) note.textContent = 'Оновлено з GitHub.';
+    }
 
-      const ok = await ensureAdexiumReady();
-      if (!ok || !window.AdexiumWidget){
-        alert('Реклама тимчасово недоступна. Спробуй пізніше.');
-        return;
-      }
-
-      if (!adexiumInstance){
-        adexiumInstance = new window.AdexiumWidget({
-          wid: ADEXIUM_WIDGET_ID,
-          adFormat: 'interstitial',
-          debug: ADEXIUM_DEBUG,
-          isFullScreen: true
-        });
-      }
-      if (!adexiumBound){
-        adexiumBound = true;
-
-        adexiumInstance.on('adReceived', (ad) => {
-          try { adexiumInstance.displayAd(ad); } catch(e){ console.error(e); }
-        });
-        adexiumInstance.on('noAdFound', () => {
-          alert('Наразі немає реклами. Спробуй пізніше.');
-        });
-        adexiumInstance.on('adPlaybackCompleted', () => {
-          const newCount = incDailyCounter('adexiumDaily');
-          addBalance(ADEXIUM_REWARD);
-          refreshAdexiumUi();
-          const msg = `+${ADEXIUM_REWARD}⭐ за перегляд (${newCount}/${ADEXIUM_DAILY_LIMIT} сьогодні)`;
-          try{ window.Telegram?.WebApp?.showPopup?.({title:'Нагорода', message: msg, buttons:[{type:'ok'}]}); }catch(_){}
-        });
-        adexiumInstance.on('adDisplayed', ()=>console.log('[Adexium] показано'));
-        adexiumInstance.on('adRedirected', ()=>console.log('[Adexium] клік/перехід'));
-        adexiumInstance.on('adClosed', ()=>console.log('[Adexium] закрито'));
-      }
-
+    async function loadLeaderboard(){
       try{
-        btn.disabled = true;
-        adexiumInstance.requestAd('interstitial');
+        const data = await fetchLeaderboard();
+        renderLeaderboard(data||[]);
       }catch(e){
-        alert('Не вдалося показати рекламу. Спробуй ще раз.');
-      }finally{
-        setTimeout(()=>{
-          const cnt = getDailyCounter('adexiumDaily');
-          btn.disabled = cnt >= ADEXIUM_DAILY_LIMIT;
-        }, 1500);
+        renderLeaderboard([]);
+        const note = document.getElementById('lbNote');
+        if(note) note.textContent = 'Не вдалось завантажити лідерборд.';
+        console.warn('LB load error:', e);
       }
+    }
+    window.loadLeaderboard = loadLeaderboard;
+
+    document.addEventListener('DOMContentLoaded', ()=>{
+      if(document.getElementById('leaderboard')?.classList.contains('active')){
+        loadLeaderboard();
+      }
+    });
+  </script>
+
+  <!-- ===== I18N (UA / EN) ===== -->
+  <script>
+    const I18N = {
+      uk: {
+        instructions: "Клік або пробіл — поставити блок. Після завершення — клікни/пробіл, щоб зіграти ще.",
+        game_over: "Гра закінчена",
+        nice_try: "Ти молодець 👍",
+        restart_hint: "Клікни або натисни пробіл, щоб почати знову",
+        start_btn: "▶ Старт",
+        pause_before_new_game: "Пауза перед новою грою",
+        you_can_start_in: "Можна буде почати через:",
+        sec_suffix: "с",
+
+        tasks_title: "Завдання",
+        task_subscribe_text: "Підпишись на канал +1⭐",
+        open: "Перейти",
+        done: "Виконано",
+        task_75_text: "🎯 Досягни рекорду 75 (+5.15⭐)",
+        check: "Перевірити",
+
+        b_tour_title: "⚔️ Виклик суперника",
+        b_tour_sub: "Згенеруй рекорд, зроби ставку ⭐ і побий його за 3 години",
+        opponent: "Суперник",
+        generate: "Згенерувати",
+        stake: "Ставка ⭐",
+        start_challenge: "Почати виклик (3 год)",
+        no_active_challenge: "Немає активного виклику.",
+        time_left_prefix: "Залишилось:",
+        rule_goal: "🎯 Мета: побий рекорд за 3 год",
+        rule_prize: "💎 Виграш: ×1.5 від ставки",
+        rule_risk: "⚠️ Якщо не встигаєш — ставка згорає",
+        make_bet: "Зробити ставку",
+
+        balance: "Баланс",
+        wallet: "Гаманець",
+        invite_friends: "Запроси друзів",
+        bot_link: "Посилання на бота:",
+        open_bot: "➡ Відкрити бота @Stacktongame_bot",
+        copy: "Скопіювати",
+        one_link: "Це одна силка для всіх 👍",
+        withdraw_title: "Вивід зірок",
+        withdraw_hint: "За натискання списується рівно 50⭐, решта лишається. Далі відкриється група/«Поділитися» з готовим повідомленням і двома кодами.",
+        withdraw_btn: "Вивести",
+        payout_list_title: "Список виводів",
+
+        shop_announcements: "Оголошення",
+        post_announcement: "Виставити оголошення",
+        write_dm: "Написати в лс",
+        shop_info_text: "Якщо бажаєте продати NFT, зірки чи інші подарунки — пишіть у лс.",
+        close: "Закрити",
+
+        lb_title: "Лідерборд",
+        lb_sub: "Попадай у ТОП — отримуй більше ⭐ за місце!"
+      },
+      en: {
+        instructions: "Click or Space — drop the block. After game over, click/space to play again.",
+        game_over: "Game Over",
+        nice_try: "Nice try 👍",
+        restart_hint: "Click or press Space to start again",
+        start_btn: "▶ Start",
+        pause_before_new_game: "Pause before new game",
+        you_can_start_in: "You can start in:",
+        sec_suffix: "s",
+
+        tasks_title: "Tasks",
+        task_subscribe_text: "Subscribe to channel +1⭐",
+        open: "Open",
+        done: "Done",
+        task_75_text: "🎯 Reach 75 highscore (+5.15⭐)",
+        check: "Check",
+
+        b_tour_title: "⚔️ Challenge an opponent",
+        b_tour_sub: "Generate a target, place a ⭐ bet and beat it within 3 hours",
+        opponent: "Opponent",
+        generate: "Generate",
+        stake: "Stake ⭐",
+        start_challenge: "Start challenge (3h)",
+        no_active_challenge: "No active challenge.",
+        time_left_prefix: "Time left:",
+        rule_goal: "🎯 Goal: beat the score in 3 hours",
+        rule_prize: "💎 Prize: ×1.5 of your stake",
+        rule_risk: "⚠️ If you fail — you lose the stake",
+        make_bet: "Make a bet",
+
+        balance: "Balance",
+        wallet: "Wallet",
+        invite_friends: "Invite friends",
+        bot_link: "Bot link:",
+        open_bot: "➡ Open @Stacktongame_bot",
+        copy: "Copy",
+        one_link: "Same link for everyone 👍",
+        withdraw_title: "Withdraw stars",
+        withdraw_hint: "Clicking deducts exactly 50⭐, the rest stays. You’ll then open a group/Share with a ready message and two codes.",
+        withdraw_btn: "Withdraw",
+        payout_list_title: "Payouts",
+
+        shop_announcements: "Announcements",
+        post_announcement: "Post an announcement",
+        write_dm: "Message in DM",
+        shop_info_text: "If you want to sell NFTs, stars or other gifts — message me in DM.",
+        close: "Close",
+
+        lb_title: "Leaderboard",
+        lb_sub: "Climb the TOP — earn more ⭐ for your rank!"
+      }
+    };
+
+    function applyLang(lang){
+      const dict = I18N[lang] || I18N.uk;
+      document.querySelectorAll('[data-i18n]').forEach(el=>{
+        const key = el.getAttribute('data-i18n');
+        if (dict[key] != null) el.innerHTML = dict[key];
+      });
+      const subBtn=document.getElementById('subscribeBtn');
+      if (subBtn){
+        const subscribed=(localStorage.getItem('subscribed')==='true');
+        subBtn.textContent = subscribed ? dict.done : dict.open;
+      }
+      const btn=document.getElementById('langToggle');
+      if (btn) btn.textContent = (lang==='en'?'EN':'UA');
+      localStorage.setItem('lang', lang);
+      document.documentElement.setAttribute('lang', lang==='en'?'en':'uk');
     }
 
     document.addEventListener('DOMContentLoaded', ()=>{
-      const btn = document.getElementById('watchAdexiumDailyBtn');
-      if (btn) btn.addEventListener('click', onAdexiumDailyClick);
-    });
-  </script>
-
-  <!-- ===== i18n (UA/EN) ===== -->
-  <script>
-  const I18N = {
-    ua: {
-      instructions: "Клік або пробіл — поставити блок. Після завершення — клікни/пробіл, щоб зіграти ще.",
-      game_over: "Гра закінчена",
-      nice_try: "Ти молодець 👍",
-      restart_hint: "Клікни або натисни пробіл, щоб почати знову",
-      pause_before_new_game: "Пауза перед новою грою",
-      you_can_start_in: "Можна буде почати через:",
-      sec_suffix: "с",
-      tasks_title: "Завдання",
-      open: "Перейти",
-      task_subscribe_text: "Підпишись на канал +1⭐",
-      task_75_text: "🎯 Досягни рекорду 75 (+5.15⭐)",
-      check: "Перевірити",
-      task_5ads_text: "🎬 Переглянь 5 реклам (+1⭐)",
-      watch: "Дивитися",
-      task_5ads_available_in: "«5 реклам» доступне через:",
-      wait: "Очікуй…",
-      task_10ads_text: "🎬 Переглянь 10 реклам (+1.85⭐)",
-      task_10ads_available_in: "«10 реклам» доступне через:",
-      task_100games_text: "🎮 Зіграй 100 ігор (+5⭐) — зіграно:",
-      b_tour_title: "⚔️ Виклик суперника",
-      b_tour_sub: "Згенеруй рекорд, зроби ставку ⭐ і побий його за 3 години",
-      opponent: "Суперник",
-      generate: "Згенерувати",
-      stake: "Ставка ⭐",
-      start_challenge: "Почати виклик (3 год)",
-      no_active_challenge: "Немає активного виклику.",
-      time_left_prefix: "Залишилось:",
-      make_bet: "Зробити ставку",
-      balance: "Баланс",
-      wallet: "Гаманець",
-      lb_title: "Лідерборд",
-      lb_sub: "Попадай у ТОП — отримуй більше ⭐ за місце!",
-      rule_goal: "🎯 Мета: побий рекорд за 3 год",
-      rule_prize: "💎 Виграш: ×1.5 від ставки",
-      rule_risk: "⚠️ Якщо не встигаєш — ставка згорає",
-    },
-    en: {
-      instructions: "Click or Space — drop the block. After game over — click/Space to play again.",
-      game_over: "Game Over",
-      nice_try: "Nice try 👍",
-      restart_hint: "Click or press Space to restart",
-      pause_before_new_game: "Pause before new game",
-      you_can_start_in: "You can start in:",
-      sec_suffix: "s",
-      tasks_title: "Tasks",
-      open: "Open",
-      task_subscribe_text: "Subscribe to the channel +1⭐",
-      task_75_text: "🎯 Reach score 75 (+5.15⭐)",
-      check: "Check",
-      task_5ads_text: "🎬 Watch 5 ads (+1⭐)",
-      watch: "Watch",
-      task_5ads_available_in: "“5 ads” available in:",
-      wait: "Wait…",
-      task_10ads_text: "🎬 Watch 10 ads (+1.85⭐)",
-      task_10ads_available_in: "“10 ads” available in:",
-      task_100games_text: "🎮 Play 100 games (+5⭐) — played:",
-      b_tour_title: "⚔️ Challenge an opponent",
-      b_tour_sub: "Generate a record, place a ⭐ bet and beat it within 3 hours",
-      opponent: "Opponent",
-      generate: "Generate",
-      stake: "Bet ⭐",
-      start_challenge: "Start challenge (3h)",
-      no_active_challenge: "No active challenge.",
-      time_left_prefix: "Time left:",
-      make_bet: "Make a bet",
-      balance: "Balance",
-      wallet: "Wallet",
-      lb_title: "Leaderboard",
-      lb_sub: "Reach TOP — earn more ⭐ for your place!",
-      rule_goal: "🎯 Goal: beat the record in 3h",
-      rule_prize: "💎 Prize: ×1.5 of the bet",
-      rule_risk: "⚠️ If you fail — the bet burns",
-    }
-  };
-
-  function applyI18n(lang){
-    const dict = I18N[lang] || I18N.ua;
-    document.querySelectorAll('[data-i18n]').forEach(el=>{
-      const k = el.getAttribute('data-i18n');
-      if (dict[k] !== undefined){
-        el.textContent = dict[k];
-      }
-    });
-    const menuUa = ["Гра","Завдання","Топ","Батли","Гаманець"];
-    const menuEn = ["Game","Tasks","Top","Battles","Wallet"];
-    const labels = (lang==='en') ? menuEn : menuUa;
-    document.querySelectorAll('.menu button').forEach((b,i)=>{ if(labels[i]) b.textContent = labels[i]; });
-    const toggle = document.getElementById('langToggle');
-    if(toggle) toggle.textContent = (lang==='en' ? 'EN' : 'UA');
-  }
-  function setLang(lang){
-    localStorage.setItem('lang', lang);
-    applyI18n(lang);
-  }
-  document.addEventListener('DOMContentLoaded', ()=>{
-    const saved = localStorage.getItem('lang') || 'ua';
-    applyI18n(saved);
-    const toggle = document.getElementById('langToggle');
-    if (toggle){
-      toggle.addEventListener('click', ()=>{
-        const next = (localStorage.getItem('lang')==='en') ? 'ua' : 'en';
-        setLang(next);
+      const saved = localStorage.getItem('lang') || 'uk';
+      applyLang(saved);
+      document.getElementById('langToggle')?.addEventListener('click', ()=>{
+        const cur = localStorage.getItem('lang') || 'uk';
+        applyLang(cur==='uk' ? 'en' : 'uk');
       });
-    }
-  });
+    });
   </script>
 
+  <!-- ====== Основна логіка гри/завдань/батлів/ads ====== -->
+  <!-- Підключаємо твій повний script.js (версія, яку ми зібрали раніше) -->
+  <script src="./script.js"></script>
 </body>
 </html>
+
 
