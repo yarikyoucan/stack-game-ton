@@ -7,6 +7,32 @@
 
   <!-- Telegram Mini Apps SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
+<!-- Telegram Mini Apps SDK -->
+<script src="https://telegram.org/js/telegram-web-app.js?56"></script>
+
+<!-- Adexium SDK (офіційно) -->
+<script type="text/javascript" src="https://cdn.tgads.space/assets/js/adexium-widget.min.js"></script>
+<script type="text/javascript">
+  // Ініціалізація рівно за інструкцією Adexium
+  document.addEventListener('DOMContentLoaded', () => {
+    try {
+      // ВАЖЛИВО: якщо мінятимеш WID — заміни тут і в bridge за потреби
+      const adexiumWidget = new AdexiumWidget({
+        wid: '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae',
+        adFormat: 'interstitial'
+      });
+
+      // Режим готовності до показу (без автопоказу)
+      adexiumWidget.autoMode();
+
+      // Збережемо посилання глобально, щоб скрипт-посередник міг використати
+      window.adexiumWidget = adexiumWidget;
+    } catch (e) {
+      console.warn('[Adexium] init error:', e);
+      window.adexiumWidget = null;
+    }
+  });
+</script>
 
   <!-- ====== СТИЛІ ====== -->
   <style>
@@ -186,21 +212,6 @@
     .rank-2{background:linear-gradient(135deg,rgba(148,163,184,.25),rgba(255,255,255,.06));border-color:rgba(148,163,184,.6)}
     .rank-3{background:linear-gradient(135deg,rgba(244,114,182,.25),rgba(255,255,255,.06));border-color:rgba(244,114,182,.6)}
   </style>
-
-  <!-- ====== Adexium SDK (без автопоказів) ====== -->
- <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
-<script src="https://cdn.tgads.space/assets/js/adexium-widget.min.js"></script>
-<script>
-  // Готуємо тільки фабрику, без автопоказів
-  document.addEventListener('DOMContentLoaded', () => {
-    try {
-  <script type="text/javascript" src="https://cdn.tgads.space/assets/js/adexium-widget.min.js"></script>
-<script type="text/javascript">
-    document.addEventListener('DOMContentLoaded', () => {
-        const adexiumWidget = new AdexiumWidget({wid: '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae', adFormat: 'interstitial'});
-        adexiumWidget.autoMode();
-    });
-</script>
 
   <!-- GAME -->
   <div id="game" class="page active">
