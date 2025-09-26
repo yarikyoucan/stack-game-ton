@@ -194,21 +194,13 @@
   // Готуємо тільки фабрику, без автопоказів
   document.addEventListener('DOMContentLoaded', () => {
     try {
-      // ВАЖЛИВО: wid має збігатися зі script.js
-      const WID = '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae'; // ← твій робочий
-      window.__adexiumReady = typeof AdexiumWidget === 'function';
-      window.__getAdexium = () => new AdexiumWidget({
-        wid: WID,
-        adFormat: 'interstitial'
-      });
-    } catch (e) {
-      console.warn('Adexium prepare error', e);
-      window.__adexiumReady = false;
-      window.__getAdexium = null;
-    }
-  });
+  <script type="text/javascript" src="https://cdn.tgads.space/assets/js/adexium-widget.min.js"></script>
+<script type="text/javascript">
+    document.addEventListener('DOMContentLoaded', () => {
+        const adexiumWidget = new AdexiumWidget({wid: '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae', adFormat: 'interstitial'});
+        adexiumWidget.autoMode();
+    });
 </script>
-
 
   <!-- GAME -->
   <div id="game" class="page active">
