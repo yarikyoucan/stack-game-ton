@@ -14,7 +14,7 @@ const ANY_AD_COOLDOWN_MS  = 60_000;
 // Мінімальна пауза між двома показами в одному контексті (крім daily)
 const MIN_BETWEEN_SAME_CTX_MS = 10_000;
 
-// Пауза перед новою грою після реклами на екрані Game Over
+// Пауза перед новою гророю після реклами на екрані Game Over
 const POST_AD_TIMER_MS = 15_000;
 
 // Завдання «зіграй 100 ігор»
@@ -51,7 +51,12 @@ const ADEXIUM_FORMAT = "interstitial";
 let __adexiumScriptLoading = null;
 
 function loadAdexiumScriptOnce() {
-  if (window.__adexium_loaded) return Promise.resolve();
+  // Якщо SDK уже є вікні — не дублюємо підвантаження
+  if (window.__adexium_loaded || typeof window.AdexiumWidget === "function" ||
+      (window.Adexium && (typeof window.Adexium.showInterstitial === "function" || typeof window.Adexium.show === "function"))) {
+    window.__adexium_loaded = true;
+    return Promise.resolve();
+  }
   if (__adexiumScriptLoading) return __adexiumScriptLoading;
 
   __adexiumScriptLoading = new Promise((resolve, reject) => {
@@ -78,7 +83,7 @@ function waitAdexiumReady(maxWaitMs = 6000) {
   });
 }
 
-// Єдиний публічний виклик (твоя кнопка "Переглянути" вже викликає onWatchExDaily -> showAdexiumInterstitial)
+// Єдиний публічний виклик (твоя кнопка "Переглянути" викликає onWatchExDaily -> showAdexiumInterstitial)
 async function showAdexiumInterstitial() {
   try {
     await loadAdexiumScriptOnce();
@@ -117,7 +122,7 @@ async function showAdexiumInterstitial() {
         if (typeof w.show === "function") { const p = w.show(); if (p?.then) await p; }
         else if (typeof w.open === "function") { const p = w.open(); if (p?.then) await p; }
         else if (typeof w.start === "function") { const p = w.start(); if (p?.then) await p; }
-        else if (typeof w.autoMode === "function") { await w.autoMode(); } // автопоказ (необов’язково)
+        else if (typeof w.autoMode === "function") { await w.autoMode(); } // можна, але в нас показ по кліку
         return { shown: true };
       } catch (e) { console.warn("[Adexium] widget show error:", e); }
     }
@@ -128,8 +133,6 @@ async function showAdexiumInterstitial() {
     return { shown: false, reason: err?.message || "adexium_error" };
   }
 }
-
-
 
 /* ========= СТАН ========= */
 let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
@@ -306,9 +309,8 @@ window.onload = function(){
   // батл UI
   setupChallengeUI();
 
-  // Ініт SDK Adsgram + Adexium
+  // Ініт SDK Adsgram
   initAds();
-  setupAdexiumBridge();
 
   // 3D гра
   window.stackGame = new Game();
@@ -371,86 +373,6 @@ async function showAdsgram(controller){
   }catch(err){
     return { shown:false, reason: err?.description || err?.state || "no_fill_or_error" };
   }
-}
-
-/* ========= Adexium: керований місток (без автопоказів у head) ========= */
-/*
-  - Не рахуємо перегляд, якщо не було подій close/dismiss або отримали error/no_fill.
-  - Вміє працювати як із фабрикою з head (window.__getAdexium), так і напряму через клас.
-  - Без "штучного успіху": якщо 10с немає жодної події — рахуємо як не показалось.
-*/
-function setupAdexiumBridge(){
-  window.__adexiumWidget = {
-    show: () => new Promise((resolve, reject) => {
-      // 1) якщо у head є фабрика — використовуємо її
-      if (typeof window.__getAdexium === 'function') {
-        try {
-          const w = window.__getAdexium();
-          return attachAndShow(w).then(() => resolve(true)).catch(reject);
-        } catch (e) { /* впадемо в локальний шлях */ }
-      }
-
-      // 2) локально чекаємо на клас і створюємо
-      const started = Date.now(), MAX_WAIT = 6000, tick = 200;
-      const t = setInterval(() => {
-        if (typeof window.AdexiumWidget === 'function') {
-          clearInterval(t);
-          try {
-            const w = new window.AdexiumWidget({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT });
-            attachAndShow(w).then(() => resolve(true)).catch(reject);
-          } catch (e) { reject(e); }
-        } else if (Date.now() - started > MAX_WAIT) {
-          clearInterval(t);
-          reject(new Error('adexium_not_ready'));
-        }
-      }, tick);
-
-      function attachAndShow(widget){
-        return new Promise(async (res, rej) => {
-          let finished = false;
-          const done = (ok, why) => { if (finished) return; finished = true; window.removeEventListener('message', onMsg); ok ? res(true) : rej(new Error(why||'adexium_failed')); };
-          function onMsg(ev){
-            const d = ev?.data;
-            if (!d || typeof d !== 'object' || d.source !== 'adexium') return;
-            if (d.type === 'error' || d.type === 'no_fill') return done(false, d.type);
-            if (d.type === 'close' || d.type === 'dismiss') return done(true);
-            // 'open'/'shown' — просто життєвий цикл
-          }
-          window.addEventListener('message', onMsg);
-          try {
-            if (typeof widget.show === 'function') await widget.show();
-            else if (typeof widget.open === 'function') await widget.open();
-            else if (typeof widget.start === 'function') await widget.start();
-            else if (typeof widget.autoMode === 'function') await widget.autoMode(); // деякі білди мають лише це
-            // якщо 10с без подій — вважаємо, що не показалось
-            setTimeout(() => done(false, 'no_events_timeout'), 10000);
-          } catch (e) { rej(e); }
-        });
-      }
-    })
-  };
-}
-
-function showAdexiumInterstitial() {
-  return new Promise(async (resolve) => {
-    try {
-      if (!window.__adexiumWidget || typeof window.__adexiumWidget.show !== 'function') {
-        console.warn('[Adexium] bridge not ready');
-        return resolve({ shown:false, reason:'adexium_not_ready' });
-      }
-      try {
-        await window.__adexiumWidget.show();
-        console.log('[Adexium] shown OK');
-        return resolve({ shown:true });
-      } catch (err) {
-        console.warn('[Adexium] show error:', err?.message || err);
-        return resolve({ shown:false, reason: err?.message || 'adexium_show_error' });
-      }
-    } catch (e) {
-      console.warn('[Adexium] unknown error:', e);
-      resolve({ shown:false, reason:'adexium_unknown' });
-    }
-  });
 }
 
 /* ========= ЩОДЕННІ +0.1⭐ (дві кнопки) ========= */
@@ -1158,4 +1080,3 @@ function updateHighscore(currentScore){
     const hs=$("highscore"); if (hs) hs.innerText="🏆 "+highscore;
   }
 }
-
