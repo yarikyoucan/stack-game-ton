@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Stack Game</title>
 
-  <!-- 1) Telegram Mini Apps SDK (має бути у <head>) -->
+  <!-- 1) Telegram Mini Apps SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
 
   <!-- ====== СТИЛІ ====== -->
@@ -38,8 +38,8 @@
         url('data:image/svg+xml;utf8,\
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="220" viewBox="0 0 800 220">\
   <rect width="800" height="220" fill="none"/>\
-  <path d="M0 190 L20 170 L45 172 L45 190 L70 160 L95 162 L95 190 L130 150 L160 152 L160 190 L200 165 L230 167 L230 190 L270 155 L310 157 L310 190 L350 170 L380 172 L380 190 L420 160 L455 162 L455 190 L495 168 L530 170 Л530 190 Л570 156 Л610 158 Л610 190 Л650 170 Л690 172 Л690 190 Л730 160 Л770 165 Л770 190 Л800 150 Л800 220 Л0 220 Z" fill="%23040a1c"/>\
-  <path d="M0 200 L30 180 L50 180 L50 200 Л80 155 Л110 155 Л110 200 Л150 140 Л180 140 Л180 200 Л220 165 Л250 165 Л250 200 Л300 145 Л340 145 Л340 200 Л380 175 Л420 175 Л420 200 Л460 150 Л500 150 Л500 200 Л540 165 Л580 165 Л580 200 Л620 145 Л660 145 Л660 200 Л700 175 Л740 175 Л740 200 Л800 160 Л800 220 Л0 220 Z" fill="%23000a1a"/>\
+  <path d="M0 190 L20 170 L45 172 L45 190 L70 160 L95 162 L95 190 L130 150 L160 152 L160 190 L200 165 L230 167 L230 190 L270 155 L310 157 L310 190 L350 170 L380 172 L380 190 L420 160 L455 162 L455 190 L495 168 L530 170 L530 190 L570 156 L610 158 L610 190 L650 170 L690 172 L690 190 L730 160 L770 165 L770 190 L800 150 L800 220 L0 220 Z" fill="%23040a1c"/>\
+  <path d="M0 200 L30 180 L50 180 L50 200 L80 155 L110 155 L110 200 L150 140 L180 140 L180 200 L220 165 L250 165 L250 200 L300 145 L340 145 L340 200 L380 175 L420 175 L420 200 L460 150 L500 150 L500 200 L540 165 L580 165 Л580 200 Л620 145 Л660 145 Л660 200 Л700 175 Л740 175 Л740 200 Л800 160 Л800 220 Л0 220 Z" fill="%23000a1a"/>\
   <g fill="%23ffd34d">\
     <rect x="58" y="184" width="6" height="10"/><rect x="66" y="184" width="6" height="10" opacity="0.6"/>\
     <rect x="206" y="186" width="6" height="10"/><rect x="214" y="186" width="6" height="10" opacity="0.6"/>\
@@ -167,7 +167,7 @@
     #lbList{width:92%;margin:0 auto 18px}
     .lb-row{
       display:grid;
-      grid-template-columns:56px 1fr 70px 90px; /* rank | name | ?⭐ | рекорд */
+      grid-template-columns:56px 1fr 70px 90px;
       align-items:center;gap:10px;
       background:rgba(255,255,255,.06);
       border:1px solid rgba(255,255,255,.15);
@@ -187,24 +187,18 @@
     .rank-3{background:linear-gradient(135deg,rgba(244,114,182,.25),rgba(255,255,255,.06));border-color:rgba(244,114,182,.6)}
   </style>
 
-  <!-- 2) Adexium SDK (за документацією) -->
+  <!-- 2) Adexium SDK (КЕРОВАНИЙ, без автопоказів; фабрика для script.js) -->
   <script src="https://cdn.tgads.space/assets/js/adexium-widget.min.js"></script>
   <script>
-    // Мінімальна інтеграція: створюємо віджет і вмикаємо autoMode після DOMContentLoaded
-    document.addEventListener('DOMContentLoaded', () => {
-      try{
-        const adexiumWidget = new AdexiumWidget({
-          wid: '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae',
-          adFormat: 'interstitial'
-        });
-        adexiumWidget.autoMode();
-        // Позначка готовності для script.js (не обовʼязково, але корисно)
-        window.__adexiumReady = true;
-      }catch(e){
-        console.warn('Adexium init error', e);
-        window.__adexiumReady = false;
-      }
-    });
+    (function () {
+      const ADEXIUM_WID = '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae';
+      const ADEXIUM_FORMAT = 'interstitial';
+      window.__getAdexium = function () {
+        if (typeof AdexiumWidget !== 'function') throw new Error('Adexium SDK not ready');
+        return new AdexiumWidget({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT });
+      };
+      window.__adexiumReady = true;
+    })();
   </script>
 </head>
 <body>
@@ -538,7 +532,7 @@
         nice_try: "Ти молодець 👍",
         restart_hint: "Клікни або натисни пробіл, щоб почати знову",
         start_btn: "▶ Старт",
-        pause_before_new_game: "Пауза перед новою грою",
+        pause_before_new_game: "Пауза перед новою гророю",
         you_can_start_in: "Можна буде почати через:",
         sec_suffix: "с",
 
@@ -663,10 +657,10 @@
     });
   </script>
 
-  <!-- ====== Основна логіка гри/завдань/батлів/ads ====== -->
-  <!-- Підключаємо твій повний script.js (версія, яку ми зібрали раніше) -->
+  <!-- ====== Основна логіка ====== -->
   <script src="./script.js"></script>
 </body>
 </html>
+
 
 
