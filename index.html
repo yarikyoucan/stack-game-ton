@@ -1,3 +1,4 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="uk">
 <head>
@@ -17,10 +18,13 @@
 
     /* Нижнє меню — напівпрозоре */
     .menu{display:flex;justify-content:space-around;border-top:1px solid rgba(255,255,255,.15);background:rgba(15,23,42,.75);padding:10px 0;position:fixed;left:0;right:0;bottom:0;z-index:9999;backdrop-filter:blur(6px)}
-    .menu button{flex:1;background:none;border:none;font-size:22px;cursor:pointer;color:#fff}.menu button.active{color:#3b82f6;font-weight:bold}
+    .menu button{flex:1;background:none;border:none;font-size:22px;cursor:pointer;color:#fff}
+    .menu button.active{color:#3b82f6;font-weight:bold}
 
     .task{display:flex;justify-content:space-between;align-items:center;background:#fff;padding:15px;margin:10px auto;border-radius:10px;width:90%;box-shadow:0 2px 5px rgba(0,0,0,.1)}
-    .task button{background:#007bff;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}.task button.done{background:#28a745}.task button:disabled{opacity:.6;cursor:not-allowed}
+    .task button{background:#007bff;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
+    .task button.done{background:#28a745}
+    .task button:disabled{opacity:.6;cursor:not-allowed}
     .balance{font-size:20px;margin-bottom:20px;text-align:center}
 
     /* --- ГРА: нічне небо + місяць + зірки + будинки, прозорий canvas --- */
@@ -39,8 +43,8 @@
         url('data:image/svg+xml;utf8,\
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="220" viewBox="0 0 800 220">\
   <rect width="800" height="220" fill="none"/>\
-  <path d="M0 190 L20 170 L45 172 L45 190 L70 160 L95 162 L95 190 L130 150 L160 152 L160 190 L200 165 L230 167 L230 190 L270 155 L310 157 L310 190 Л350 170 Л380 172 Л380 190 Л420 160 Л455 162 Л455 190 Л495 168 Л530 170 Л530 190 Л570 156 Л610 158 Л610 190 Л650 170 Л690 172 Л690 190 Л730 160 Л770 165 Л770 190 Л800 150 Л800 220 Л0 220 Z" fill="%23040a1c"/>\
-  <path d="M0 200 L30 180 L50 180 L50 200 L80 155 L110 155 Л110 200 Л150 140 Л180 140 Л180 200 Л220 165 Л250 165 Л250 200 Л300 145 Л340 145 Л340 200 Л380 175 Л420 175 Л420 200 Л460 150 Л500 150 Л500 200 Л540 165 Л580 165 Л580 200 Л620 145 Л660 145 Л660 200 Л700 175 Л740 175 Л740 200 Л800 160 Л800 220 Л0 220 Z" fill="%23000a1a"/>\
+  <path d="M0 190 L20 170 L45 172 L45 190 L70 160 L95 162 L95 190 L130 150 L160 152 L160 190 L200 165 L230 167 L230 190 L270 155 L310 157 L310 190 L350 170 L380 172 L380 190 L420 160 L455 162 L455 190 L495 168 L530 170 L530 190 L570 156 L610 158 L610 190 L650 170 L690 172 L690 190 L730 160 L770 165 L770 190 L800 150 L800 220 L0 220 Z" fill="%23040a1c"/>\
+  <path d="M0 200 L30 180 L50 180 L50 200 L80 155 L110 155 L110 200 L150 140 L180 140 L180 200 L220 165 L250 165 L250 200 L300 145 L340 145 L340 200 L380 175 L420 175 L420 200 L460 150 L500 150 L500 200 L540 165 L580 165 L580 200 L620 145 L660 145 L660 200 L700 175 L740 175 L740 200 L800 160 L800 220 L0 220 Z" fill="%23000a1a"/>\
   <g fill="%23ffd34d">\
     <rect x="58" y="184" width="6" height="10"/><rect x="66" y="184" width="6" height="10" opacity="0.6"/>\
     <rect x="206" y="186" width="6" height="10"/><rect x="214" y="186" width="6" height="10" opacity="0.6"/>\
@@ -190,6 +194,8 @@
 
   <!-- 2) Adexium SDK -->
   <script src="https://cdn.tgads.space/assets/js/adexium-widget.min.js"></script>
+
+  <!-- ADEXIUM WRAPPER: гарантує requestAd/adReceived/displayAd + події у window -->
   <script>
     (function () {
       const WID    = '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae'; // твій widget id
@@ -198,7 +204,7 @@
       // Глобальний стан + pendingAd
       window.__adex = { ready:false, widget:null, queue:[], pendingAd:undefined };
 
-      // Фабрика, яку викликає твій script.js
+      // Фабрика, яку викликає script.js
       window.__getAdexium = function (cb) {
         if (typeof cb !== 'function') return;
         if (window.__adex.ready && window.__adex.widget) cb(window.__adex.widget);
@@ -217,7 +223,7 @@
               window.__adex.widget = adexiumAds;
               window.__adex.ready  = true;
 
-              // 2) переносимо їх події у window (це слухає твій script.js)
+              // 2) прокидаємо події у window
               const emit = (name, detail) => window.dispatchEvent(new CustomEvent('adexium:'+name, { detail }));
               adexiumAds.on('adReceived', (ad) => { window.__adex.pendingAd = ad; emit('adReceived', { ad }); });
               adexiumAds.on('noAdFound',  ()  => { window.__adex.pendingAd = null; emit('noAdFound'); });
@@ -272,7 +278,7 @@
       </div>
 
       <div class="game-over" id="postAdTimer" style="display:none;">
-        <h2 data-i18n="pause_before_new_game">Пауза перед новою гророю</h2>
+        <h2 data-i18n="pause_before_new_game">Пауза перед новою грою</h2>
         <p><span data-i18n="you_can_start_in">Можна буде почати через:</span>
           <b id="postAdCountdown">15</b> <span data-i18n="sec_suffix">с</span></p>
       </div>
@@ -502,7 +508,7 @@
     });
   </script>
 
-  <!-- Лідерборд: читання з GitHub -->
+  <!-- Лідерборд: читання з GitHub (підправлено шаблон) -->
   <script>
     const LB_URL = 'https://raw.githubusercontent.com/yarikyoucan/stack-game-ton/main/leaderboard.json';
 
@@ -577,7 +583,7 @@
         nice_try: "Ти молодець 👍",
         restart_hint: "Клікни або натисни пробіл, щоб почати знову",
         start_btn: "▶ Старт",
-        pause_before_new_game: "Пауза перед новою гророю",
+        pause_before_new_game: "Пауза перед новою грою",
         you_can_start_in: "Можна буде почати через:",
         sec_suffix: "с",
 
@@ -702,7 +708,8 @@
     });
   </script>
 
-  <!-- ====== Основна логіка (твій файл) ====== -->
+  <!-- ====== Основна логіка ====== -->
   <script src="./script.js"></script>
 </body>
 </html>
+
