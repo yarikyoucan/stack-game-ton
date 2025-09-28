@@ -43,88 +43,120 @@ const ALPH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 
 /* ========= ADEXIUM ========= */
-// офіційний SDK з твого повідомлення
+/* ========= ADEXIUM (drop-in) ========= */
+/* Налаштування */
 const ADEXIUM_SDK_URL = "https://cdn.tgads.space/assets/js/adexium-widget.min.js";
-const ADEXIUM_WID = "8d2ce1f1-ae64-4fc3-ac46-41bc92683fae"; // твій wid
-const ADEXIUM_FORMAT = "interstitial";
+const ADEXIUM_WID     = "8d2ce1f1-ae64-4fc3-ac46-41bc92683fae";
+const ADEXIUM_FORMAT  = "interstitial";
 
 let __adexiumScriptLoading = null;
+let __adexiumWidget = null;
 
+/* 1) Завантаження SDK один раз */
 function loadAdexiumScriptOnce() {
-  // Якщо SDK уже є вікні — не дублюємо підвантаження
-  if (window.__adexium_loaded || typeof window.AdexiumWidget === "function" ||
-      (window.Adexium && (typeof window.Adexium.showInterstitial === "function" || typeof window.Adexium.show === "function"))) {
-    window.__adexium_loaded = true;
-    return Promise.resolve();
-  }
+  if (window.__adexium_loaded) return Promise.resolve();
   if (__adexiumScriptLoading) return __adexiumScriptLoading;
 
   __adexiumScriptLoading = new Promise((resolve, reject) => {
     const s = document.createElement("script");
     s.src = ADEXIUM_SDK_URL;
     s.async = true;
-    s.onload = () => setTimeout(() => { window.__adexium_loaded = true; resolve(); }, 250);
+    s.onload = () => {
+      // невелика пауза, щоб клас гарантовано був у window
+      setTimeout(() => { window.__adexium_loaded = true; resolve(); }, 200);
+    };
     s.onerror = () => reject(new Error("adexium_sdk_load_error"));
     document.head.appendChild(s);
   });
+
   return __adexiumScriptLoading;
 }
 
-function waitAdexiumReady(maxWaitMs = 6000) {
-  const start = Date.now();
-  return new Promise((resolve, reject) => {
-    const t = setInterval(() => {
-      const widgetC = typeof window.AdexiumWidget === "function";
-      const factory = typeof window.__getAdexium === "function";
-      const apiObj  = window.Adexium && (typeof window.Adexium.showInterstitial === "function" || typeof window.Adexium.show === "function");
-      if (widgetC || factory || apiObj) { clearInterval(t); resolve({ widgetC, factory, apiObj }); }
-      else if (Date.now() - start > maxWaitMs) { clearInterval(t); reject(new Error("adexium_not_ready")); }
-    }, 150);
+/* 2) Створення (або повторне використання) віджета */
+async function getAdexiumWidget() {
+  await loadAdexiumScriptOnce();
+
+  // іноді SDK надає глобальні API
+  if (!__adexiumWidget) {
+    if (typeof window.AdexiumWidget === "function") {
+      __adexiumWidget = new window.AdexiumWidget({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT });
+    } else if (typeof window.__getAdexium === "function") {
+      // фабрика у head (рідше)
+      __adexiumWidget = window.__getAdexium();
+    } else if (window.Adexium && (typeof window.Adexium.showInterstitial === "function" || typeof window.Adexium.show === "function")) {
+      // збережемо “фасад”, щоб викликати API уніфіковано
+      __adexiumWidget = { _api: window.Adexium };
+    } else {
+      throw new Error("adexium_not_ready");
+    }
+  }
+  return __adexiumWidget;
+}
+
+/* 3) Показ з чеканням реальних подій від SDK */
+function openWithEvents(openFn, timeoutMs = 12000) {
+  return new Promise((resolve) => {
+    let finished = false;
+    const finish = (ok, reason) => {
+      if (finished) return;
+      finished = true;
+      window.removeEventListener("message", onMsg);
+      clearTimeout(tmo);
+      resolve({ shown: !!ok, reason: reason || (ok ? "ok" : "no_events_timeout") });
+    };
+
+    const onMsg = (ev) => {
+      const d = ev?.data;
+      if (!d || typeof d !== "object" || d.source !== "adexium") return;
+      if (d.type === "close" || d.type === "dismiss") return finish(true, d.type); // ✅ зараховуємо
+      if (d.type === "error" || d.type === "no_fill") return finish(false, d.type); // ❌ не зараховуємо
+      // 'open'/'shown' ігноруємо — чекаємо фінальних подій
+    };
+
+    window.addEventListener("message", onMsg);
+    const tmo = setTimeout(() => finish(false, "no_events_timeout"), timeoutMs);
+
+    try {
+      const p = openFn();
+      if (p && typeof p.then === "function") {
+        p.catch(e => finish(false, e?.message || "show_rejected"));
+      }
+    } catch (e) {
+      finish(false, e?.message || "show_throw");
+    }
   });
 }
 
-// Єдиний публічний виклик (твоя кнопка "Переглянути" викликає onWatchExDaily -> showAdexiumInterstitial)
+/* 4) Уніфікована функція показу */
 async function showAdexiumInterstitial() {
   try {
-    await loadAdexiumScriptOnce();
-    const ready = await waitAdexiumReady();
+    const w = await getAdexiumWidget();
 
-    // 1) офіційний об’єкт
-    if (ready.apiObj) {
-      try {
-        if (typeof window.Adexium.showInterstitial === "function") {
-          const p = window.Adexium.showInterstitial(ADEXIUM_WID, { format: ADEXIUM_FORMAT });
-          if (p?.then) await p;
-        } else {
-          const p = window.Adexium.show({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT });
-          if (p?.then) await p;
-        }
-        return { shown: true };
-      } catch (e) { console.warn("[Adexium] api show error:", e); }
+    // Випадок: клас віджета
+    if (typeof w?.show === "function" || typeof w?.open === "function" || typeof w?.start === "function" || typeof w?.autoMode === "function") {
+      if (typeof w.show === "function")   return openWithEvents(() => w.show());
+      if (typeof w.open === "function")   return openWithEvents(() => w.open());
+      if (typeof w.start === "function")  return openWithEvents(() => w.start());
+      // деякі збірки мають тільки autoMode (він теж відкриває інтерстішл)
+      if (typeof w.autoMode === "function") return openWithEvents(() => w.autoMode());
     }
 
-    // 2) фабрика у head (іноді так додають)
-    if (ready.factory) {
-      try {
-        const w = window.__getAdexium();
-        const p = (w.show && w.show({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT })) ||
-                  (w.open && w.open({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT })) ||
-                  (w.start && w.start({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT }));
-        if (p?.then) await p;
-        return { shown: true };
-      } catch (e) { console.warn("[Adexium] factory show error:", e); }
+    // Випадок: фабрика повернула об’єкт з методами
+    if (typeof w === "object" && (w.show || w.open || w.start)) {
+      if (w.show)  return openWithEvents(() => w.show({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT }));
+      if (w.open)  return openWithEvents(() => w.open({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT }));
+      if (w.start) return openWithEvents(() => w.start({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT }));
     }
 
-    // 3) клас віджета з SDK (згідно документації)
-    if (ready.widgetC) {
-      try {
-        const w = new window.AdexiumWidget({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT });
-        if (typeof w.show === "function") { const p = w.show(); if (p?.then) await p; }
-        else if (typeof w.open === "function") { const p = w.open(); if (p?.then) await p; }
-        else if (typeof w.start === "function") { const p = w.start(); if (p?.then) await p; }
-        else if (typeof w.autoMode === "function") { await w.autoMode(); } // можна, але в нас показ по кліку
-        return { shown: true };
-      } catch (e) { console.warn("[Adexium] widget show error:", e); }
+    // Випадок: глобальне API
+    if (w?._api) {
+      const api = w._api;
+      if (typeof api.showInterstitial === "function") {
+        return openWithEvents(() => api.showInterstitial(ADEXIUM_WID, { format: ADEXIUM_FORMAT }));
+      }
+      if (typeof api.show === "function") {
+        return openWithEvents(() => api.show({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT }));
+      }
     }
 
     return { shown: false, reason: "adexium_show_unavailable" };
@@ -133,6 +165,35 @@ async function showAdexiumInterstitial() {
     return { shown: false, reason: err?.message || "adexium_error" };
   }
 }
+
+/* 5) Замінити твою onWatchExDaily() на цю */
+async function onWatchExDaily(){
+  // денний ліміт
+  if (exCount >= DAILY_CAP) return;
+
+  // показ
+  const res = await showAdexiumInterstitial();
+
+  // зараховуємо тільки при real close/dismiss
+  if (!res.shown) {
+    console.warn("[Adexium] not shown, reason =", res.reason);
+    return; // ⭐ не додаємо
+  }
+
+  // ✅ успішний показ
+  lastExAt = Date.now();
+  exCount += 1;
+  addBalance(0.1);
+  saveData();
+  updateDailyUI();
+}
+
+/* 6) (необов'язково) — ініціалізація наперед, щоб перший показ був швидшим */
+document.addEventListener("DOMContentLoaded", () => {
+  // підвантажимо SDK наперед, але без автопоказу
+  loadAdexiumScriptOnce().catch(()=>{ /* тихо */ });
+});
+
 
 /* ========= СТАН ========= */
 let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
