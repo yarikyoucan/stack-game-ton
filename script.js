@@ -42,61 +42,25 @@ const TASK_DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000; // після отриман
 const ALPH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 
-/* ========= ADEXIUM ========= */
-/* ========= ADEXIUM (drop-in) ========= */
-/* Налаштування */
-const ADEXIUM_SDK_URL = "https://cdn.tgads.space/assets/js/adexium-widget.min.js";
-const ADEXIUM_WID     = "8d2ce1f1-ae64-4fc3-ac46-41bc92683fae";
-const ADEXIUM_FORMAT  = "interstitial";
+/* ========= ADEXIUM (мінімальний, керований) ========= */
+/* Працює з фабрикою __getAdexium, яку ти вже вставив у index.html */
+const ADEXIUM_WID    = "8d2ce1f1-ae64-4fc3-ac46-41bc92683fae";
+const ADEXIUM_FORMAT = "interstitial";
 
-let __adexiumScriptLoading = null;
-let __adexiumWidget = null;
-
-/* 1) Завантаження SDK один раз */
-function loadAdexiumScriptOnce() {
-  if (window.__adexium_loaded) return Promise.resolve();
-  if (__adexiumScriptLoading) return __adexiumScriptLoading;
-
-  __adexiumScriptLoading = new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = ADEXIUM_SDK_URL;
-    s.async = true;
-    s.onload = () => {
-      // невелика пауза, щоб клас гарантовано був у window
-      setTimeout(() => { window.__adexium_loaded = true; resolve(); }, 200);
-    };
-    s.onerror = () => reject(new Error("adexium_sdk_load_error"));
-    document.head.appendChild(s);
-  });
-
-  return __adexiumScriptLoading;
-}
-
-/* 2) Створення (або повторне використання) віджета */
-async function getAdexiumWidget() {
-  await loadAdexiumScriptOnce();
-
-  // іноді SDK надає глобальні API
-  if (!__adexiumWidget) {
-    if (typeof window.AdexiumWidget === "function") {
-      __adexiumWidget = new window.AdexiumWidget({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT });
-    } else if (typeof window.__getAdexium === "function") {
-      // фабрика у head (рідше)
-      __adexiumWidget = window.__getAdexium();
-    } else if (window.Adexium && (typeof window.Adexium.showInterstitial === "function" || typeof window.Adexium.show === "function")) {
-      // збережемо “фасад”, щоб викликати API уніфіковано
-      __adexiumWidget = { _api: window.Adexium };
-    } else {
-      throw new Error("adexium_not_ready");
-    }
+/** Отримати віджет із фабрики з head */
+function _getAdexiumWidget() {
+  if (typeof window.__getAdexium !== "function") {
+    throw new Error("adexium_not_ready");
   }
-  return __adexiumWidget;
+  const w = window.__getAdexium(); // new AdexiumWidget({ wid, adFormat })
+  return w;
 }
 
-/* 3) Показ з чеканням реальних подій від SDK */
-function openWithEvents(openFn, timeoutMs = 12000) {
+/** Показ інтерстішіалу з очікуванням реальної події close/dismiss (або error/no_fill). */
+function showAdexiumInterstitial() {
   return new Promise((resolve) => {
     let finished = false;
+
     const finish = (ok, reason) => {
       if (finished) return;
       finished = true;
@@ -108,92 +72,50 @@ function openWithEvents(openFn, timeoutMs = 12000) {
     const onMsg = (ev) => {
       const d = ev?.data;
       if (!d || typeof d !== "object" || d.source !== "adexium") return;
-      if (d.type === "close" || d.type === "dismiss") return finish(true, d.type); // ✅ зараховуємо
-      if (d.type === "error" || d.type === "no_fill") return finish(false, d.type); // ❌ не зараховуємо
+      if (d.type === "close" || d.type === "dismiss") return finish(true, d.type);     // ✅ зараховуємо
+      if (d.type === "error" || d.type === "no_fill") return finish(false, d.type);   // ❌ не зараховуємо
       // 'open'/'shown' ігноруємо — чекаємо фінальних подій
     };
 
     window.addEventListener("message", onMsg);
-    const tmo = setTimeout(() => finish(false, "no_events_timeout"), timeoutMs);
+    const tmo = setTimeout(() => finish(false, "no_events_timeout"), 12000);
 
     try {
-      const p = openFn();
+      const w = _getAdexiumWidget();
+      const start =
+        (typeof w.show === "function" && (() => w.show())) ||
+        (typeof w.open === "function" && (() => w.open())) ||
+        (typeof w.start === "function" && (() => w.start())) ||
+        (typeof w.autoMode === "function" && (() => w.autoMode()));
+
+      if (!start) return finish(false, "adexium_no_api");
+
+      const p = start();
       if (p && typeof p.then === "function") {
-        p.catch(e => finish(false, e?.message || "show_rejected"));
+        p.catch((e) => finish(false, e?.message || "show_rejected"));
       }
     } catch (e) {
-      finish(false, e?.message || "show_throw");
+      finish(false, e?.message || "adexium_throw");
     }
   });
 }
 
-/* 4) Уніфікована функція показу */
-async function showAdexiumInterstitial() {
-  try {
-    const w = await getAdexiumWidget();
-
-    // Випадок: клас віджета
-    if (typeof w?.show === "function" || typeof w?.open === "function" || typeof w?.start === "function" || typeof w?.autoMode === "function") {
-      if (typeof w.show === "function")   return openWithEvents(() => w.show());
-      if (typeof w.open === "function")   return openWithEvents(() => w.open());
-      if (typeof w.start === "function")  return openWithEvents(() => w.start());
-      // деякі збірки мають тільки autoMode (він теж відкриває інтерстішл)
-      if (typeof w.autoMode === "function") return openWithEvents(() => w.autoMode());
-    }
-
-    // Випадок: фабрика повернула об’єкт з методами
-    if (typeof w === "object" && (w.show || w.open || w.start)) {
-      if (w.show)  return openWithEvents(() => w.show({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT }));
-      if (w.open)  return openWithEvents(() => w.open({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT }));
-      if (w.start) return openWithEvents(() => w.start({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT }));
-    }
-
-    // Випадок: глобальне API
-    if (w?._api) {
-      const api = w._api;
-      if (typeof api.showInterstitial === "function") {
-        return openWithEvents(() => api.showInterstitial(ADEXIUM_WID, { format: ADEXIUM_FORMAT }));
-      }
-      if (typeof api.show === "function") {
-        return openWithEvents(() => api.show({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT }));
-      }
-    }
-
-    return { shown: false, reason: "adexium_show_unavailable" };
-  } catch (err) {
-    console.warn("[Adexium] not shown:", err?.message || err);
-    return { shown: false, reason: err?.message || "adexium_error" };
-  }
-}
-
-/* 5) Замінити твою onWatchExDaily() на цю */
-async function onWatchExDaily(){
-  // денний ліміт
+/* ====== Твоя кнопка щоденних +0.1⭐ для Adexium — лишаємо без змін ====== */
+async function onWatchExDaily() {
   if (exCount >= DAILY_CAP) return;
 
-  // показ
   const res = await showAdexiumInterstitial();
-
-  // зараховуємо тільки при real close/dismiss
   if (!res.shown) {
     console.warn("[Adexium] not shown, reason =", res.reason);
-    return; // ⭐ не додаємо
+    return; // ⭐ не додаємо, якщо показу не було
   }
 
-  // ✅ успішний показ
   lastExAt = Date.now();
   exCount += 1;
   addBalance(0.1);
   saveData();
   updateDailyUI();
 }
-
-/* 6) (необов'язково) — ініціалізація наперед, щоб перший показ був швидшим */
-document.addEventListener("DOMContentLoaded", () => {
-  // підвантажимо SDK наперед, але без автопоказу
-  loadAdexiumScriptOnce().catch(()=>{ /* тихо */ });
-});
-
 
 /* ========= СТАН ========= */
 let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
