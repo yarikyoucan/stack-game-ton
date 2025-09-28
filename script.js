@@ -1,15 +1,16 @@
-// script.js — ПОВНА версія: гра, завдання, батли, коди, Adsgram/Adexium
+// script.js — повна версія з таймером 1 хв для Adexium і добовою квотою 10/день
 "use strict";
 console.clear();
 
 /* ========= КОНСТАНТИ ========= */
-// Щоденні +0.1⭐ (окремі кнопки для Adsgram та Adexium)
-const DAILY_CAP = 25;             // максимум переглядів на день для КОЖНОГО провайдера
-const DAILY_COOLDOWN_MS = 0;      // БЕЗ кулдауна між показами
+// Щоденні +0.1⭐ (ОКРЕМО для Adsgram та Adexium)
+const DAILY_CAP_GRAM = 25;  // Adsgram ліміт/день
+const DAILY_CAP_EX   = 10;  // Adexium рекомендований ліміт/день
+const ADEXIUM_MIN_GAP_MS = 60_000; // 1 хв між переглядами Adexium
 
 // Реклама після гри (локальний антиспам)
 const GAME_AD_COOLDOWN_MS = 15_000;
-// Загальний глобальний антиспам — НЕ використовуємо для щоденних +0.1⭐
+// Глобальний антиспам — НЕ використовується для щоденних +0.1⭐
 const ANY_AD_COOLDOWN_MS  = 60_000;
 // Мінімальна пауза між двома показами в одному контексті (крім daily)
 const MIN_BETWEEN_SAME_CTX_MS = 10_000;
@@ -43,8 +44,8 @@ const ALPH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 
 /* ========= ADEXIUM ========= */
-const ADEXIUM_WID = "8d2ce1f1-ae64-4fc3-ac46-41bc92683fae"; // вирівняно з index.html
-const ADEXIUM_FORMAT = "interstitial";
+const ADEXIUM_WID = "8d2ce1f1-ae64-4fc3-ac46-41bc92683fae";
+const ADEXIUM_FORMAT_PREFERRED = "interstitial";
 
 /* ========= СТАН ========= */
 let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
@@ -57,7 +58,7 @@ let lastTask5RewardAt = 0, lastTask10RewardAt = 0;
 
 /* --- щоденні лічильники +0.1⭐ окремо для провайдерів --- */
 let gramCount = 0, exCount = 0;     // перегляди за сьогодні
-let lastGramAt = 0, lastExAt = 0;   // не блокують покази (DAILY_COOLDOWN_MS = 0), лиш для статистики
+let lastGramAt = 0, lastExAt = 0;   // останні успішні покази
 let dailyStamp = "";                // 'YYYY-MM-DD' для авто-ресету
 
 /* --- пострекламний таймер --- */
@@ -76,8 +77,8 @@ let adInFlightGameover = false;
 let adInFlightTask5 = false;
 let adInFlightTask10 = false;
 
-/* ========= БАТЛ (виклик суперника) ========= */
-let oppScorePending = null; // ЗБЕРІГАЄМО В localStorage
+/* ========= БАТЛ ========= */
+let oppScorePending = null;
 let challengeActive = false;
 let challengeStartAt = 0;
 let challengeDeadline = 0;
@@ -211,10 +212,10 @@ window.onload = function(){
   if (withdrawBtn) withdrawBtn.addEventListener("click", withdraw50ShareToGroup);
 
   // таски 5/10
-  if ($("watchAd5Btn"))  $("watchAd5Btn").addEventListener("click", onWatchAd5);
-  if ($("watchAd10Btn")) $("watchAd10Btn").addEventListener("click", onWatchAd10);
+  $("watchAd5Btn")?.addEventListener("click", onWatchAd5);
+  $("watchAd10Btn")?.addEventListener("click", onWatchAd10);
 
-  // ЩОДЕННІ +0.1⭐ — прив’язка до кнопок з HTML
+  // ЩОДЕННІ +0.1⭐
   $("watchAdsgramDailyBtn")?.addEventListener("click", onWatchGramDaily);
   $("watchAdexiumDailyBtn")?.addEventListener("click", onWatchExDaily);
 
@@ -245,7 +246,7 @@ function subscribe(){
   saveData();
 }
 
-/* ========= Навігація (якщо хочеш — можна забрати, бо є в index.html) ========= */
+/* ========= Навігація ========= */
 function showPage(id, btn){
   document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
   $(id).classList.add("active");
@@ -259,7 +260,7 @@ window.showPage = showPage;
 /* ========= Лідерборд-заглушка ========= */
 function initLeaderboard(){ /* no-op */ }
 
-/* ========= Реклама: SDK Adsgram ========= */
+/* ========= Adsgram ========= */
 function initAds(){
   const sdk = window.Adsgram || window.SAD || null;
   if (!sdk){
@@ -275,9 +276,6 @@ function initAds(){
   try { AdGameover = (sdk.init ? sdk.init({ blockId: ADSGRAM_BLOCK_ID_GAMEOVER }) : sdk.AdController?.create({blockId: ADSGRAM_BLOCK_ID_GAMEOVER})); }
   catch (e) { console.warn("Adsgram init (gameover) error:", e); }
 }
-
-function inTelegramWebApp(){ return !!(window.Telegram && Telegram.WebApp); }
-
 async function showAdsgram(controller){
   if (!controller) return { shown:false, reason:'adsgram_no_controller' };
   try{
@@ -288,87 +286,93 @@ async function showAdsgram(controller){
   }
 }
 
-/* ========= Adexium: керований місток (без автопоказів у head) ========= */
-/*
-  - Не рахуємо перегляд, якщо не було подій close/dismiss або отримали error/no_fill.
-  - Вміє працювати як із фабрикою з head (window.__getAdexium), так і напряму через клас.
-  - Без "штучного успіху": якщо 10с немає жодної події — рахуємо як не показалось.
-*/
-function setupAdexiumBridge(){
-  window.__adexiumWidget = {
-    show: () => new Promise((resolve, reject) => {
-      // 1) якщо у head є фабрика — використовуємо її
-      if (typeof window.__getAdexium === 'function') {
-        try {
-          const w = window.__getAdexium();
-          return attachAndShow(w).then(() => resolve(true)).catch(reject);
-        } catch (e) { /* впадемо в локальний шлях */ }
-      }
+/* ========= ADEXIUM: місток, події, fallback на різні API ========= */
+function inTelegramWebApp(){ return !!(window.Telegram && Telegram.WebApp); }
+function adxLog(...a){ console.log("[Adexium]", ...a); }
+// Debug bus
+(function attachAdexiumDebugBus(){
+  if (window.__adexiumBusAttached) return;
+  window.__adexiumBusAttached = true;
+  window.addEventListener('message', (ev)=>{
+    const d = ev?.data;
+    if (!d || typeof d!=='object' || d.source!=='adexium') return;
+    adxLog("event:", d.type, d);
+  });
+})();
 
-      // 2) локально чекаємо на клас і створюємо
-      const started = Date.now(), MAX_WAIT = 6000, tick = 200;
-      const t = setInterval(() => {
-        if (typeof window.AdexiumWidget === 'function') {
-          clearInterval(t);
-          try {
-            const w = new window.AdexiumWidget({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT });
-            attachAndShow(w).then(() => resolve(true)).catch(reject);
-          } catch (e) { reject(e); }
-        } else if (Date.now() - started > MAX_WAIT) {
-          clearInterval(t);
-          reject(new Error('adexium_not_ready'));
-        }
-      }, tick);
-
-      function attachAndShow(widget){
-        return new Promise(async (res, rej) => {
-          let finished = false;
-          const done = (ok, why) => { if (finished) return; finished = true; window.removeEventListener('message', onMsg); ok ? res(true) : rej(new Error(why||'adexium_failed')); };
-          function onMsg(ev){
-            const d = ev?.data;
-            if (!d || typeof d !== 'object' || d.source !== 'adexium') return;
-            if (d.type === 'error' || d.type === 'no_fill') return done(false, d.type);
-            if (d.type === 'close' || d.type === 'dismiss') return done(true);
-            // 'open'/'shown' — просто життєвий цикл
-          }
-          window.addEventListener('message', onMsg);
-          try {
-            if (typeof widget.show === 'function') await widget.show();
-            else if (typeof widget.open === 'function') await widget.open();
-            else if (typeof widget.start === 'function') await widget.start();
-            else if (typeof widget.autoMode === 'function') await widget.autoMode(); // деякі білди мають лише це
-            // якщо 10с без подій — вважаємо, що не показалось
-            setTimeout(() => done(false, 'no_events_timeout'), 10000);
-          } catch (e) { rej(e); }
-        });
-      }
-    })
-  };
-}
-
-function showAdexiumInterstitial() {
-  return new Promise(async (resolve) => {
-    try {
-      if (!window.__adexiumWidget || typeof window.__adexiumWidget.show !== 'function') {
-        console.warn('[Adexium] bridge not ready');
-        return resolve({ shown:false, reason:'adexium_not_ready' });
-      }
-      try {
-        await window.__adexiumWidget.show();
-        console.log('[Adexium] shown OK');
-        return resolve({ shown:true });
-      } catch (err) {
-        console.warn('[Adexium] show error:', err?.message || err);
-        return resolve({ shown:false, reason: err?.message || 'adexium_show_error' });
-      }
-    } catch (e) {
-      console.warn('[Adexium] unknown error:', e);
-      resolve({ shown:false, reason:'adexium_unknown' });
+async function createAndShowAdexium({prefer=ADEXIUM_FORMAT_PREFERRED}={}){
+  // 1) якщо index.html дав фабрику — беремо її
+  if (typeof window.__getAdexium === 'function') {
+    const w = window.__getAdexium();
+    return showViaKnownApis(w);
+  }
+  // 2) інакше чекаємо клас
+  const MAX_WAIT = 6000, start=Date.now();
+  while (typeof window.AdexiumWidget!=='function' && (Date.now()-start)<MAX_WAIT){
+    await new Promise(r=>setTimeout(r, 150));
+  }
+  if (typeof window.AdexiumWidget!=='function'){
+    throw new Error("adexium_not_ready");
+  }
+  // 3) пробуємо формати у порядку пріоритету
+  const formats = prefer==='interstitial' ? ['interstitial','push_like'] : ['push_like','interstitial'];
+  let lastErr = null;
+  for (const fmt of formats){
+    try{
+      const w = new window.AdexiumWidget({ wid: ADEXIUM_WID, adFormat: fmt });
+      adxLog("try format:", fmt);
+      await showViaKnownApis(w);
+      adxLog("shown with format:", fmt);
+      return; // успіх
+    }catch(e){
+      adxLog("format fail:", fmt, e?.message||e);
+      lastErr = e;
     }
+  }
+  throw lastErr || new Error("adexium_unknown");
+}
+function showViaKnownApis(widget){
+  return new Promise(async (resolve, reject)=>{
+    let finished = false;
+    const done = (ok, why) => {
+      if (finished) return;
+      finished = true;
+      window.removeEventListener('message', onMsg);
+      ok ? resolve() : reject(new Error(why||'adexium_failed'));
+    };
+    function onMsg(ev){
+      const d = ev?.data;
+      if (!d || typeof d!=='object' || d.source!=='adexium') return;
+      if (d.type==='error' || d.type==='no_fill') return done(false, d.type);
+      if (d.type==='close' || d.type==='dismiss') return done(true);
+    }
+    window.addEventListener('message', onMsg);
+    try{
+      if (typeof widget.show === 'function') await widget.show();
+      else if (typeof widget.open === 'function') await widget.open();
+      else if (typeof widget.start=== 'function') await widget.start();
+      else if (typeof widget.autoMode === 'function') await widget.autoMode();
+      else throw new Error("no_show_method");
+      // бекап, якщо не приходять події
+      setTimeout(()=>done(false,'no_events_timeout'), 10000);
+    }catch(e){ reject(e); }
   });
 }
+async function showAdexiumInterstitial(){
+  if (!inTelegramWebApp()){
+    alert("Відкрий через Telegram (WebApp), реклама тут не запускається.");
+    return { shown:false, reason:"not_in_telegram" };
+  }
+  try{
+    await createAndShowAdexium({prefer:'interstitial'});
+    return { shown:true };
+  }catch(e){
+    adxLog("show fail:", e?.message||e);
+    return { shown:false, reason: e?.message||'adexium_error' };
+  }
+}
 
-/* ========= ЩОДЕННІ +0.1⭐ (дві кнопки) ========= */
+/* ========= ЩОДЕННІ +0.1⭐ ========= */
 function startDailyPlusTicker(){
   if (dailyUiTicker) clearInterval(dailyUiTicker);
   dailyUiTicker = setInterval(()=>{
@@ -379,20 +383,42 @@ function startDailyPlusTicker(){
 }
 
 function updateDailyUI(){
-  const g = $("adGramCounter");
-  const e = $("adExCounter");
-  if (g) g.textContent = String(Math.min(gramCount, DAILY_CAP));
-  if (e) e.textContent = String(Math.min(exCount, DAILY_CAP));
+  // Підпишемо правильні квоти у тексті тасків
+  const gramTask = document.querySelector('#taskAdsgramDaily > span');
+  if (gramTask){
+    gramTask.innerHTML = `🎬 Adsgram: +0.1⭐ — <b id="adGramCounter">${Math.min(gramCount, DAILY_CAP_GRAM)}</b>/${DAILY_CAP_GRAM} сьогодні`;
+  }
+  const exTask = document.querySelector('#taskAdexiumDaily > span');
+  if (exTask){
+    exTask.innerHTML = `🎬 Adexium: +0.1⭐ — <b id="adExCounter">${Math.min(exCount, DAILY_CAP_EX)}</b>/${DAILY_CAP_EX} сьогодні`;
+  }
 
   const gBtn = $("watchAdsgramDailyBtn");
   const eBtn = $("watchAdexiumDailyBtn");
-  // БЕЗ кулдауна: блокуємо лише коли досягнуто денний ліміт
-  if (gBtn) gBtn.disabled = (gramCount >= DAILY_CAP);
-  if (eBtn) eBtn.disabled = (exCount >= DAILY_CAP);
+
+  if (gBtn) gBtn.disabled = (gramCount >= DAILY_CAP_GRAM);
+
+  // cooldown для Adexium
+  const now = Date.now();
+  const gapLeft = ADEXIUM_MIN_GAP_MS - (now - lastExAt);
+  const adexiumCooling = gapLeft > 0;
+
+  if (eBtn){
+    eBtn.disabled = (exCount >= DAILY_CAP_EX) || adexiumCooling;
+    // показати секунди до розблокування
+    if (adexiumCooling){
+      const secs = Math.ceil(gapLeft/1000);
+      if (!eBtn.dataset._label) eBtn.dataset._label = eBtn.textContent;
+      eBtn.textContent = (document.documentElement.lang==='en' ? `Wait ${secs}s` : `Очікуй ${secs}с`);
+    } else if (eBtn.dataset._label){
+      eBtn.textContent = eBtn.dataset._label;
+      delete eBtn.dataset._label;
+    }
+  }
 }
 
 async function onWatchGramDaily(){
-  if (gramCount >= DAILY_CAP) return;
+  if (gramCount >= DAILY_CAP_GRAM) return;
 
   const res = await showAdsgram(AdTaskMinute);
   if (!res.shown) return;
@@ -405,15 +431,31 @@ async function onWatchGramDaily(){
 }
 
 async function onWatchExDaily(){
-  if (exCount >= DAILY_CAP) return;
+  if (exCount >= DAILY_CAP_EX) return;
+
+  // Перевірка кулдауна 1 хв
+  const now = Date.now();
+  const elapsed = now - lastExAt;
+  if (elapsed < ADEXIUM_MIN_GAP_MS){
+    const secs = Math.ceil((ADEXIUM_MIN_GAP_MS - elapsed)/1000);
+    alert(document.documentElement.lang==='en'
+      ? `Please wait ${secs}s before the next Adexium view.`
+      : `Зачекай ${secs}с до наступного перегляду Adexium.`);
+    updateDailyUI();
+    return;
+  }
 
   const res = await showAdexiumInterstitial();
   if (!res.shown) {
-    console.warn('[Adexium] not shown, reason =', res.reason);
-    return; // не зараховуємо перегляд, якщо показу не було
+    const reason = String(res.reason || "").replace(/_/g," ");
+    alert((document.documentElement.lang==='en'
+      ? "Ad wasn't shown: "
+      : "Реклама не показалась: ") + reason);
+    updateDailyUI();
+    return;
   }
 
-  lastExAt = Date.now(); // статистика
+  lastExAt = Date.now(); // фіксуємо час успішного показу для кулдауна
   exCount += 1;
   addBalance(0.1);
   saveData();
@@ -681,7 +723,7 @@ function onCheckGames100(){
   }
 }
 
-/* ========= БАТЛ: логіка ========= */
+/* ========= БАТЛ ========= */
 function weightedOppScore(){
   const r = Math.random();
   if (r < 0.15){
@@ -701,7 +743,6 @@ function setupChallengeUI(){
   const leftEl = $("challengeLeft");
   const statusEl = $("challengeStatus");
 
-  // Початковий стан (oppScorePending з localStorage)
   const storedOpp = localStorage.getItem("oppScorePending");
   if (storedOpp && !isNaN(+storedOpp)) oppScorePending = +storedOpp;
   if (scoreBox) scoreBox.textContent = oppScorePending!=null ? String(oppScorePending) : "—";
@@ -734,7 +775,7 @@ function setupChallengeUI(){
     challengeStartAt = Date.now();
     challengeDeadline = challengeStartAt + 3*60*60*1000; // 3 години
     challengeStake = stake;
-    challengeOpp = oppScorePending; // фіксуємо поточного суперника
+    challengeOpp = oppScorePending;
 
     info.textContent = `Виклик активний! Твій суперник має рекорд ${challengeOpp}. Побий його до завершення таймера.`;
     checkBtn.disabled = false;
@@ -762,7 +803,7 @@ function setupChallengeUI(){
     const expired = now > challengeDeadline;
 
     if (won){
-      addBalance(challengeStake * 1.5); // виграш
+      addBalance(challengeStake * 1.5);
       statusEl.textContent = "✅ Виконано! Нараховано " + (challengeStake*1.5).toFixed(2) + "⭐";
       checkBtn.disabled = true;
       finishChallenge();
@@ -775,7 +816,6 @@ function setupChallengeUI(){
     }
   };
 
-  // Якщо відновлювали зі сховища (активний виклик)
   const storedActive = localStorage.getItem("challengeActive")==="true";
   if (storedActive){
     challengeActive = true;
@@ -803,7 +843,7 @@ function finishChallenge(){
   challengeDeadline = 0;
   challengeStake = 0;
   challengeOpp = 0;
-  oppScorePending = null; // очищаємо «рекорд суперника» після завершення
+  oppScorePending = null;
   const scoreBox = $("opponentScore");
   if (scoreBox) scoreBox.textContent = "—";
   $("challengeCountdown").style.display = "none";
@@ -816,7 +856,6 @@ class Stage{
   constructor(){
     this.container = document.getElementById("container");
     this.scene = new THREE.Scene();
-    // прозорий рендерер, щоб CSS-фон було видно під грою
     this.renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setClearColor(0x000000, 0);
@@ -1023,7 +1062,6 @@ class Game{
     updateHighscore(currentScore);
     gamesPlayedSinceClaim += 1; saveData(); updateGamesTaskUI();
 
-    // показ реклами «gameover»: тільки Adsgram-блок для gameover
     const now = Date.now();
     if (!adInFlightGameover && (now - lastGameoverAdAt >= Math.max(MIN_BETWEEN_SAME_CTX_MS, GAME_AD_COOLDOWN_MS))){
       adInFlightGameover = true;
@@ -1073,6 +1111,7 @@ function updateHighscore(currentScore){
     const hs=$("highscore"); if (hs) hs.innerText="🏆 "+highscore;
   }
 }
+
 
 
 
