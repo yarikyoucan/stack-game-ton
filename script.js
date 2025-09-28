@@ -43,8 +43,136 @@ const ALPH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 
 /* ========= ADEXIUM ========= */
-const ADEXIUM_WID = "8d2ce1f1-ae64-4fc3-ac46-41bc92683fae"; // вирівняно з index.html
+/* ПІДСТАВ СВІЙ SDK URL від Adexium.
+   Приклади (вигадані; вкажи реальні):
+   - "https://cdn.adexium.xyz/sdk/adexium.min.js"
+   - "https://cdn.tgads.example/adexium/widget.js"
+*/
+const ADEXIUM_SDK_URL = "REPLACE_WITH_REAL_ADEXIUM_SDK_URL";
+const ADEXIUM_WID = "8d2ce1f1-ae64-4fc3-ac46-41bc92683fae"; // твій wid
 const ADEXIUM_FORMAT = "interstitial";
+
+/* Одноразове підвантаження скрипту */
+let __adexiumScriptLoading = null;
+function loadAdexiumScriptOnce() {
+  if (window.__adexium_loaded) return Promise.resolve();
+  if (__adexiumScriptLoading) return __adexiumScriptLoading;
+
+  __adexiumScriptLoading = new Promise((resolve, reject) => {
+    if (!ADEXIUM_SDK_URL || ADEXIUM_SDK_URL.startsWith("REPLACE_WITH")) {
+      console.warn("[Adexium] SDK URL не заданий");
+      return reject(new Error("adexium_sdk_url_missing"));
+    }
+    const s = document.createElement("script");
+    s.src = ADEXIUM_SDK_URL;
+    s.async = true;
+    s.onload = () => {
+      // даємо SDK 200–300 мс ініціалізуватися
+      setTimeout(() => { window.__adexium_loaded = true; resolve(); }, 250);
+    };
+    s.onerror = () => reject(new Error("adexium_sdk_load_error"));
+    document.head.appendChild(s);
+  });
+  return __adexiumScriptLoading;
+}
+
+/* Очікування готовності будь-якого з підтримуваних API */
+function waitAdexiumReady(maxWaitMs = 6000) {
+  const start = Date.now();
+  return new Promise((resolve, reject) => {
+    const tick = setInterval(() => {
+      const factory = typeof window.__getAdexium === "function";
+      const widgetC = typeof window.AdexiumWidget === "function";
+      const apiObj  = (window.Adexium && (typeof window.Adexium.showInterstitial === "function" || typeof window.Adexium.show === "function"));
+
+      if (factory || widgetC || apiObj) {
+        clearInterval(tick);
+        resolve({ factory, widgetC, apiObj });
+      } else if (Date.now() - start > maxWaitMs) {
+        clearInterval(tick);
+        reject(new Error("adexium_not_ready"));
+      }
+    }, 150);
+  });
+}
+
+/* Єдиний публічний виклик показу ADEXIUM (використовується у onWatchExDaily) */
+async function showAdexiumInterstitial() {
+  try {
+    // 1) підвантажуємо SDK (якщо ще ні)
+    await loadAdexiumScriptOnce();
+    // 2) чекаємо на один із підтримуваних інтерфейсів
+    const ready = await waitAdexiumReady();
+
+    // 3) Викликаємо в порядку пріоритету: офіційний об’єкт -> фабрика -> клас віджета
+    // 3.1) window.Adexium.* (наприклад showInterstitial / show(blockId?))
+    if (ready.apiObj) {
+      try {
+        if (typeof window.Adexium.showInterstitial === "function") {
+          const r = window.Adexium.showInterstitial(ADEXIUM_WID, { format: ADEXIUM_FORMAT });
+          if (r && typeof r.then === "function") await r;
+        } else {
+          // інколи метод може називатись "show"
+          const r = window.Adexium.show({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT });
+          if (r && typeof r.then === "function") await r;
+        }
+        console.log("[Adexium] shown via window.Adexium.*");
+        return { shown: true };
+      } catch (e) {
+        console.warn("[Adexium] apiObj show error:", e);
+        // падаємо на наступний шлях
+      }
+    }
+
+    // 3.2) фабрика у head: __getAdexium()
+    if (ready.factory) {
+      try {
+        const w = window.__getAdexium();
+        const p = (w.show && w.show({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT })) ||
+                  (w.open && w.open({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT })) ||
+                  (w.start && w.start({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT }));
+        if (p && typeof p.then === "function") await p;
+        console.log("[Adexium] shown via __getAdexium()");
+        return { shown: true };
+      } catch (e) {
+        console.warn("[Adexium] factory show error:", e);
+        // далі — клас
+      }
+    }
+
+    // 3.3) клас AdexiumWidget
+    if (ready.widgetC) {
+      try {
+        const w = new window.AdexiumWidget({ wid: ADEXIUM_WID, adFormat: ADEXIUM_FORMAT });
+        if (typeof w.show === "function") {
+          const p = w.show();
+          if (p && typeof p.then === "function") await p;
+        } else if (typeof w.open === "function") {
+          const p = w.open();
+          if (p && typeof p.then === "function") await p;
+        } else if (typeof w.start === "function") {
+          const p = w.start();
+          if (p && typeof p.then === "function") await p;
+        } else if (typeof w.autoMode === "function") {
+          await w.autoMode();
+        } else {
+          throw new Error("adexium_widget_no_methods");
+        }
+        console.log("[Adexium] shown via AdexiumWidget");
+        return { shown: true };
+      } catch (e) {
+        console.warn("[Adexium] widget show error:", e);
+      }
+    }
+
+    // якщо сюди дійшли — нічого не спрацювало
+    return { shown: false, reason: "adexium_show_unavailable" };
+  } catch (err) {
+    console.warn("[Adexium] not shown:", err?.message || err);
+    return { shown: false, reason: err?.message || "adexium_error" };
+  }
+}
+
 
 /* ========= СТАН ========= */
 let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
