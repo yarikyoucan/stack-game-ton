@@ -122,11 +122,12 @@ const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
     }
 
     // інстанс виджета (БЕЗ debug → живі оголошення)
-    const adex = new AdexiumWidget({
-      wid: WID,
-      adFormat: 'interstitial'
-      // debug: false // не вказуємо взагалі
-    });
+  const adex = new AdexiumWidget({
+  wid: '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae',
+  adFormat: 'interstitial'
+  // debug не передаємо
+});
+
 
     // по кліку — запросити показ
     btn.addEventListener('click', () => {
