@@ -45,170 +45,29 @@ const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 /* ===========================
    ADEXIUM — ЩОДЕННИЙ ТАСК (ручний показ по кліку, LIVE)
    =========================== */
-(function () {
-  // --- Налаштування ---
-  const WID = '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae'; // твій wid
-  const BTN_ID = 'watchAdexiumDailyBtn';               // id кнопки у HTML
-
-  const DAILY_CAP = 25;        // максимум платних переглядів на день
-  const CREDIT = 0.1;          // скільки зірок даємо за перегляд
-  const CREDIT_ON_CLOSE = true; // зараховувати, якщо користувач просто закрив (за потреби = false)
-
-  // --- Ключі localStorage ---
-  const LS_EX_COUNT = 'dailyExCount'; // лічильник показів Adexium за сьогодні
-  const LS_DAY      = 'dailyStamp';   // yyyy-mm-dd
-  const LS_BAL      = 'balance';      // баланс зірок
-
-  // --- Внутрішній стан ---
-  let inFlight = false;   // захист від подвійного кліку під час одного показу
-  let creditedFlag = false; // щоб за один показ зарахувати рівно один раз
-
-  // --- Хелпери стану/балансу/UI ---
-  function todayStamp() {
-    const d = new Date();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${d.getFullYear()}-${mm}-${dd}`;
-  }
-
-  function loadState() {
-    let exCount = parseInt(localStorage.getItem(LS_EX_COUNT) || '0', 10);
-    let day = localStorage.getItem(LS_DAY) || todayStamp();
-
-    const t = todayStamp();
-    if (day !== t) {
-      exCount = 0;
-      day = t;
-      saveState(exCount, day);
-    }
-    return { exCount, day };
-  }
-
-  function saveState(exCount, day) {
-    localStorage.setItem(LS_EX_COUNT, String(exCount));
-    localStorage.setItem(LS_DAY, day || todayStamp());
-  }
-
-  function getBalance() {
-    return parseFloat(localStorage.getItem(LS_BAL) || '0');
-  }
-
-  function setBalance(v) {
-    const val = Number.isInteger(v) ? String(v) : v.toFixed(2);
-    localStorage.setItem(LS_BAL, String(v));
-    const b = document.getElementById('balance');
-    if (b) b.textContent = val;
-  }
-
-  function addBalance(delta) {
-    const next = parseFloat((getBalance() + delta).toFixed(2));
-    setBalance(next);
-  }
-
-  function updateCounterUI(exCount) {
-    const cnt = document.getElementById('adExCounter');
-    if (cnt) cnt.textContent = String(Math.min(exCount, DAILY_CAP));
-    const btn = document.getElementById(BTN_ID);
-    if (btn) btn.disabled = (exCount >= DAILY_CAP) || inFlight;
-  }
-
-  // --- Основна логіка ---
-  document.addEventListener('DOMContentLoaded', () => {
-    const btn = document.getElementById(BTN_ID);
-    if (!btn) return;
-
-    // 1) Початковий стан UI
-    let { exCount, day } = loadState();
-    updateCounterUI(exCount);
-    setBalance(getBalance());
-
-    // 2) SDK має бути підключений у index.html:
-    //    <script src="https://cdn.tgads.space/assets/js/adexium-widget.min.js"></script>
-    if (typeof window.AdexiumWidget !== 'function') {
-      console.error('[Adexium] SDK не завантажився. Перевір підключення у index.html');
-      return;
-    }
-
-    // 3) ОДИН інстанс віджета, БЕЗ debug → live креативи
-    const adex = new AdexiumWidget({
-      wid: WID,
-      adFormat: 'interstitial'
-      // НЕ додаємо debug: true !!!
+document.addEventListener('DOMContentLoaded', () => {
+    // widget initialization
+    const adexiumAds = new AdexiumWidget({
+        wid: '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae',
+        adFormat: 'interstitial',
+        debug: true // remove this on production, use for test only
+    });
+    const button = document.getElementById('button');
+    
+    // bind click event on button
+    button.onclick = (watchAdexiumDailyBtn) => {
+        // request ad
+        adexiumAds.requestAd('interstitial');
+    };
+    // subscribe on ad received event
+    adexiumAds.on('adReceived', (ad) => {
+        adexiumAds.displayAd(ad); // displaying ad
     });
 
-    // 4) Показ лише по кліку
-    btn.addEventListener('click', () => {
-      if (inFlight || exCount >= DAILY_CAP) return;
-      inFlight = true; creditedFlag = false;
-      updateCounterUI(exCount);
-      try {
-        adex.requestAd('interstitial');
-      } catch (e) {
-        console.error('[Adexium] requestAd error:', e);
-        inFlight = false;
-        updateCounterUI(exCount);
-      }
+    adexiumAds.on('noAdFound', () => {
+        // do something if ad is not found for user
     });
-
-    // 5) Отримали — показуємо
-    adex.on('adReceived', (ad) => {
-      try {
-        adex.displayAd(ad);
-      } catch (e) {
-        console.error('[Adexium] displayAd error:', e);
-        inFlight = false;
-        updateCounterUI(exCount);
-      }
-    });
-
-    // 6) Нема інвентарю
-    adex.on('noAdFound', () => {
-      // alert('Наразі немає реклами. Спробуйте пізніше.'); // опційно
-      inFlight = false;
-      updateCounterUI(exCount);
-    });
-
-    // 7) Успішний перегляд (кращий тригер для винагород)
-    adex.on('adPlaybackCompleted', () => {
-      creditOnce();
-    });
-
-    // 8) Фолбек — юзер закрив (якщо дозволено — теж зараховуємо)
-    adex.on('adClosed', () => {
-      if (CREDIT_ON_CLOSE) creditOnce();
-      else {
-        inFlight = false;
-        updateCounterUI(exCount);
-      }
-    });
-
-    // --- Зарахування 1 раз на показ ---
-    function creditOnce() {
-      if (creditedFlag) return;
-      creditedFlag = true;
-
-      // оновити дату/лічильник на випадок перетину дня
-      const t = todayStamp();
-      if (day !== t) { exCount = 0; day = t; }
-      exCount += 1;
-      saveState(exCount, day);
-
-      // баланс
-      addBalance(CREDIT);
-
-      // розблокувати, підмалювати UI
-      inFlight = false;
-      updateCounterUI(exCount);
-
-      // готуємось до наступного кліку
-      setTimeout(() => { creditedFlag = false; }, 0);
-    }
-
-    // Навмисно даємо доступ з консолі для швидкого дебага:
-    window.__adex = adex;
-  });
-})();
-
+});
 /* ========= СТАН ========= */
 let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
 let gamesPlayedSinceClaim = 0;
