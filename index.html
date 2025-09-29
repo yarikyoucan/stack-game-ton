@@ -44,7 +44,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="220" viewBox="0 0 800 220">\
   <rect width="800" height="220" fill="none"/>\
   <path d="M0 190 L20 170 L45 172 L45 190 L70 160 L95 162 L95 190 L130 150 L160 152 L160 190 L200 165 L230 167 L230 190 L270 155 L310 157 L310 190 L350 170 L380 172 L380 190 L420 160 L455 162 L455 190 L495 168 L530 170 L530 190 L570 156 L610 158 L610 190 L650 170 L690 172 L690 190 L730 160 L770 165 L770 190 L800 150 L800 220 L0 220 Z" fill="%23040a1c"/>\
-  <path d="M0 200 L30 180 L50 180 L50 200 L80 155 L110 155 L110 200 L150 140 L180 140 L180 200 L220 165 L250 165 L250 200 L300 145 L340 145 L340 200 L380 175 L420 175 L420 200 L460 150 L500 150 L500 200 L540 165 L580 165 L580 200 L620 145 L660 145 L660 200 L700 175 L740 175 L740 200 L800 160 L800 220 L0 220 Z" fill="%23000a1a"/>\
+  <path d="M0 200 L30 180 L50 180 L50 200 L80 155 L110 155 L110 200 L150 140 L180 140 L180 200 L220 165 L250 165 L250 200 L300 145 L340 145 L340 200 L380 175 L420 175 Л420 200 L460 150 L500 150 L500 200 L540 165 L580 165 L580 200 L620 145 L660 145 L660 200 L700 175 L740 175 L740 200 L800 160 L800 220 L0 220 Z" fill="%23000a1a"/>\
   <g fill="%23ffd34d">\
     <rect x="58" y="184" width="6" height="10"/><rect x="66" y="184" width="6" height="10" opacity="0.6"/>\
     <rect x="206" y="186" width="6" height="10"/><rect x="214" y="186" width="6" height="10" opacity="0.6"/>\
@@ -87,7 +87,7 @@
       background-image:
         radial-gradient(1200px 500px at 15% 0%, rgba(99,102,241,.35), transparent 60%),
         radial-gradient(1000px 600px at 85% 100%, rgba(56,189,248,.25), transparent 60%),
-        linear-gradient(135deg,#0f172a 0%, #1e1b4b 45%, #3b82f6 100%),
+        linear-gradient(135deg,#0f172a 0%, #1e1b4б 45%, #3b82f6 100%),
         url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="620" height="180"><g fill="%23ffffff1f" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="800" transform="rotate(-18 310 90)"><text x="-60" y="40">TASKS • TASKS • TASKS • TASKS • TASKS •</text><text x="-60" y="100">TASKS • TASKS • TASKS • TASKS • TASKS •</text><text x="-60" y="160">TASKS • TASKS • TASKS • TASKS • TASKS •</text></g></svg>');
       background-size:auto,auto,auto,620px 180px;background-repeat:no-repeat,no-repeat,no-repeat,repeat;
     }
@@ -195,60 +195,61 @@
   <!-- 2) Adexium SDK -->
   <script src="https://cdn.tgads.space/assets/js/adexium-widget.min.js"></script>
 
-  <!-- ADEXIUM WRAPPER: гарантує requestAd/adReceived/displayAd + події у window -->
+  <!-- Adexium Wrapper (manual click-only, без autoMode) -->
   <script>
     (function () {
       const WID    = '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae'; // твій widget id
       const FORMAT = 'interstitial';
 
-      // Глобальний стан + pendingAd
-      window.__adex = { ready:false, widget:null, queue:[], pendingAd:undefined };
+      // Глобальний стан + pendingAd (створюємо одразу)
+      const _adex = window.__adex = window.__adex || { ready:false, widget:null, queue:[], pendingAd:undefined };
 
-      // Фабрика, яку викликає script.js
+      // Фабрика доступна відразу (навіть до ініт)
       window.__getAdexium = function (cb) {
         if (typeof cb !== 'function') return;
-        if (window.__adex.ready && window.__adex.widget) cb(window.__adex.widget);
-        else window.__adex.queue.push(cb);
+        if (_adex.ready && _adex.widget) cb(_adex.widget);
+        else _adex.queue.push(cb);
       };
 
-      // 1) ініт SDK
-      window.addEventListener('load', function () {
-        let tries = 0;
-        const t = setInterval(() => {
-          tries++;
-          if (typeof window.AdexiumWidget === 'function') {
-            clearInterval(t);
-            try {
-              const adexiumAds = new AdexiumWidget({ wid: WID, adFormat: FORMAT, debug: false });
-              window.__adex.widget = adexiumAds;
-              window.__adex.ready  = true;
+      function initOnce(){
+        if (_adex.ready) return;
+        if (typeof window.AdexiumWidget !== 'function') { // SDK ще не підвантажився — чекаємо
+          setTimeout(initOnce, 80);
+          return;
+        }
+        try {
+          const adexiumAds = new AdexiumWidget({ wid: WID, adFormat: FORMAT, debug: false });
+          _adex.widget = adexiumAds;
+          _adex.ready  = true;
 
-              // 2) прокидаємо події у window
-              const emit = (name, detail) => window.dispatchEvent(new CustomEvent('adexium:'+name, { detail }));
-              adexiumAds.on('adReceived', (ad) => { window.__adex.pendingAd = ad; emit('adReceived', { ad }); });
-              adexiumAds.on('noAdFound',  ()  => { window.__adex.pendingAd = null; emit('noAdFound'); });
-              adexiumAds.on('adDisplayed',      () => emit('adDisplayed'));
-              adexiumAds.on('adClosed',         () => emit('adClosed'));
-              adexiumAds.on('adPlaybackCompleted', () => emit('adPlaybackCompleted'));
-              adexiumAds.on('adRedirected',     () => emit('adRedirected'));
+          // Проксі подій у window
+          const emit = (name, detail) => window.dispatchEvent(new CustomEvent('adexium:'+name, { detail }));
+          adexiumAds.on('adReceived', (ad) => { _adex.pendingAd = ad; emit('adReceived', { ad }); });
+          adexiumAds.on('noAdFound',  ()  => { _adex.pendingAd = null; emit('noAdFound'); });
+          adexiumAds.on('adDisplayed',      () => emit('adDisplayed'));
+          adexiumAds.on('adClosed',         () => emit('adClosed'));
+          adexiumAds.on('adPlaybackCompleted', () => emit('adPlaybackCompleted'));
+          adexiumAds.on('adRedirected',     () => emit('adRedirected'));
 
-              // 3) розморозити чергу фабрики
-              window.__adex.queue.splice(0).forEach(fn => { try{ fn(adexiumAds); }catch(_){} });
+          // Розморозити чергу фабрики
+          _adex.queue.splice(0).forEach(fn => { try{ fn(adexiumAds); }catch(_){} });
 
-              // (резерв) якщо iframe шле postMessage
-              window.addEventListener('message', (ev) => {
-                const d = ev?.data;
-                if (!d || typeof d !== 'object' || d.source !== 'adexium') return;
-                if (d.type === 'shown')  emit('adDisplayed');
-                if (d.type === 'close' || d.type === 'dismiss') emit('adClosed');
-              });
-            } catch (e) {
-              console.warn('[Adexium] init error:', e);
-            }
-          }
-          if (tries > 50) clearInterval(t); // ~5s тайм-аут
-        }, 100);
-      });
+          // Резерв: якщо iframe шле postMessage
+          window.addEventListener('message', (ev) => {
+            const d = ev?.data;
+            if (!d || typeof d !== 'object' || d.source !== 'adexium') return;
+            if (d.type === 'shown')  emit('adDisplayed');
+            if (d.type === 'close' || d.type === 'dismiss') emit('adClosed');
+          });
+        } catch (e) {
+          console.warn('[Adexium] init error:', e);
+        }
+      }
+
+      // Ініціалізуємо якомога раніше, НЕ чекаючи window.load
+      document.addEventListener('DOMContentLoaded', initOnce);
+      // якщо DOM уже готовий — пробуємо одразу
+      if (document.readyState === 'interactive' || document.readyState === 'complete') initOnce();
     })();
   </script>
 </head>
@@ -508,7 +509,7 @@
     });
   </script>
 
-  <!-- Лідерборд: читання з GitHub (підправлено шаблон) -->
+  <!-- Лідерборд: читання з GitHub -->
   <script>
     const LB_URL = 'https://raw.githubusercontent.com/yarikyoucan/stack-game-ton/main/leaderboard.json';
 
@@ -583,7 +584,7 @@
         nice_try: "Ти молодець 👍",
         restart_hint: "Клікни або натисни пробіл, щоб почати знову",
         start_btn: "▶ Старт",
-        pause_before_new_game: "Пауза перед новою гророю",
+        pause_before_new_game: "Пауза перед новою грою",
         you_can_start_in: "Можна буде почати через:",
         sec_suffix: "с",
 
@@ -712,4 +713,5 @@
   <script src="./script.js"></script>
 </body>
 </html>
+
 
