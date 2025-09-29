@@ -1042,3 +1042,4 @@ function updateHighscore(currentScore){
     const hs=$("highscore"); if (hs) hs.innerText="🏆 "+highscore;
   }
 }
+
