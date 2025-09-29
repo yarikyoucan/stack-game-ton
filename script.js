@@ -43,31 +43,170 @@ const ALPH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 
 /* ===========================
-   ADEXIUM — ЩОДЕННИЙ ТАСК (ручний показ по кліку, LIVE)
+   ADEXIUM — ручний показ по кліку (LIVE)
    =========================== */
-document.addEventListener('DOMContentLoaded', () => {
-    // widget initialization
-    const adexiumAds = new AdexiumWidget({
-        wid: '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae',
-        adFormat: 'interstitial',
-        debug: true // remove this on production, use for test only
-    });
-    const button = document.getElementById('button');
-    
-    // bind click event on button
-    button.onclick = (watchAdexiumDailyBtn) => {
-        // request ad
-        adexiumAds.requestAd('interstitial');
-    };
-    // subscribe on ad received event
-    adexiumAds.on('adReceived', (ad) => {
-        adexiumAds.displayAd(ad); // displaying ad
+(function () {
+  // --- Налаштування ---
+  const WID          = '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae'; // твій prod wid
+  const BTN_ID       = 'watchAdexiumDailyBtn';                  // кнопка в таску
+  const COUNTER_ID   = 'adExCounter';                           // лічильник у тексті таска
+  const BALANCE_ID   = 'balance';                               // елемент балансу (якщо є)
+
+  const DAILY_CAP    = 25;   // максимум показів на день
+  const CREDIT       = 0.1;  // +⭐ за показ
+  const CREDIT_ON_CLOSE = true; // зараховувати якщо юзер просто закрив (фолбек)
+
+  // --- Сховище ---
+  const LS_EX_COUNT = 'dailyExCount'; // кількість показів Adexium за сьогодні
+  const LS_DAY      = 'dailyStamp';   // yyyy-mm-dd
+  const LS_BAL      = 'balance';      // баланс зірок
+
+  // --- Внутрішній стан ---
+  let inFlight = false;
+  let creditedOnce = false;
+
+  // --- Хелпери ---
+  function todayStamp() {
+    const d = new Date();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${mm}-${dd}`;
+  }
+
+  function loadDayAndCount() {
+    let exCount = parseInt(localStorage.getItem(LS_EX_COUNT) || '0', 10);
+    let day = localStorage.getItem(LS_DAY) || todayStamp();
+    const t = todayStamp();
+    if (day !== t) { exCount = 0; day = t; }
+    return { exCount, day };
+  }
+  function saveDayAndCount(exCount, day) {
+    localStorage.setItem(LS_EX_COUNT, String(exCount));
+    localStorage.setItem(LS_DAY, day || todayStamp());
+  }
+
+  function getBalance() {
+    return parseFloat(localStorage.getItem(LS_BAL) || '0');
+  }
+  function setBalance(v) {
+    localStorage.setItem(LS_BAL, String(v));
+    const el = document.getElementById(BALANCE_ID);
+    if (el) el.textContent = Number.isInteger(v) ? String(v) : v.toFixed(2);
+  }
+  function addBalanceLocal(delta) {
+    const next = parseFloat((getBalance() + delta).toFixed(2));
+    setBalance(next);
+  }
+
+  function updateCounterUI(exCount) {
+    const cnt = document.getElementById(COUNTER_ID);
+    if (cnt) cnt.textContent = String(Math.min(exCount, DAILY_CAP));
+    const btn = document.getElementById(BTN_ID);
+    if (btn) btn.disabled = (exCount >= DAILY_CAP) || inFlight;
+  }
+
+  function creditOnce() {
+    if (creditedOnce) return;
+    creditedOnce = true;
+
+    // оновлюємо дату/лічильник
+    let { exCount, day } = loadDayAndCount();
+    const t = todayStamp();
+    if (day !== t) { exCount = 0; day = t; }
+    exCount += 1;
+    saveDayAndCount(exCount, day);
+
+    // +баланс: якщо у тебе є глобальна addBalance — використаємо її
+    if (typeof window.addBalance === 'function') {
+      window.addBalance(CREDIT);
+    } else {
+      addBalanceLocal(CREDIT);
+    }
+
+    // підмалювати UI (якщо є твоя глобальна updateDailyUI — викличемо)
+    updateCounterUI(exCount);
+    if (typeof window.updateDailyUI === 'function') window.updateDailyUI();
+
+    inFlight = false;
+    setTimeout(() => { creditedOnce = false; }, 0);
+  }
+
+  // --- Основна логіка ---
+  document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById(BTN_ID);
+    if (!btn) return;
+
+    // первинний UI
+    const s = loadDayAndCount();
+    saveDayAndCount(s.exCount, s.day);
+    updateCounterUI(s.exCount);
+    // відобразити баланс зі сховища, якщо нема твого апдейтера
+    if (typeof window.setBalanceUI !== 'function') {
+      setBalance(getBalance());
+    }
+
+    if (typeof window.AdexiumWidget !== 'function') {
+      console.error('[Adexium] SDK не завантажився. Перевір підключення у index.html');
+      return;
+    }
+
+    // ВАЖЛИВО: створюємо інстанс БЕЗ debug/autoMode → LIVE
+    const adex = new AdexiumWidget({
+      wid: WID,
+      adFormat: 'interstitial'
+      // НЕ додавати debug:true і НЕ викликати autoMode()
     });
 
-    adexiumAds.on('noAdFound', () => {
-        // do something if ad is not found for user
+    btn.addEventListener('click', () => {
+      const { exCount } = loadDayAndCount();
+      if (inFlight || exCount >= DAILY_CAP) return;
+      inFlight = true; creditedOnce = false;
+      updateCounterUI(exCount);
+      try {
+        adex.requestAd('interstitial');
+      } catch (e) {
+        console.error('[Adexium] requestAd error:', e);
+        inFlight = false;
+        updateCounterUI(exCount);
+      }
     });
-});
+
+    adex.on('adReceived', (ad) => {
+      try {
+        adex.displayAd(ad);
+      } catch (e) {
+        console.error('[Adexium] displayAd error:', e);
+        inFlight = false;
+        const { exCount } = loadDayAndCount();
+        updateCounterUI(exCount);
+      }
+    });
+
+    adex.on('noAdFound', () => {
+      // опційно: alert('Наразі немає реклами. Спробуйте пізніше.');
+      inFlight = false;
+      const { exCount } = loadDayAndCount();
+      updateCounterUI(exCount);
+    });
+
+    adex.on('adPlaybackCompleted', () => {
+      creditOnce(); // основний тригер винагороди
+    });
+
+    adex.on('adClosed', () => {
+      if (CREDIT_ON_CLOSE) creditOnce();
+      else {
+        inFlight = false;
+        const { exCount } = loadDayAndCount();
+        updateCounterUI(exCount);
+      }
+    });
+
+    // залишимо інстанс у вікні на випадок дебагу
+    window.__adex = adex;
+  });
+})();
+
 /* ========= СТАН ========= */
 let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
 let gamesPlayedSinceClaim = 0;
