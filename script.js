@@ -42,55 +42,98 @@ const TASK_DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000; // після отриман
 const ALPH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 
-/* =======================
-   ADEXIUM — ТІЛЬКИ РУЧНИЙ ПОКАЗ ПО КЛІКУ
-   ======================= */
-
-(function(){
-  // ID кнопки у твоєму index.html
-  const BTN_ID = 'watchAdexiumDailyBtn';
-
-  // Твій WID (з кабінету)
+/* ===========================
+   ADEXIUM — щоденний таск (ручний показ по кліку)
+   =========================== */
+(function () {
+  // --- Налаштування ---
   const WID = '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae';
+  const DAILY_CAP = 25;       // максимум показів/винагород за день
+  const CREDIT = 0.1;         // скільки зірок нараховуємо за один показ
+  const CREDIT_ON_CLOSE = true; // true = зараховувати і при закритті (не тільки при повному перегляді)
 
-  // Якщо хочеш бачити тестову рекламу завжди під час діагностики — залиш true.
-  // На проді змінити на false.
-  const DEBUG_TEST_ADS = true;
+  // --- Стан (localStorage) ---
+  const LS_EX_COUNT = 'dailyExCount';
+  const LS_DAY      = 'dailyStamp';
+  const LS_BAL      = 'balance';
 
-  // Захист від подвійних кліків під час одного показу
-  let inFlight = false;
+  let inFlight = false; // захист від повторного кліку під час показу
 
-  // Допоміжно — щоб нарахувати нагороду лише один раз за показ
-  let creditedThisShow = false;
+  function todayStamp() {
+    const d = new Date();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${m}-${day}`;
+  }
 
-  // Ініціалізуємо після готовності DOM (кнопка вже в DOM)
+  function loadState() {
+    let exCount = parseInt(localStorage.getItem(LS_EX_COUNT) || '0', 10);
+    let day = localStorage.getItem(LS_DAY) || todayStamp();
+    // автоскидання на новий день
+    const t = todayStamp();
+    if (day !== t) {
+      exCount = 0;
+      day = t;
+      saveState(exCount, day);
+    }
+    return { exCount, day };
+  }
+
+  function saveState(exCount, day) {
+    localStorage.setItem(LS_EX_COUNT, String(exCount));
+    localStorage.setItem(LS_DAY, day || todayStamp());
+  }
+
+  function getBalance() {
+    return parseFloat(localStorage.getItem(LS_BAL) || '0');
+  }
+
+  function setBalance(v) {
+    localStorage.setItem(LS_BAL, String(v));
+    const b = document.getElementById('balance');
+    if (b) b.textContent = Number.isInteger(v) ? String(v) : v.toFixed(2);
+  }
+
+  function addBalance(delta) {
+    const cur = getBalance();
+    const next = parseFloat((cur + delta).toFixed(2));
+    setBalance(next);
+  }
+
+  function updateCounterUI(exCount) {
+    const el = document.getElementById('adExCounter');
+    if (el) el.textContent = String(Math.min(exCount, DAILY_CAP));
+    const btn = document.getElementById('watchAdexiumDailyBtn');
+    if (btn) btn.disabled = (exCount >= DAILY_CAP);
+  }
+
+  // --- Головна логіка показу ---
   document.addEventListener('DOMContentLoaded', () => {
-    const btn = document.getElementById(BTN_ID);
-    if (!btn) {
-      console.warn('[Adexium] Не знайдено кнопку #' + BTN_ID);
-      return;
-    }
+    const btn = document.getElementById('watchAdexiumDailyBtn');
+    if (!btn) return;
 
-    // Перевіряємо, чи завантажився SDK
+    // початковий стан лічильника
+    let { exCount, day } = loadState();
+    updateCounterUI(exCount);
+
     if (typeof window.AdexiumWidget !== 'function') {
-      console.error('[Adexium] SDK не завантажився. Перевір src в index.html і мережеві помилки.');
+      console.error('[Adexium] SDK не завантажився. Перевір src у index.html');
       return;
     }
 
-    // 1) Створюємо інстанс ВІДЖЕТА (без autoMode!)
+    // інстанс виджета (БЕЗ debug → живі оголошення)
     const adex = new AdexiumWidget({
       wid: WID,
-      adFormat: 'interstitial',
-      debug: DEBUG_TEST_ADS
+      adFormat: 'interstitial'
+      // debug: false // не вказуємо взагалі
     });
 
-    // 2) Вішай клік — ЛИШЕ ЦЕ викликає показ
+    // по кліку — запросити показ
     btn.addEventListener('click', () => {
-      if (inFlight) return;          // запобігаємо дабл-кліку
+      if (inFlight) return;
+      if (exCount >= DAILY_CAP) return;
       inFlight = true;
-      creditedThisShow = false;
       btn.disabled = true;
-
       try {
         adex.requestAd('interstitial');
       } catch (e) {
@@ -100,7 +143,7 @@ const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
       }
     });
 
-    // 3) Як тільки оголошення отримано — показуємо
+    // оголошення отримали — показуємо
     adex.on('adReceived', (ad) => {
       try {
         adex.displayAd(ad);
@@ -111,71 +154,58 @@ const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
       }
     });
 
-    // 4) Службові події — для дебага та нарахувань
+    // нема інвентарю
     adex.on('noAdFound', () => {
-      console.warn('[Adexium] noAdFound');
+      // опційно: alert('Наразі немає реклами. Спробуйте пізніше.');
       inFlight = false;
       btn.disabled = false;
-      // Можеш показати юзеру підказку: alert('Немає реклами. Спробуй пізніше.');
     });
 
-    adex.on('adDisplayed', () => {
-      // console.log('[Adexium] adDisplayed');
-    });
-
-    // УСПІШНЕ ЗАВЕРШЕННЯ: найкраще чекати adPlaybackCompleted (відео додивилися)
+    // успішне завершення перегляду
     adex.on('adPlaybackCompleted', () => {
-      if (!creditedThisShow) {
-        creditedThisShow = true;
-        creditReward(); // нараховуємо +0.1⭐ якщо треба
-      }
-      inFlight = false;
-      btn.disabled = false;
+      creditOnce();
     });
 
-    // Фолбек — юзер просто закрив. Якщо хочеш теж зараховувати — залиш, або прибери.
+    // фолбек — користувач закрив (зараховуємо, якщо треба)
     adex.on('adClosed', () => {
-      if (!creditedThisShow) {
-        creditedThisShow = true;
-        creditReward(); // або закоментуй, якщо за "закриття" нагороду не даєш
+      if (CREDIT_ON_CLOSE) creditOnce();
+      else {
+        inFlight = false;
+        btn.disabled = false;
       }
+    });
+
+    // зарахування винагороди один раз на показ
+    let creditedFlag = false;
+    function creditOnce() {
+      if (creditedFlag) return;
+      creditedFlag = true;
+
+      // оновлюємо день/лічильник
+      const t = todayStamp();
+      if (day !== t) { exCount = 0; day = t; }
+
+      exCount += 1;
+      saveState(exCount, day);
+      updateCounterUI(exCount);
+
+      // баланс +0.1⭐
+      addBalance(CREDIT);
+
+      // розблокувати клік
       inFlight = false;
-      btn.disabled = false;
-    });
+      const btn = document.getElementById('watchAdexiumDailyBtn');
+      if (btn) btn.disabled = (exCount >= DAILY_CAP);
 
-    adex.on('adRedirected', () => {
-      // console.log('[Adexium] adRedirected');
-    });
-
-    // === Нарахування винагороди (адаптуй під свої змінні/ф-ції) ===
-    function creditReward(){
-      // Якщо у тебе є лічильники/баланс з великого скрипта — задіємо їх.
-      // Усе нижче — опційно. Без твоїх змінних просто нічого не зламається.
-
-      try {
-        // денний лічильник Adexium
-        if (typeof exCount === 'number') {
-          if (typeof DAILY_CAP === 'number') {
-            if (exCount < DAILY_CAP) exCount += 1;
-          } else {
-            exCount += 1;
-          }
-        }
-        // баланс
-        if (typeof addBalance === 'function') addBalance(0.1);
-        // збереження стейту
-        if (typeof saveData === 'function') saveData();
-        // оновити UI лічильників
-        if (typeof updateDailyUI === 'function') updateDailyUI();
-      } catch (e) {
-        console.warn('[Adexium] creditReward warn:', e);
-      }
+      // дозволити наступний показ
+      setTimeout(() => { creditedFlag = false; }, 0);
     }
 
-    // Зручно мати глобальний доступ у консолі для дебага
-    window.__adexManual = adex;
+    // на всяк випадок — якщо на сторінці вже був баланс, підмалюємо його зі сховища
+    setBalance(getBalance());
   });
 })();
+
 
 
 /* ========= СТАН ========= */
