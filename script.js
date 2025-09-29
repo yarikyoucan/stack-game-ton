@@ -42,25 +42,45 @@ const TASK_DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000; // після отриман
 const ALPH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 
-/* ========= ADEXIUM: request → adReceived → displayAd(ad) з усіма подіями ========= */
+// ==== Adexium: показ по кліку (стабільний) ====
+
+// 1) захист від повторних кліків під час показу
+let adInFlightExDaily = false;
+
+// 2) очікування готовності фабрики __getAdexium (до 5с)
+function waitForFactory(maxMs = 5000) {
+  return new Promise((resolve) => {
+    if (typeof window.__getAdexium === 'function') return resolve(true);
+    const start = Date.now();
+    const t = setInterval(() => {
+      if (typeof window.__getAdexium === 'function') {
+        clearInterval(t); resolve(true);
+      } else if (Date.now() - start > maxMs) {
+        clearInterval(t); resolve(false);
+      }
+    }, 80);
+  });
+}
+
 /**
- * Показ interstitial з очікуванням "успішного завершення".
- * Успіх = подія adPlaybackCompleted, або (як fallback) adClosed.
- * Повертає Promise<{ shown: boolean, reason?: string }>
+ * 3) Запит interstitial:
+ *    - requestAd('interstitial') -> чекаємо 'adReceived' -> displayAd(ad)
+ *    - успішне завершення: 'adPlaybackCompleted' або 'adClosed'
+ *    Повертає: { shown: boolean, reason?: string }
  */
 function showAdexiumInterstitial() {
-  return new Promise((resolve) => {
+  return new Promise(async (resolve) => {
     const finish = (ok, reason) => resolve({ shown: !!ok, reason });
 
-    if (typeof window.__getAdexium !== 'function') {
-      return finish(false, 'factory_not_ready');
-    }
+    // чекаємо, поки фабрика стане доступною
+    const okFactory = await waitForFactory(5000);
+    if (!okFactory) return finish(false, 'factory_timeout');
 
+    // беремо інстанс віджета
     window.__getAdexium((adexiumAds) => {
       if (!adexiumAds) return finish(false, 'sdk_not_ready');
 
-      let credited = false;   // щоб нарахувати рівно один раз
-      let done = false;       // завершити проміс один раз
+      let done = false;
       let waitReceivedTimer = null;
       let waitCloseTimer = null;
 
@@ -70,23 +90,22 @@ function showAdexiumInterstitial() {
         window.removeEventListener('adexium:adPlaybackCompleted', onCompleted);
         window.removeEventListener('adexium:adClosed', onClosed);
         window.removeEventListener('adexium:noAdFound', onNoAd);
-        window.removeEventListener('adexium:adDisplayed', onDisplayed);
         window.removeEventListener('adexium:adReceived', onReceived);
         if (waitReceivedTimer) clearTimeout(waitReceivedTimer);
         if (waitCloseTimer) clearTimeout(waitCloseTimer);
         finish(ok, reason);
       };
 
-      const onCompleted = () => { if (!credited) credited = true; safeFinish(true, 'adPlaybackCompleted'); };
-      const onClosed    = () => { if (!credited) credited = true; safeFinish(true, 'adClosed'); };
-      const onNoAd      = () => { window.__adex.pendingAd = null; safeFinish(false, 'noAdFound'); };
-      const onDisplayed = () => {};
+      const onCompleted = () => safeFinish(true, 'adPlaybackCompleted');
+      const onClosed    = () => safeFinish(true, 'adClosed');
+      const onNoAd      = () => { window.__adex && (window.__adex.pendingAd = null); safeFinish(false, 'noAdFound'); };
       const onReceived  = (ev) => {
         try {
-          const ad = window.__adex.pendingAd || ev?.detail?.ad;
+          const ad = (window.__adex && window.__adex.pendingAd) || ev?.detail?.ad;
           if (!ad) return;
           adexiumAds.displayAd(ad);
-          waitCloseTimer = setTimeout(() => safeFinish(false, 'timeout_wait_close'), 12000);
+          // запас: якщо користувач не закрив/не завершив — не висимо вічно
+          waitCloseTimer = setTimeout(() => safeFinish(false, 'timeout_wait_close'), 15000);
         } catch (e) {
           safeFinish(false, e?.message || 'display_throw');
         }
@@ -95,20 +114,68 @@ function showAdexiumInterstitial() {
       window.addEventListener('adexium:adPlaybackCompleted', onCompleted);
       window.addEventListener('adexium:adClosed', onClosed);
       window.addEventListener('adexium:noAdFound', onNoAd);
-      window.addEventListener('adexium:adDisplayed', onDisplayed);
       window.addEventListener('adexium:adReceived', onReceived);
 
+      // запит показу
       try { adexiumAds.requestAd('interstitial'); }
       catch (e) { return safeFinish(false, e?.message || 'request_throw'); }
 
+      // якщо не прилетів adReceived — фейл
       waitReceivedTimer = setTimeout(() => {
         if (done) return;
-        if (window.__adex.pendingAd === null) return safeFinish(false, 'noAdFound');
+        if (window.__adex && window.__adex.pendingAd === null) return safeFinish(false, 'noAdFound');
         safeFinish(false, 'timeout_wait_received');
-      }, 8000);
+      }, 12000);
     });
   });
 }
+
+/**
+ * 4) Обробник кнопки "Дивитись":
+ *    - блокує кнопку на час показу
+ *    - викликає showAdexiumInterstitial()
+ *    - (опційно) нараховує +0.1⭐, якщо у твоєму коді є відповідні змінні/функції
+ */
+async function onWatchExDailyClick() {
+  const btn = document.getElementById('watchAdexiumDailyBtn');
+  if (adInFlightExDaily) return;
+
+  adInFlightExDaily = true;
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await showAdexiumInterstitial();
+    if (res.shown) {
+      // ====== ОПЦІЙНО: нарахування винагороди +0.1⭐ ======
+      // Якщо у твоєму проекті є змінні/ф-ції з минулого скрипта — задіємо їх:
+      if (typeof exCount === 'number') {
+        // ліміт на день, якщо є (DAILY_CAP), інакше просто інкремент
+        if (typeof DAILY_CAP === 'number' ? exCount < DAILY_CAP : true) {
+          exCount += 1;
+        }
+      }
+      if (typeof addBalance === 'function') addBalance(0.1);
+      if (typeof saveData === 'function') saveData();
+      if (typeof updateDailyUI === 'function') updateDailyUI();
+
+      // Можеш також кинути свій евент:
+      // window.dispatchEvent(new CustomEvent('adexium:credited', { detail: { amount: 0.1 } }));
+    } else {
+      // тут можна показати тултіп/алерт, якщо треба
+      console.warn('[Adexium] not shown, reason =', res.reason);
+      // alert('Сьогодні немає доступної реклами. Спробуй трохи пізніше.');
+    }
+  } finally {
+    adInFlightExDaily = false;
+    if (btn) btn.disabled = false; // або залиш true, якщо хочеш 1 показ за клік
+  }
+}
+
+// 5) Прив'язуємо клік після завантаження DOM
+document.addEventListener('DOMContentLoaded', () => {
+  const btn = document.getElementById('watchAdexiumDailyBtn');
+  if (btn) btn.addEventListener('click', onWatchExDailyClick);
+});
 
 /* ========= СТАН ========= */
 let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
