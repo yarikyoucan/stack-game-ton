@@ -1,4 +1,4 @@
-// script.js — ПОВНА версія: гра, завдання, батли, коди, Adsgram/Adexium (fixed midnight timer)
+// script.js — повна версія: гра, завдання, батли, коди, Adsgram/Adexium (fixed: таймер до 00:00 і показ Adexium)
 "use strict";
 console.clear();
 
@@ -42,17 +42,41 @@ const TASK_DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000; // після отриман
 const ALPH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 
-/* ========= ХЕЛПЕРИ (нові для таймера до 00:00) ========= */
+/* ========= ХЕЛПЕРИ ========= */
+const $ = id => document.getElementById(id);
+const formatStars = v => Number.isInteger(Number(v)) ? String(Number(v)) : Number(v).toFixed(2);
+
+function setBalanceUI(){
+  const el = $("balance");
+  if (el) el.innerText = formatStars(balance);
+}
+function _todayStamp(){
+  const d = new Date();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
 function msUntilMidnightLocal(){
   const now = new Date();
   const next = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1, 0, 0, 0, 0);
   return next - now;
 }
+function formatHMS(ms){
+  ms = Math.max(0, ms|0);
+  const s = Math.ceil(ms/1000);
+  const hh = Math.floor(s/3600);
+  const mm = Math.floor((s%3600)/60);
+  const ss = s%60;
+  return (hh>0 ? String(hh).padStart(2,'0')+":" : "") + String(mm).padStart(2,'0')+":"+String(ss).padStart(2,'0');
+}
 
-/* ===== ADEXIUM (єдина інтеграція через обгортку з index.html) ===== */
-const ADEX_CREDIT_ON_CLOSE = true;     // Фолбек: зарахувати, якщо юзер закрив
+/* ===== ADEXIUM (через обгортку з index.html) ===== */
+const ADEX_CREDIT_ON_CLOSE = true; // Дозволити зарахування при простому закритті (fallback)
 let __adexBusy = false;
 
+/** Показ міжсторінкового Adexium.
+ *  Працює з вашою обгорткою: adReceived -> displayAd(ad) -> чекаємо completed/closed.
+ */
 function showAdexiumInterstitial(){
   return new Promise((resolve) => {
     if (typeof window.__getAdexium !== 'function'){
@@ -66,30 +90,50 @@ function showAdexiumInterstitial(){
     __adexBusy = true;
 
     let finished = false;
+    let timeoutId = null;
+
     const finish = (ok, reason) => {
       if (finished) return;
       finished = true;
-      __adexBusy = false;
+      window.removeEventListener('adexium:adReceived', onReceived);
       window.removeEventListener('adexium:adPlaybackCompleted', onCompleted);
       window.removeEventListener('adexium:adClosed', onClosed);
       window.removeEventListener('adexium:noAdFound', onNoFill);
       window.removeEventListener('adexium:adDisplayed', onDisplayed);
+      if (timeoutId) clearTimeout(timeoutId);
+      __adexBusy = false;
       resolve({ shown: !!ok, reason });
     };
 
+    const onReceived = (ev) => {
+      const ad = ev?.detail?.ad || window.__adex?.pendingAd;
+      window.__getAdexium((adex) => {
+        try {
+          if (ad) adex.displayAd(ad);
+          else finish(false, 'received_no_ad');
+        } catch (e) {
+          finish(false, 'display_error');
+        }
+      });
+    };
     const onCompleted = () => finish(true, 'completed');
     const onClosed    = () => finish(ADEX_CREDIT_ON_CLOSE, ADEX_CREDIT_ON_CLOSE ? 'closed_granted' : 'closed_no_credit');
     const onNoFill    = () => finish(false, 'no_fill');
     const onDisplayed = () => {}; // інформативно
 
+    window.addEventListener('adexium:adReceived', onReceived, { once:true });
     window.addEventListener('adexium:adPlaybackCompleted', onCompleted, { once:true });
     window.addEventListener('adexium:adClosed', onClosed, { once:true });
     window.addEventListener('adexium:noAdFound', onNoFill, { once:true });
     window.addEventListener('adexium:adDisplayed', onDisplayed, { once:true });
 
+    // fail-safe на випадок, якщо події не прийдуть
+    timeoutId = setTimeout(() => finish(false, 'timeout'), 15000);
+
+    // власне запит на рекламу (клік користувача вже був)
     window.__getAdexium((adex) => {
       try { adex.requestAd('interstitial'); }
-      catch(e){ finish(false,'request_error'); }
+      catch (e) { finish(false, 'request_error'); }
     });
   });
 }
@@ -132,11 +176,7 @@ let challengeDeadline = 0;
 let challengeStake = 0;
 let challengeOpp = 0;
 
-/* ========= ХЕЛПЕРИ ========= */
-const $ = id => document.getElementById(id);
-const formatStars = v => Number.isInteger(Number(v)) ? String(Number(v)) : Number(v).toFixed(2);
-const setBalanceUI = () => $("balance") && ($("balance").innerText = formatStars(balance));
-
+/* ========= ЗБЕРЕЖЕННЯ ========= */
 function saveData(){
   localStorage.setItem("balance", String(balance));
   localStorage.setItem("subscribed", subscribed ? "true" : "false");
@@ -179,12 +219,6 @@ function getUserTag(){
   if (name) return name;
   if (u.id) return "id"+u.id;
   return "Гравець";
-}
-function _todayStamp(){
-  const d = new Date();
-  const m = String(d.getMonth()+1).padStart(2,'0');
-  const day = String(d.getDate()).padStart(2,'0');
-  return `${d.getFullYear()}-${m}-${day}`;
 }
 
 /* ========= ІНІЦІАЛІЗАЦІЯ ========= */
@@ -264,7 +298,7 @@ window.onload = function(){
 
   // ЩОДЕННІ +0.1⭐ — прив’язка до кнопок з HTML
   $("watchAdsgramDailyBtn")?.addEventListener("click", onWatchGramDaily);
-  $("watchAdexiumDailyBtn")?.addEventListener("click", onWatchExDaily); // ЄДИНА прив’язка!
+  $("watchAdexiumDailyBtn")?.addEventListener("click", onWatchExDaily);
 
   // батл UI
   setupChallengeUI();
@@ -334,7 +368,7 @@ function startDailyPlusTicker(){
 
 // ОНОВЛЕНО: показуємо таймер до 00:00, блокуємо кнопки на ліміті, автоскидання в новий день
 function updateDailyUI(){
-  // 1) Автоскидання на новий день
+  // 1) автоскидання на новий день
   const today = _todayStamp();
   if (dailyStamp !== today){
     gramCount = 0; exCount = 0;
@@ -343,13 +377,13 @@ function updateDailyUI(){
     saveData();
   }
 
-  // 2) Синхрон з LS (на випадок зовнішніх змін)
+  // 2) синхрон з LS (на випадок зовнішніх змін)
   const lsGram = parseInt(localStorage.getItem('dailyGramCount') || '0', 10);
   const lsEx   = parseInt(localStorage.getItem('dailyExCount')   || '0', 10);
   if (lsGram !== gramCount) gramCount = lsGram;
   if (lsEx   !== exCount)   exCount   = lsEx;
 
-  // 3) Лічильники
+  // 3) лічильники
   const g = $("adGramCounter");
   const e = $("adExCounter");
   if (g) g.textContent = String(Math.min(gramCount, DAILY_CAP));
@@ -358,28 +392,18 @@ function updateDailyUI(){
   // 4) Кнопки + таймер до 00:00
   const gBtn = $("watchAdsgramDailyBtn");
   const eBtn = $("watchAdexiumDailyBtn");
-  const left = msUntilMidnightLocal();
-  const leftTxt = formatHMS(left);
+  const leftTxt = formatHMS(msUntilMidnightLocal());
 
   if (gBtn && !gBtn.dataset.label) gBtn.dataset.label = gBtn.innerText;
   if (eBtn && !eBtn.dataset.label) eBtn.dataset.label = eBtn.innerText;
 
   if (gBtn){
     gBtn.disabled = (gramCount >= DAILY_CAP);
-    if (gramCount >= DAILY_CAP){
-      gBtn.innerText = `Ліміт до 00:00 (${leftTxt})`;
-    } else {
-      gBtn.innerText = gBtn.dataset.label;
-    }
+    gBtn.innerText = (gramCount >= DAILY_CAP) ? `Ліміт до 00:00 (${leftTxt})` : gBtn.dataset.label;
   }
-
   if (eBtn){
     eBtn.disabled = (exCount >= DAILY_CAP);
-    if (exCount >= DAILY_CAP){
-      eBtn.innerText = `Ліміт до 00:00 (${leftTxt})`;
-    } else {
-      eBtn.innerText = eBtn.dataset.label;
-    }
+    eBtn.innerText = (exCount >= DAILY_CAP) ? `Ліміт до 00:00 (${leftTxt})` : eBtn.dataset.label;
   }
 }
 
@@ -394,7 +418,7 @@ async function onWatchGramDaily(){
   updateDailyUI();
 }
 
-/* ЄДИНА версія onWatchExDaily — показ Adexium + нарахування лише по успіху/close(якщо дозволено) */
+/* ЄДИНА версія onWatchExDaily — показ Adexium + нарахування */
 async function onWatchExDaily(){
   if (exCount >= DAILY_CAP) return;
 
@@ -412,14 +436,6 @@ async function onWatchExDaily(){
 }
 
 /* ========= 5 і 10 реклам ========= */
-function formatHMS(ms){
-  ms = Math.max(0, ms|0);
-  const s = Math.ceil(ms/1000);
-  const hh = Math.floor(s/3600);
-  const mm = Math.floor((s%3600)/60);
-  const ss = s%60;
-  return (hh>0 ? String(hh).padStart(2,'0')+":" : "") + String(mm).padStart(2,'0')+":"+String(ss).padStart(2,'0');
-}
 function updateAdTasksUI(){
   const fiveWrap = $("taskWatch5");
   const fiveCD   = $("taskWatch5Cooldown");
@@ -932,7 +948,7 @@ class Game{
 
     document.addEventListener("keydown",(e)=>{ if(isPaused || postAdTimerActive) return; if(e.keyCode===32) this.onAction(); });
     document.addEventListener("click",(e)=>{ if(isPaused || postAdTimerActive) return; if($("game").classList.contains("active") && e.target.tagName.toLowerCase()==="canvas") this.onAction(); });
-    $("start-button").addEventListener("click",()=>{ if (postAdTimerActive) return; this.onAction(); });
+    $("start-button")?.addEventListener("click",()=>{ if (postAdTimerActive) return; this.onAction(); });
   }
 
   hardResetAfterEnd(){
@@ -942,7 +958,7 @@ class Game{
     this.blocks = [];
     this.stage.setCamera(2, 0);
     this.scoreEl.innerHTML = "0";
-    $("instructions").classList.remove("hide");
+    $("instructions")?.classList.remove("hide");
     this.addBlock();
   }
 
@@ -1006,7 +1022,7 @@ class Game{
     this.scoreEl.innerHTML=String(this.blocks.length-1);
     const b=new Block(last); this.newBlocks.add(b.mesh); this.blocks.push(b);
     this.stage.setCamera(this.blocks.length*2);
-    if(this.blocks.length>=5) $("instructions").classList.add("hide");
+    $("instructions")?.classList.add("hide");
   }
 
   async endGame(){
