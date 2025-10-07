@@ -13,45 +13,61 @@
   <!-- ====== СТИЛІ ====== -->
   <style>
     /* --- БАЗА ІНТЕРФЕЙСУ --- */
+    :root{
+      --topbar-h:56px;
+      --menu-h:64px;
+    }
+    *{box-sizing:border-box}
     body{
       margin:0;font-family:Arial,sans-serif;background:#0f172a;
-      display:flex;flex-direction:column;height:100vh;padding-bottom:64px;
-      /* додано, щоб контент не ліз під верхню панель */
-      padding-top:56px;
+      display:flex;flex-direction:column;height:100vh;padding-bottom:var(--menu-h);
     }
-    .page{flex:1;display:none;overflow:auto;padding:10px}.page.active{display:block}
+    .page{flex:1;display:none;overflow:auto;padding:10px}
+    .page.active{display:block}
 
-    /* ===== Верхня панель (аватар + тег + рекорд + UA) ===== */
-    .topbar{
-      position:fixed;top:0;left:0;right:0;height:56px;
+    /* ===== ВЕРХНЯ ПАНЕЛЬ — ТІЛЬКИ ДЛЯ ВКЛАДКИ "ГРА" ===== */
+    #game .topbar{
+      position:fixed;top:0;left:0;right:0;height:var(--topbar-h);
       display:flex;align-items:center;justify-content:space-between;
       padding:8px 12px;background:rgba(15,23,42,.88);
       backdrop-filter:blur(6px);border-bottom:1px solid rgba(255,255,255,.15);
       z-index:1000;
     }
     .tb-left,.tb-mid,.tb-right{display:flex;align-items:center;gap:10px}
+    .tb-left{min-width:0}
+    .tb-mid{gap:8px}
+    .tb-right{gap:10px}
+
     .tb-left img{
       width:32px;height:32px;border-radius:50%;object-fit:cover;
-      border:2px solid rgba(255,255,255,.9);
+      border:2px solid rgba(255,255,255,.9)
     }
-    .tg-tag{color:#fff;font-weight:700;letter-spacing:.2px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    /* Тег — білий + еліпсис */
+    .tg-tag{
+      color:#fff;font-weight:800;letter-spacing:.2px;
+      max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1;
+    }
 
-    /* коробочки для score */
+    /* Однакова висота елементів 32px */
+    #score,#highscore,.lang-btn{
+      height:32px;display:flex;align-items:center;line-height:1
+    }
     #score,#highscore{
-      background:rgba(0,0,0,.5);color:#fff;padding:5px 10px;border-radius:8px;
-      font-weight:700;
+      background:rgba(255,255,255,.12);color:#fff;padding:0 12px;border-radius:10px;
+      font-weight:800;border:1px solid rgba(255,255,255,.25)
     }
-
-    /* Кнопка мови тепер не absolute */
     .lang-btn{
-      position:static;z-index:auto;
       background:rgba(255,255,255,.12);color:#eaf2ff;border:1px solid rgba(255,255,255,.25);
-      padding:6px 10px;border-radius:10px;font-weight:800;letter-spacing:.5px;cursor:pointer;backdrop-filter:blur(6px)
+      padding:0 12px;border-radius:10px;font-weight:800;letter-spacing:.5px;cursor:pointer;backdrop-filter:blur(6px)
     }
     .lang-btn:hover{filter:brightness(1.05)}
 
-    /* --- НИЖНЄ МЕНЮ — напівпрозоре --- */
-    .menu{display:flex;justify-content:space-around;border-top:1px solid rgba(255,255,255,.15);background:rgba(15,23,42,.75);padding:10px 0;position:fixed;left:0;right:0;bottom:0;z-index:9999;backdrop-filter:blur(6px)}
+    /* --- НИЖНЄ МЕНЮ --- */
+    .menu{
+      display:flex;justify-content:space-around;border-top:1px solid rgba(255,255,255,.15);
+      background:rgba(15,23,42,.75);padding:10px 0;position:fixed;left:0;right:0;bottom:0;
+      z-index:9999;backdrop-filter:blur(6px)
+    }
     .menu button{flex:1;background:none;border:none;font-size:22px;cursor:pointer;color:#fff}
     .menu button.active{color:#3b82f6;font-weight:bold}
 
@@ -61,9 +77,11 @@
     .task button:disabled{opacity:.6;cursor:not-allowed}
     .balance{font-size:20px;margin-bottom:20px;text-align:center}
 
-    /* --- ГРА: небо + місяць + зірки; СИЛУЕТИ БУДИНКІВ ВИДАЛЕНО --- */
+    /* --- ГРА: фон неба --- */
     #container{
       position:relative;width:100%;height:100%;overflow:hidden;
+      /* щоб інструкція/канвас не лізли під топбар: */
+      padding-top:calc(var(--topbar-h) + 8px);
       background:
         url('data:image/svg+xml;utf8,\
 <svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">\
@@ -81,29 +99,35 @@
     #container canvas{position:absolute!important;top:0;left:0;width:100%!important;height:100%!important;z-index:1!important;background:transparent!important}
 
     /* Підказки/модалки гри */
-    #instructions{position:absolute;top:70px;left:10px;color:#fff;font-size:16px;background:rgba(0,0,0,.4);padding:4px 8px;border-radius:6px;z-index:2}
+    #instructions{position:absolute;top:calc(var(--topbar-h) + 14px);left:10px;color:#fff;font-size:16px;background:rgba(0,0,0,.4);padding:4px 8px;border-radius:6px;z-index:2}
     .hide{display:none}
     .game-over,.ready{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;background:rgba(15,23,42,.95);color:#fff;padding:20px;border-radius:10px;display:none;z-index:3;min-width:260px;box-shadow:0 2px 5px rgba(0,0,0,.35)}
 
-    /* ===== НЕПРОЗОРІ БАГАТОПОВЕРХІВКИ (нижній шар) ===== */
+    /* ===== НЕПРОЗОРІ БАГАТОПОВЕРХІВКИ (нижній шар, прикріплені до низу вікна) ===== */
     .city-skyline{
-      position:fixed;left:0;right:0;bottom:64px;height:34vh;
+      position:fixed;left:0;right:0;bottom:var(--menu-h);height:36vh;
       display:flex;align-items:flex-end;gap:10px;padding:0 12px;
       z-index:0;pointer-events:none;
     }
     .city-skyline .bldg{
-      width:clamp(40px,7vw,90px);height:var(--h,22vh);
-      background:#1f2937;border-radius:6px 6px 3px 3px;
-      box-shadow:inset 0 -2px 0 rgba(255,255,255,.04),0 6px 20px rgba(0,0,0,.35);
+      width:clamp(44px,7vw,96px);height:var(--h,24vh);
+      background:#1f2937; /* ОПАКО */
+      border:1px solid #111827;border-radius:3px;
+      box-shadow:inset 0 -2px 0 rgba(255,255,255,.04),0 8px 24px rgba(0,0,0,.45);
       position:relative;
     }
+    .city-skyline .bldg::before{
+      content:"";position:absolute;left:0;right:0;top:-3px;height:3px;
+      background:#111827;border-radius:2px 2px 0 0;
+    }
     .city-skyline .bldg::after{
-      content:"";position:absolute;inset:8px;
-      background-image:radial-gradient(#ffd166 1.4px, transparent 1.6px);
-      background-size:12px 12px;opacity:var(--win-o,.35);
+      content:"";position:absolute;inset:10px;
+      background-image:radial-gradient(#ffd166 1.6px, transparent 1.8px);
+      background-size:14px 14px;opacity:.9;
       filter:drop-shadow(0 0 1px rgba(0,0,0,.25));
     }
 
+    /* ТЕМИ ТА РЕШТА */
     .share-card{width:90%;margin:12px auto;background:#fff;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,.1);padding:16px}
     .share-row{display:flex;gap:8px;margin-top:8px}
     .share-row input{flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px}
@@ -115,7 +139,7 @@
     .payout-list li{padding:6px 8px;border:1px solid #eee;border-radius:8px;margin-top:6px;font-size:14px}
 
     .themed{
-      position:relative;color:#eef;padding-bottom:84px;
+      position:relative;color:#eef;padding-bottom:calc(var(--menu-h) + 20px);
       background:
         radial-gradient(1200px 500px at 15% 0%, rgba(99,102,241,.35), transparent 60%),
         radial-gradient(1000px 600px at 85% 100%, rgba(56,189,248,.25), transparent 60%),
@@ -154,7 +178,7 @@
     #friends h2.wallet-title{color:#eaf2ff;text-align:center;font-size:28px;margin:0 0 20px}
 
     #tournaments{
-      position:relative;color:#eef;padding-bottom:84px;
+      position:relative;color:#eef;padding-bottom:calc(var(--menu-h) + 20px);
       background-image:
         radial-gradient(1200px 500px at 15% 0%, rgba(99,102,241,.35), transparent 60%),
         radial-gradient(1000px 600px at 85% 100%, rgba(56,189,248,.25), transparent 60%),
@@ -174,18 +198,6 @@
     #tournaments .btn{background:#3b82f6;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
     #tournaments .btn:hover{filter:brightness(1.05)}
 
-    .battle-panel{width:92%; margin:14px auto 96px;border-radius:16px; overflow:hidden;background:
-      linear-gradient(135deg, rgba(30,27,75,.85), rgba(37,99,235,.85)),
-      url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="280" height="280" viewBox="0 0 280 280"><g fill="none" stroke="%23ffffff22"><path d="M0 40h280M0 80h280M0 120h280M0 160h280M0 200h280M0 240h280"/><path d="M40 0v280M80 0v280M120 0v280M160 0v280M200 0v280M240 0v280"/></g></svg>') center/280px repeat;
-      border:1px solid rgba(255,255,255,.18);color:#eaf2ff; box-shadow:0 10px 30px rgba(0,0,0,.2)}
-    .battle-panel .inner{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:14px 16px}
-    .battle-panel .title{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
-    .battle-panel .title .logo{width:38px;height:38px;border-radius:12px;background:radial-gradient(circle at 30% 30%, #93c5fd, #6366f1);box-shadow:inset 0 1px 0 rgba(255,255,255,.35), 0 6px 16px rgba(99,102,241,.35);display:grid;place-items:center;font-size:20px}
-    .battle-panel .rules{display:flex;gap:10px;flex:1;min-width:220px;justify-content:center;flex-wrap:wrap}
-    .battle-panel .pill{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);padding:6px 10px;border-radius:999px;font-weight:700;font-size:13px}
-    .battle-panel .cta{display:flex;gap:8px;align-items:center}
-    .battle-panel .cta .btn{padding:10px 12px;border-radius:10px}
-
     /* ======= ЛІДЕРБОРД ======= */
     #leaderboard.themed{
       background-image:
@@ -194,7 +206,7 @@
         linear-gradient(135deg,#0f172a 0%, #1e1b4b 45%, #3b82f6 100%),
         url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="760" height="200"><g fill="%23ffffff15" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="800" transform="rotate(-18 380 100)"><text x="-60" y="40">LEADERBOARD • LEADERBOARD • LEADERBOARD •</text><text x="-60" y="100">LEADERBOARD • LEADERBOARD • LEADERBOARD •</text><text x="-60" y="160">LEADERBOARD • LEADERBOARD • LEADERBOARD •</text></g></svg>');
       background-size:auto,auto,auto,760px 200px;background-repeat:no-repeat,no-repeat,no-repeat,repeat;
-      color:#eaf2ff; padding-bottom:84px;
+      color:#eaf2ff; padding-bottom:calc(var(--menu-h) + 20px);
     }
     .lb-header{width:92%;margin:12px auto 8px}
     .lb-title{font-size:26px;margin:0 0 4px}
@@ -271,25 +283,27 @@
 </head>
 <body>
 
-  <!-- ===== ВЕРХНЯ ПАНЕЛЬ: аватар + тег (зліва), score/record (центр), UA (праворуч) ===== -->
-  <div class="topbar">
-    <div class="tb-left">
-      <img id="tgAvatar" referrerpolicy="no-referrer"
-           alt="Avatar"
-           src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%239ca3af'/><circle cx='32' cy='24' r='12' fill='%23e5e7eb'/><path d='M10 54c0-10 10-16 22-16s22 6 22 16v4H10z' fill='%23e5e7eb'/></svg>'">
-      <div id="tgTag" class="tg-tag">@guest</div>
-    </div>
-    <div class="tb-mid">
-      <div id="score">0</div>
-      <div id="highscore">🏆 0</div>
-    </div>
-    <div class="tb-right">
-      <button id="langToggle" class="lang-btn">UA</button>
-    </div>
-  </div>
+  <!-- МІСТО (непрозорі багатоповерхівки) -->
+  <div class="city-skyline" id="citySkyline" aria-hidden="true"></div>
 
-  <!-- GAME -->
+  <!-- GAME (верхня панель всередині, закріплена і лише тут) -->
   <div id="game" class="page active">
+    <div class="topbar">
+      <div class="tb-left">
+        <img id="tgAvatar" referrerpolicy="no-referrer"
+             alt="Avatar"
+             src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%239ca3af'/><circle cx='32' cy='24' r='12' fill='%23e5e7eb'/><path d='M10 54c0-10 10-16 22-16s22 6 22 16v4H10z' fill='%23e5e7eb'/></svg>'">
+        <div id="tgTag" class="tg-tag">@guest</div>
+      </div>
+      <div class="tb-mid">
+        <div id="score">0</div>
+        <div id="highscore">🏆 0</div>
+      </div>
+      <div class="tb-right">
+        <button id="langToggle" class="lang-btn">UA</button>
+      </div>
+    </div>
+
     <div id="container">
       <!-- підказки/модалки гри -->
       <div id="instructions" data-i18n="instructions">
@@ -313,9 +327,6 @@
       </div>
     </div>
   </div>
-
-  <!-- МІСТО (непрозорі багатоповерхівки) -->
-  <div class="city-skyline" id="citySkyline" aria-hidden="true"></div>
 
   <!-- TASKS -->
   <div id="tasks" class="page themed">
@@ -417,18 +428,21 @@
       </div>
     </div>
 
-    <div class="battle-panel" aria-label="Правила батлу">
-      <div class="inner">
-        <div class="title">
-          <div class="logo">⚔️</div>
+    <div class="battle-panel" aria-label="Правила батлу" style="width:92%; margin:14px auto calc(var(--menu-h) + 32px);border-radius:16px; overflow:hidden;background:
+      linear-gradient(135deg, rgba(30,27,75,.85), rgba(37,99,235,.85)),
+      url('data:image/svg+xml;utf8,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;280&quot; height=&quot;280&quot; viewBox=&quot;0 0 280 280&quot;><g fill=&quot;none&quot; stroke=&quot;%23ffffff22&quot;><path d=&quot;M0 40h280M0 80h280M0 120h280M0 160h280M0 200h280M0 240h280&quot;/><path d=&quot;M40 0v280M80 0v280M120 0v280M160 0v280M200 0v280M240 0v280&quot;/></g></svg>') center/280px repeat;
+      border:1px solid rgba(255,255,255,.18);color:#eaf2ff; box-shadow:0 10px 30px rgba(0,0,0,.2)">
+      <div class="inner" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:14px 16px">
+        <div class="title" style="display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase">
+          <div class="logo" style="width:38px;height:38px;border-radius:12px;background:radial-gradient(circle at 30% 30%, #93c5fd, #6366f1);box-shadow:inset 0 1px 0 rgba(255,255,255,.35), 0 6px 16px rgba(99,102,241,.35);display:grid;place-items:center;font-size:20px">⚔️</div>
           <div>BATTLES</div>
         </div>
-        <div class="rules">
-          <div class="pill" data-i18n="rule_goal">🎯 Мета: побий рекорд за 3 год</div>
-          <div class="pill" data-i18n="rule_prize">💎 Виграш: ×1.5 від ставки</div>
-          <div class="pill" data-i18n="rule_risk">⚠️ Якщо не встигаєш — ставка згорає</div>
+        <div class="rules" style="display:flex;gap:10px;flex:1;min-width:220px;justify-content:center;flex-wrap:wrap">
+          <div class="pill" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);padding:6px 10px;border-radius:999px;font-weight:700;font-size:13px" data-i18n="rule_goal">🎯 Мета: побий рекорд за 3 год</div>
+          <div class="pill" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);padding:6px 10px;border-radius:999px;font-weight:700;font-size:13px" data-i18n="rule_prize">💎 Виграш: ×1.5 від ставки</div>
+          <div class="pill" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);padding:6px 10px;border-radius:999px;font-weight:700;font-size:13px" data-i18n="rule_risk">⚠️ Якщо не встигаєш — ставка згорає</div>
         </div>
-        <div class="cta">
+        <div class="cta" style="display:flex;gap:8px;align-items:center">
           <button class="btn" onclick="document.getElementById('stakeInput').focus()" data-i18n="make_bet">Зробити ставку</button>
         </div>
       </div>
@@ -474,10 +488,10 @@
   <div id="shop" class="page themed">
     <h2 class="wallet-title" style="margin-top:12px">🛒 <span data-i18n="shop_announcements">Оголошення</span></h2>
 
-    <div class="share-card shop-card" style="text-align:center">
-      <button class="info-btn" id="shopInfoBtn" aria-label="Info">i</button>
+    <div class="share-card shop-card" style="text-align:center; position:relative;">
+      <button class="info-btn" id="shopInfoBtn" aria-label="Info" style="position:absolute; right:12px; top:12px; width:28px;height:28px;border-radius:999px;border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.12); color:#fff;">i</button>
 
-      <div class="info-pop" id="shopInfoPop">
+      <div class="info-pop" id="shopInfoPop" style="display:none; margin-top:8px;">
         <p data-i18n="shop_info_text">Якщо бажаєте продати NFT, зірки чи інші подарунки — пишіть у лс.</p>
         <button class="btn" id="shopInfoClose" data-i18n="close">Закрити</button>
       </div>
@@ -534,9 +548,12 @@
       const infoBtn = document.getElementById('shopInfoBtn');
       const infoPop = document.getElementById('shopInfoPop');
       const infoClose = document.getElementById('shopInfoClose');
-      infoBtn?.addEventListener('click', ()=>infoPop.classList.toggle('open'));
-      infoClose?.addEventListener('click', ()=>infoPop.classList.remove('open'));
-      document.addEventListener('click', (e)=>{ if (!infoPop.contains(e.target) && !infoBtn.contains(e.target)) infoPop.classList.remove('open'); });
+      infoBtn?.addEventListener('click', ()=>{ infoPop.style.display = (infoPop.style.display==='block'?'none':'block'); });
+      infoClose?.addEventListener('click', ()=>{ infoPop.style.display='none'; });
+      document.addEventListener('click', (e)=>{
+        if (!infoPop || !infoBtn) return;
+        if (!infoPop.contains(e.target) && !infoBtn.contains(e.target)) infoPop.style.display='none';
+      });
     });
   </script>
 
@@ -615,7 +632,7 @@
         nice_try: "Ти молодець 👍",
         restart_hint: "Клікни або натисни пробіл, щоб почати знову",
         start_btn: "▶ Старт",
-        pause_before_new_game: "Пауза перед новою гророю",
+        pause_before_new_game: "Пауза перед новою грою",
         you_can_start_in: "Можна буде почати через:",
         sec_suffix: "с",
 
@@ -756,23 +773,21 @@
 
       if (tagEl) tagEl.textContent = display;
 
-      // Показуємо реальне фото гравця зліва від тега
+      // Реальне фото гравця зліва від тега
       if (user?.photo_url && avatarEl){
-        // спроба напряму
         avatarEl.src = user.photo_url;
         avatarEl.addEventListener('error', () => {
-          // fallback через blob->dataURL
           fetch(user.photo_url, {cache:'no-store'})
             .then(r => r.blob())
             .then(b => new Promise(res => {const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.readAsDataURL(b);} ))
             .then(dataUrl => { avatarEl.src = dataUrl; })
-            .catch(()=>{ /* лишаємо плейсхолдер */ });
+            .catch(()=>{ /* плейсхолдер лишається */ });
         }, {once:true});
       }
     });
   </script>
 
-  <!-- ====== Основна логіка гри ====== -->
+  <!-- ====== Основна логіка гри (твій файл) ====== -->
   <script src="./script.js"></script>
 
   <!-- ====== Генерація багатоповерхівок ====== -->
@@ -789,7 +804,6 @@
           b.className = 'bldg';
           const h = Math.floor(Math.random()*20)+12; // 12–32vh
           b.style.setProperty('--h', h+'vh');
-          b.style.setProperty('--win-o', (0.25 + Math.random()*0.35).toFixed(2));
           skyline.appendChild(b);
         }
       }
@@ -799,5 +813,6 @@
   </script>
 </body>
 </html>
+
 
 
