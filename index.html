@@ -44,7 +44,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="800" height="220" viewBox="0 0 800 220">\
   <rect width="800" height="220" fill="none"/>\
   <path d="M0 190 L20 170 L45 172 L45 190 L70 160 L95 162 L95 190 L130 150 L160 152 L160 190 L200 165 L230 167 L230 190 L270 155 L310 157 L310 190 L350 170 L380 172 L380 190 L420 160 L455 162 L455 190 L495 168 L530 170 L530 190 L570 156 L610 158 L610 190 L650 170 L690 172 L690 190 L730 160 L770 165 L770 190 L800 150 L800 220 L0 220 Z" fill="%23040a1c"/>\
-  <path d="M0 200 L30 180 L50 180 L50 200 L80 155 L110 155 L110 200 L150 140 L180 140 L180 200 L220 165 L250 165 L250 200 L300 145 L340 145 L340 200 L380 175 L420 175 Л420 200 L460 150 L500 150 L500 200 L540 165 L580 165 L580 200 L620 145 L660 145 L660 200 L700 175 L740 175 L740 200 L800 160 L800 220 L0 220 Z" fill="%23000a1a"/>\
+  <path d="M0 200 L30 180 L50 180 L50 200 L80 155 L110 155 L110 200 L150 140 L180 140 L180 200 L220 165 L250 165 L250 200 L300 145 L340 145 L340 200 L380 175 L420 175 L420 200 L460 150 L500 150 L500 200 L540 165 L580 165 L580 200 L620 145 L660 145 Л660 200 L700 175 L740 175 L740 200 L800 160 L800 220 L0 220 Z" fill="%23000a1a"/>\
   <g fill="%23ffd34d">\
     <rect x="58" y="184" width="6" height="10"/><rect x="66" y="184" width="6" height="10" opacity="0.6"/>\
     <rect x="206" y="186" width="6" height="10"/><rect x="214" y="186" width="6" height="10" opacity="0.6"/>\
@@ -57,7 +57,7 @@
       background-position:95% 8%,center,bottom,center;
     }
     #container canvas{position:absolute!important;top:0;left:0;width:100%!important;height:100%!important;z-index:1!important;background:transparent!important}
-    #scoreboard{position:absolute;top:10px;left:10px;display:flex;gap:10px;z-index:2}
+    #scoreboard{position:absolute;top:10px;left:10px;display:flex;gap:10px;z-index:2;align-items:center}
     #score,#highscore{background:rgba(0,0,0,.5);color:#fff;padding:5px 10px;border-radius:6px}
     #instructions{position:absolute;top:50px;left:10px;color:#fff;font-size:16px;background:rgba(0,0,0,.4);padding:4px 8px;border-radius:6px;z-index:2}
     .hide{display:none}
@@ -87,7 +87,7 @@
       background-image:
         radial-gradient(1200px 500px at 15% 0%, rgba(99,102,241,.35), transparent 60%),
         radial-gradient(1000px 600px at 85% 100%, rgba(56,189,248,.25), transparent 60%),
-        linear-gradient(135deg,#0f172a 0%, #1e1b4б 45%, #3b82f6 100%),
+        linear-gradient(135deg,#0f172a 0%, #1e1b4b 45%, #3b82f6 100%),
         url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="620" height="180"><g fill="%23ffffff1f" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="800" transform="rotate(-18 310 90)"><text x="-60" y="40">TASKS • TASKS • TASKS • TASKS • TASKS •</text><text x="-60" y="100">TASKS • TASKS • TASKS • TASKS • TASKS •</text><text x="-60" y="160">TASKS • TASKS • TASKS • TASKS • TASKS •</text></g></svg>');
       background-size:auto,auto,auto,620px 180px;background-repeat:no-repeat,no-repeat,no-repeat,repeat;
     }
@@ -190,6 +190,25 @@
     .rank-1{background:linear-gradient(135deg,rgba(250,204,21,.25),rgba(255,255,255,.06));border-color:rgba(250,204,21,.6)}
     .rank-2{background:linear-gradient(135deg,rgba(148,163,184,.25),rgba(255,255,255,.06));border-color:rgba(148,163,184,.6)}
     .rank-3{background:linear-gradient(135deg,rgba(244,114,182,.25),rgba(255,255,255,.06));border-color:rgba(244,114,182,.6)}
+
+    /* === АВАТАР + ТЕГ праворуч від рекорду === */
+    .player-box{
+      display:flex; align-items:center; gap:10px;
+      padding:6px 10px;
+      background:rgba(15,23,42,.5);
+      border:1px solid rgba(255,255,255,.15);
+      border-radius:10px;
+    }
+    .avatar{
+      width:40px; height:40px; border-radius:12px;
+      object-fit:cover; background:#111;
+      border:1px solid rgba(255,255,255,.12);
+      flex:0 0 auto;
+    }
+    .tg-tag{
+      font-weight:600; opacity:.95; white-space:nowrap;
+      max-width:160px; overflow:hidden; text-overflow:ellipsis;
+    }
   </style>
 
   <!-- 2) Adexium SDK -->
@@ -231,9 +250,6 @@
           adexiumAds.on('adPlaybackCompleted', () => emit('adPlaybackCompleted'));
           adexiumAds.on('adRedirected',     () => emit('adRedirected'));
 
-          // Розморозити чергу фабрики
-          _adex.queue.splice(0).forEach(fn => { try{ fn(adexiumAds); }catch(_){} });
-
           // Резерв: якщо iframe шле postMessage
           window.addEventListener('message', (ev) => {
             const d = ev?.data;
@@ -241,6 +257,9 @@
             if (d.type === 'shown')  emit('adDisplayed');
             if (d.type === 'close' || d.type === 'dismiss') emit('adClosed');
           });
+
+          // Розморозити чергу фабрики
+          _adex.queue.splice(0).forEach(fn => { try{ fn(adexiumAds); }catch(_){} });
         } catch (e) {
           console.warn('[Adexium] init error:', e);
         }
@@ -248,7 +267,6 @@
 
       // Ініціалізуємо якомога раніше, НЕ чекаючи window.load
       document.addEventListener('DOMContentLoaded', initOnce);
-      // якщо DOM уже готовий — пробуємо одразу
       if (document.readyState === 'interactive' || document.readyState === 'complete') initOnce();
     })();
   </script>
@@ -260,10 +278,22 @@
     <div id="container">
       <button id="langToggle" class="lang-btn">UA</button>
 
+      <!-- SCOREBOARD + АВАТАР/ТЕГ -->
       <div id="scoreboard">
         <div id="score">0</div>
         <div id="highscore">🏆 0</div>
+
+        <div id="playerBox" class="player-box">
+          <img
+            id="tgAvatar"
+            class="avatar"
+            alt="Avatar"
+            src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%239ca3af'/><circle cx='32' cy='24' r='12' fill='%23e5e7eb'/><path d='M10 54c0-10 10-16 22-16s22 6 22 16v4H10z' fill='%23e5e7eb'/></svg>'"
+          />
+          <div id="tgTag" class="tg-tag">@guest</div>
+        </div>
       </div>
+
       <div id="instructions" data-i18n="instructions">
         Клік або пробіл — поставити блок. Після завершення — клікни/пробіл, щоб зіграти ще.
       </div>
@@ -584,7 +614,7 @@
         nice_try: "Ти молодець 👍",
         restart_hint: "Клікни або натисни пробіл, щоб почати знову",
         start_btn: "▶ Старт",
-        pause_before_new_game: "Пауза перед новою грою",
+        pause_before_new_game: "Пауза перед новою гророю",
         you_can_start_in: "Можна буде почати через:",
         sec_suffix: "с",
 
@@ -709,9 +739,38 @@
     });
   </script>
 
-  <!-- ====== Основна логіка ====== -->
+  <!-- ===== АВТО-ТЕГ З TELEGRAM (та аватар за замовчуванням) ===== -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const tg = window.Telegram?.WebApp;
+      try { tg?.expand?.(); } catch(e) {}
+
+      const user = tg?.initDataUnsafe?.user || null;
+      const tagEl = document.getElementById('tgTag');
+
+      let display = '@guest';
+      if (user?.username) display = '@' + user.username;
+      else if (user?.first_name || user?.last_name)
+        display = [user.first_name, user.last_name].filter(Boolean).join(' ');
+
+      if (tagEl) tagEl.textContent = display;
+
+      // Якщо захочеш реальне фото з Telegram — вистави true:
+      const USE_TELEGRAM_PHOTO = false;
+      if (USE_TELEGRAM_PHOTO && user?.photo_url) {
+        fetch(user.photo_url, {cache:'no-store'})
+          .then(r => r.blob())
+          .then(b => new Promise(res => {const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.readAsDataURL(b);}))
+          .then(dataUrl => { const img=document.getElementById('tgAvatar'); if (img) img.src=dataUrl; })
+          .catch(()=>{});
+      }
+    });
+  </script>
+
+  <!-- ====== Основна логіка гри ====== -->
   <script src="./script.js"></script>
 </body>
 </html>
+
 
 
