@@ -1,3 +1,4 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="uk">
 <head>
@@ -6,27 +7,25 @@
   <meta name="theme-color" content="#0f172a" />
   <title>Stack Game</title>
 
-  <!-- Telegram Mini Apps SDK -->
+  <!-- 1) Telegram Mini Apps SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
 
+  <!-- ====== СТИЛІ ====== -->
   <style>
-    :root{ --topbar-h:56px; --menu-h:64px; }
-    *{ box-sizing:border-box }
+    /* --- БАЗА ІНТЕРФЕЙСУ --- */
+    :root{
+      --topbar-h:56px;
+      --menu-h:64px;
+    }
+    *{box-sizing:border-box}
     body{
       margin:0;font-family:Arial,sans-serif;background:#0f172a;
-      display:flex;flex-direction:column;min-height:100vh;
-      padding-bottom:var(--menu-h); /* щоб контент не ліз під нижнє меню */
-      /* ВАЖЛИВО: без padding-top, бо топбар тільки у "Грі" */
+      display:flex;flex-direction:column;height:100vh;padding-bottom:var(--menu-h);
     }
-
-    /* Сторінки на весь екран (мінус меню), без внутрішніх полів по краях */
-    .page{
-      display:none;overflow:auto;padding:0;
-      min-height:calc(100vh - var(--menu-h));
-    }
+    .page{flex:1;display:none;overflow:auto;padding:10px}
     .page.active{display:block}
 
-    /* ===== Верхня панель — тільки у вкладці "Гра" ===== */
+    /* ===== ВЕРХНЯ ПАНЕЛЬ — ТІЛЬКИ ДЛЯ ВКЛАДКИ "ГРА" ===== */
     #game .topbar{
       position:fixed;top:0;left:0;right:0;height:var(--topbar-h);
       display:flex;align-items:center;justify-content:space-between;
@@ -36,16 +35,23 @@
     }
     .tb-left,.tb-mid,.tb-right{display:flex;align-items:center;gap:10px}
     .tb-left{min-width:0}
+    .tb-mid{gap:8px}
+    .tb-right{gap:10px}
+
     .tb-left img{
       width:32px;height:32px;border-radius:50%;object-fit:cover;
       border:2px solid rgba(255,255,255,.9)
     }
+    /* Тег — білий + еліпсис */
     .tg-tag{
-      color:#fff;font-weight:800;letter-spacing:.2px;line-height:1;
-      max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+      color:#fff;font-weight:800;letter-spacing:.2px;
+      max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1;
     }
-    /* одна висота для всіх елементів середньої/правої колонок */
-    #score,#highscore,.lang-btn{height:32px;display:flex;align-items:center;line-height:1}
+
+    /* Однакова висота елементів 32px */
+    #score,#highscore,.lang-btn{
+      height:32px;display:flex;align-items:center;line-height:1
+    }
     #score,#highscore{
       background:rgba(255,255,255,.12);color:#fff;padding:0 12px;border-radius:10px;
       font-weight:800;border:1px solid rgba(255,255,255,.25)
@@ -56,7 +62,7 @@
     }
     .lang-btn:hover{filter:brightness(1.05)}
 
-    /* ===== НИЖНЄ МЕНЮ ===== */
+    /* --- НИЖНЄ МЕНЮ --- */
     .menu{
       display:flex;justify-content:space-around;border-top:1px solid rgba(255,255,255,.15);
       background:rgba(15,23,42,.75);padding:10px 0;position:fixed;left:0;right:0;bottom:0;
@@ -65,13 +71,17 @@
     .menu button{flex:1;background:none;border:none;font-size:22px;cursor:pointer;color:#fff}
     .menu button.active{color:#3b82f6;font-weight:bold}
 
-    /* ===== ГРА ===== */
-    /* сам екран гри рівно на видиму висоту: 100vh - меню - топбар */
-    #game { position:relative; }
+    .task{display:flex;justify-content:space-between;align-items:center;background:#fff;padding:15px;margin:10px auto;border-radius:10px;width:90%;box-shadow:0 2px 5px rgba(0,0,0,.1)}
+    .task button{background:#007bff;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
+    .task button.done{background:#28a745}
+    .task button:disabled{opacity:.6;cursor:not-allowed}
+    .balance{font-size:20px;margin-bottom:20px;text-align:center}
+
+    /* --- ГРА: фон неба --- */
     #container{
-      position:relative;width:100%;
-      height:calc(100vh - var(--menu-h) - var(--topbar-h));
-      overflow:hidden;
+      position:relative;width:100%;height:100%;overflow:hidden;
+      /* щоб інструкція/канвас не лізли під топбар: */
+      padding-top:calc(var(--topbar-h) + 8px);
       background:
         url('data:image/svg+xml;utf8,\
 <svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">\
@@ -85,49 +95,51 @@
         linear-gradient(180deg,#1e1b4b 0%, #0b1020 60%, #090f1a 100%);
       background-size:160px 160px,140px 140px,cover;
       background-position:95% 8%,center,center;
-      margin-top:var(--topbar-h); /* щоб нічого не було під топбаром */
     }
-    #container canvas{
-      position:absolute!important;top:0;left:0;width:100%!important;height:100%!important;
-      z-index:1!important;background:transparent!important
-    }
-    #instructions{
-      position:absolute;top:14px;left:10px;color:#fff;font-size:16px;
-      background:rgba(0,0,0,.4);padding:4px 8px;border-radius:6px;z-index:2
-    }
-    .hide{display:none}
-    .game-over,.ready{
-      position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-      text-align:center;background:rgba(15,23,42,.95);color:#fff;padding:20px;border-radius:10px;
-      display:none;z-index:3;min-width:260px;box-shadow:0 2px 5px rgba(0,0,0,.35)
-    }
+    #container canvas{position:absolute!important;top:0;left:0;width:100%!important;height:100%!important;z-index:1!important;background:transparent!important}
 
-    /* ===== Непрозорі багатоповерхівки (щільніші, тільки у "Грі") ===== */
+    /* Підказки/модалки гри */
+    #instructions{position:absolute;top:calc(var(--topbar-h) + 14px);left:10px;color:#fff;font-size:16px;background:rgba(0,0,0,.4);padding:4px 8px;border-radius:6px;z-index:2}
+    .hide{display:none}
+    .game-over,.ready{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;background:rgba(15,23,42,.95);color:#fff;padding:20px;border-radius:10px;display:none;z-index:3;min-width:260px;box-shadow:0 2px 5px rgba(0,0,0,.35)}
+
+    /* ===== НЕПРОЗОРІ БАГАТОПОВЕРХІВКИ (нижній шар, прикріплені до низу вікна) ===== */
     .city-skyline{
-      position:fixed;left:0;right:0;bottom:var(--menu-h);
-      height:36vh;display:flex;align-items:flex-end;gap:6px;padding:0 6px;
+      position:fixed;left:0;right:0;bottom:var(--menu-h);height:36vh;
+      display:flex;align-items:flex-end;gap:10px;padding:0 12px;
       z-index:0;pointer-events:none;
     }
     .city-skyline .bldg{
-      width:clamp(36px,6vw,80px); /* дрібніші — влазить більше "стовпців" */
-      height:var(--h,24vh);
-      background:#1f2937;border:1px solid #111827;border-radius:3px;
+      width:clamp(44px,7vw,96px);height:var(--h,24vh);
+      background:#1f2937; /* ОПАКО */
+      border:1px solid #111827;border-radius:3px;
       box-shadow:inset 0 -2px 0 rgba(255,255,255,.04),0 8px 24px rgba(0,0,0,.45);
       position:relative;
     }
     .city-skyline .bldg::before{
-      content:"";position:absolute;left:0;right:0;top:-3px;height:3px;background:#111827;border-radius:2px 2px 0 0;
+      content:"";position:absolute;left:0;right:0;top:-3px;height:3px;
+      background:#111827;border-radius:2px 2px 0 0;
     }
     .city-skyline .bldg::after{
       content:"";position:absolute;inset:10px;
-      background-image:radial-gradient(#ffd166 1.5px, transparent 1.7px);
-      background-size:13px 13px;opacity:.9;filter:drop-shadow(0 0 1px rgba(0,0,0,.25));
+      background-image:radial-gradient(#ffd166 1.6px, transparent 1.8px);
+      background-size:14px 14px;opacity:.9;
+      filter:drop-shadow(0 0 1px rgba(0,0,0,.25));
     }
 
-    /* ===== Інші вкладки — фулскрін секції (фон як був), без змін внутр. розкладок ===== */
+    /* ТЕМИ ТА РЕШТА */
+    .share-card{width:90%;margin:12px auto;background:#fff;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,.1);padding:16px}
+    .share-row{display:flex;gap:8px;margin-top:8px}
+    .share-row input{flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px}
+    .share-actions{display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap}
+    .btn{background:#007bff;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;text-decoration:none;display:inline-block}
+    .muted{color:#c7d2fe;font-size:12px}
+    .ok{color:#198754}.err{color:#dc3545}
+    .payout-list{list-style:none;margin:8px 0 0;padding:0}
+    .payout-list li{padding:6px 8px;border:1px solid #eee;border-radius:8px;margin-top:6px;font-size:14px}
+
     .themed{
-      position:relative;color:#eef;
-      min-height:calc(100vh - var(--menu-h));
+      position:relative;color:#eef;padding-bottom:calc(var(--menu-h) + 20px);
       background:
         radial-gradient(1200px 500px at 15% 0%, rgba(99,102,241,.35), transparent 60%),
         radial-gradient(1000px 600px at 85% 100%, rgba(56,189,248,.25), transparent 60%),
@@ -157,8 +169,36 @@
         url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="180"><g fill="%23ffffff1a" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="800" transform="rotate(-18 320 90)"><text x="-60" y="40">SHOP • SHOP • SHOP • SHOP • SHOP •</text><text x="-60" y="100">SHOP • SHOP • SHOP • SHOP • SHOP •</text><text x="-60" y="160">SHOP • SHOP • SHOP • SHOP • SHOP •</text></g></svg>');
       background-size:auto,auto,auto,640px 180px;background-repeat:no-repeat,no-repeat,no-repeat,repeat;
     }
+    .themed .task,.themed .share-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);color:#eef;backdrop-filter:blur(6px);box-shadow:0 10px 30px rgba(0,0,0,.15)}
+    .themed .btn{background:#3b82f6;color:#fff;border:none}
+    .themed .btn:hover{filter:brightness(1.05)}
 
-    /* ===== Лідерборд ===== */
+    #tasksTitle{color:#eaf2ff;margin:6px 0 8px 14px;font-size:28px}
+    #friends .balance{font-size:30px;font-weight:800;text-align:center;margin:16px 0;color:#eaf2ff}
+    #friends h2.wallet-title{color:#eaf2ff;text-align:center;font-size:28px;margin:0 0 20px}
+
+    #tournaments{
+      position:relative;color:#eef;padding-bottom:calc(var(--menu-h) + 20px);
+      background-image:
+        radial-gradient(1200px 500px at 15% 0%, rgba(99,102,241,.35), transparent 60%),
+        radial-gradient(1000px 600px at 85% 100%, rgba(56,189,248,.25), transparent 60%),
+        linear-gradient(135deg,#0f172a 0%, #1e1e4b 45%, #3b82f6 100%),
+        url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="760" height="200" viewBox="0 0 760 200"><g fill="%23ffffff15" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="800" transform="rotate(-18 380 100)"><text x="-60" y="40">BATTLES • BATTLES • BATTLES • BATTLES • BATTLES •</text><text x="-60" y="100">BATTLES • BATTLES • BATTLES • BATTLES • BATTLES •</text><text x="-60" y="160">BATTLES • BATTLES • BATTLES • BATTLES • BATTLES •</text></g></svg>');
+      background-size:auto,auto,auto,760px 200px;background-repeat:no-repeat,no-repeat,no-repeat,repeat;
+    }
+    #tournaments .tour-hero{width:90%;margin:12px auto;padding:16px;border-radius:14px;color:#fff;background:linear-gradient(135deg, rgba(99,102,241,.9), rgba(90,200,250,.9));box-shadow:0 10px 30px rgba(0,0,0,.15)}
+    .tour-hero-title{font-size:20px;font-weight:700}.tour-hero-sub{opacity:.95;margin-top:4px}
+    #tournaments .challenge-card{width:90%;margin:12px auto;background:rgba(255,255,255,.06);border-radius:12px;border:1px solid rgba(255,255,255,.15);padding:14px;color:#eef;backdrop-filter:blur(6px);box-shadow:0 10px 30px rgba(0,0,0,.15)}
+    #tournaments .challenge-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:10px 0}
+    #tournaments .opponent-score{font-weight:700;font-size:20px}
+    #stakeInput{flex:0 0 110px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px}
+    .stake-wrap{display:flex;gap:8px;align-items:center;flex:1}
+    .challenge-countdown{margin-top:6px;font-weight:600}
+    .challenge-actions{display:flex;align-items:center;gap:8px;margin-top:10px}
+    #tournaments .btn{background:#3b82f6;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
+    #tournaments .btn:hover{filter:brightness(1.05)}
+
+    /* ======= ЛІДЕРБОРД ======= */
     #leaderboard.themed{
       background-image:
         radial-gradient(1200px 500px at 15% 0%, rgba(99,102,241,.35), transparent 60%),
@@ -166,7 +206,7 @@
         linear-gradient(135deg,#0f172a 0%, #1e1b4b 45%, #3b82f6 100%),
         url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="760" height="200"><g fill="%23ffffff15" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="800" transform="rotate(-18 380 100)"><text x="-60" y="40">LEADERBOARD • LEADERBOARD • LEADERBOARD •</text><text x="-60" y="100">LEADERBOARD • LEADERBOARD • LEADERBOARD •</text><text x="-60" y="160">LEADERBOARD • LEADERBOARD • LEADERBOARD •</text></g></svg>');
       background-size:auto,auto,auto,760px 200px;background-repeat:no-repeat,no-repeat,no-repeat,repeat;
-      color:#eaf2ff;
+      color:#eaf2ff; padding-bottom:calc(var(--menu-h) + 20px);
     }
     .lb-header{width:92%;margin:12px auto 8px}
     .lb-title{font-size:26px;margin:0 0 4px}
@@ -193,42 +233,32 @@
     .rank-1{background:linear-gradient(135deg,rgba(250,204,21,.25),rgba(255,255,255,.06));border-color:rgba(250,204,21,.6)}
     .rank-2{background:linear-gradient(135deg,rgba(148,163,184,.25),rgba(255,255,255,.06));border-color:rgba(148,163,184,.6)}
     .rank-3{background:linear-gradient(135deg,rgba(244,114,182,.25),rgba(255,255,255,.06));border-color:rgba(244,114,182,.6)}
-
-    /* Картки/кнопки (інших вкладок) */
-    .task{display:flex;justify-content:space-between;align-items:center;background:#fff;padding:15px;margin:10px auto;border-radius:10px;width:90%;box-shadow:0 2px 5px rgba(0,0,0,.1)}
-    .task button{background:#007bff;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
-    .task button.done{background:#28a745}
-    .task button:disabled{opacity:.6;cursor:not-allowed}
-    .balance{font-size:20px;margin-bottom:20px;text-align:center}
-
-    .share-card{width:90%;margin:12px auto;background:#fff;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,.1);padding:16px}
-    .share-row{display:flex;gap:8px;margin-top:8px}
-    .share-row input{flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px}
-    .share-actions{display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap}
-    .btn{background:#007bff;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;text-decoration:none;display:inline-block}
-    .muted{color:#c7d2fe;font-size:12px}
-    .ok{color:#198754}.err{color:#dc3545}
   </style>
 
-  <!-- Adexium SDK -->
+  <!-- 2) Adexium SDK -->
   <script src="https://cdn.tgads.space/assets/js/adexium-widget.min.js"></script>
-  <!-- Adexium Wrapper -->
+
+  <!-- Adexium Wrapper (manual click-only, без autoMode) -->
   <script>
     (function () {
-      const WID    = '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae';
+      const WID    = '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae'; // твій widget id
       const FORMAT = 'interstitial';
+
       const _adex = window.__adex = window.__adex || { ready:false, widget:null, queue:[], pendingAd:undefined };
+
       window.__getAdexium = function (cb) {
         if (typeof cb !== 'function') return;
         if (_adex.ready && _adex.widget) cb(_adex.widget);
         else _adex.queue.push(cb);
       };
+
       function initOnce(){
         if (_adex.ready) return;
         if (typeof window.AdexiumWidget !== 'function') { setTimeout(initOnce, 80); return; }
         try {
           const adexiumAds = new AdexiumWidget({ wid: WID, adFormat: FORMAT, debug: false });
           _adex.widget = adexiumAds; _adex.ready  = true;
+
           const emit = (name, detail) => window.dispatchEvent(new CustomEvent('adexium:'+name, { detail }));
           adexiumAds.on('adReceived', (ad) => { _adex.pendingAd = ad; emit('adReceived', { ad }); });
           adexiumAds.on('noAdFound',  ()  => { _adex.pendingAd = null; emit('noAdFound'); });
@@ -236,11 +266,13 @@
           adexiumAds.on('adClosed',         () => emit('adClosed'));
           adexiumAds.on('adPlaybackCompleted', () => emit('adPlaybackCompleted'));
           adexiumAds.on('adRedirected',     () => emit('adRedirected'));
+
           window.addEventListener('message', (ev) => {
             const d = ev?.data; if (!d || typeof d !== 'object' || d.source !== 'adexium') return;
             if (d.type === 'shown')  emit('adDisplayed');
             if (d.type === 'close' || d.type === 'dismiss') emit('adClosed');
           });
+
           _adex.queue.splice(0).forEach(fn => { try{ fn(adexiumAds); }catch(_){} });
         } catch (e) { console.warn('[Adexium] init error:', e); }
       }
@@ -251,7 +283,10 @@
 </head>
 <body>
 
-  <!-- ===== GAME ===== -->
+  <!-- МІСТО (непрозорі багатоповерхівки) -->
+  <div class="city-skyline" id="citySkyline" aria-hidden="true"></div>
+
+  <!-- GAME (верхня панель всередині, закріплена і лише тут) -->
   <div id="game" class="page active">
     <div class="topbar">
       <div class="tb-left">
@@ -270,6 +305,7 @@
     </div>
 
     <div id="container">
+      <!-- підказки/модалки гри -->
       <div id="instructions" data-i18n="instructions">
         Клік або пробіл — поставити блок. Після завершення — клікни/пробіл, щоб зіграти ще.
       </div>
@@ -290,14 +326,11 @@
           <b id="postAdCountdown">15</b> <span data-i18n="sec_suffix">с</span></p>
       </div>
     </div>
-
-    <!-- Місто (щільні, непрозорі багатоповерхівки) -->
-    <div class="city-skyline" id="citySkyline" aria-hidden="true"></div>
   </div>
 
-  <!-- ===== TASKS ===== -->
+  <!-- TASKS -->
   <div id="tasks" class="page themed">
-    <h2 id="tasksTitle" style="margin:12px 0 8px 14px">📋 <span data-i18n="tasks_title">Завдання</span></h2>
+    <h2 id="tasksTitle">📋 <span data-i18n="tasks_title">Завдання</span></h2>
 
     <div class="task">
       <span data-i18n="task_subscribe_text">Підпишись на канал +1⭐</span>
@@ -309,7 +342,7 @@
       <button id="checkTask50" class="btn" style="margin-left:auto;" data-i18n="check">Перевірити</button>
     </div>
 
-    <!-- Денні таски -->
+    <!-- ДЕННІ ТАСКИ -->
     <div class="task" id="taskAdsgramDaily">
       <span>🎬 Adsgram: +0.1⭐ — <b id="adGramCounter">0</b>/25 сьогодні</span>
       <button id="watchAdsgramDailyBtn" class="btn">Дивитись</button>
@@ -319,6 +352,7 @@
       <span>🎬 Adexium: +0.1⭐ — <b id="adExCounter">0</b>/25 сьогодні</span>
       <button id="watchAdexiumDailyBtn" class="btn">Дивитись</button>
     </div>
+    <!-- /ДЕННІ ТАСКИ -->
 
     <!-- Квести 5/10 реклам -->
     <div class="task" id="taskWatch5">
@@ -348,7 +382,7 @@
     </div>
   </div>
 
-  <!-- ===== LEADERBOARD ===== -->
+  <!-- LEADERBOARD -->
   <div id="leaderboard" class="page themed">
     <div class="lb-header">
       <h2 class="lb-title">🏆 <span data-i18n="lb_title">Лідерборд</span></h2>
@@ -358,47 +392,43 @@
     <div class="lb-note" id="lbNote"></div>
   </div>
 
-  <!-- ===== TOURNAMENTS ===== -->
-  <div id="tournaments" class="page themed" style="background-image:
-    radial-gradient(1200px 500px at 15% 0%, rgba(99,102,241,.35), transparent 60%),
-    radial-gradient(1000px 600px at 85% 100%, rgba(56,189,248,.25), transparent 60%),
-    linear-gradient(135deg,#0f172a 0%, #1e1e4b 45%, #3b82f6 100%),
-    url('data:image/svg+xml;utf8,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;760&quot; height=&quot;200&quot; viewBox=&quot;0 0 760 200&quot;><g fill=&quot;%23ffffff15&quot; font-family=&quot;Arial, Helvetica, sans-serif&quot; font-size=&quot;36&quot; font-weight=&quot;800&quot; transform=&quot;rotate(-18 380 100)&quot;><text x=&quot;-60&quot; y=&quot;40&quot;>BATTLES • BATTLES • BATTLES • BATTLES • BATTLES •</text><text x=&quot;-60&quot; y=&quot;100&quot;>BATTLES • BATTLES • BATTLES • BATTLES • BATTLES •</text><text x=&quot;-60&quot; y=&quot;160&quot;>BATTLES • BATTLES • BATTLES • BATTLES • BATTLES •</text></g></svg>');">
-    <div class="tour-hero" style="width:90%;margin:12px auto;padding:16px;border-radius:14px;color:#fff;background:linear-gradient(135deg, rgba(99,102,241,.9), rgba(90,200,250,.9));box-shadow:0 10px 30px rgba(0,0,0,.15)">
+  <!-- TOURNAMENTS (БАТЛИ) -->
+  <div id="tournaments" class="page">
+    <div class="tour-hero">
       <div class="tour-hero-title" data-i18n="b_tour_title">⚔️ Виклик суперника</div>
       <div class="tour-hero-sub" data-i18n="b_tour_sub">Згенеруй рекорд, зроби ставку ⭐ і побий його за 3 години</div>
     </div>
 
-    <div class="share-card" style="width:90%;margin:12px auto;background:rgba(255,255,255,.06);border-radius:12px;border:1px solid rgba(255,255,255,.15);padding:14px;color:#eef;backdrop-filter:blur(6px);box-shadow:0 10px 30px rgba(0,0,0,.15)">
-      <div class="share-row" style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin:10px 0">
+    <div class="challenge-card">
+      <div class="challenge-row">
         <div>
           <div class="muted" data-i18n="opponent">Суперник</div>
-          <div class="opponent-score" id="opponentScore" style="font-weight:700;font-size:20px">—</div>
+          <div class="opponent-score" id="opponentScore">—</div>
         </div>
         <button class="btn" id="genOpponentBtn" data-i18n="generate">Згенерувати</button>
       </div>
 
-      <div class="share-row" style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin:10px 0">
+      <div class="challenge-row">
         <label for="stakeInput" class="muted" data-i18n="stake">Ставка ⭐</label>
-        <div class="stake-wrap" style="display:flex;gap:8px;align-items:center;flex:1">
-          <input id="stakeInput" type="number" min="1" step="0.5" value="1" style="flex:0 0 110px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px"/>
+        <div class="stake-wrap">
+          <input id="stakeInput" type="number" min="1" step="0.5" value="1" />
           <button class="btn" id="startChallengeBtn" data-i18n="start_challenge">Почати виклик (3 год)</button>
         </div>
       </div>
 
       <div class="challenge-info" id="challengeInfo" data-i18n="no_active_challenge">Немає активного виклику.</div>
 
-      <div class="challenge-countdown" id="challengeCountdown" style="display:none;margin-top:6px;font-weight:600">
+      <div class="challenge-countdown" id="challengeCountdown" style="display:none;">
         ⏳ <span data-i18n="time_left_prefix">Залишилось:</span> <span id="challengeLeft">03:00:00</span>
       </div>
 
-      <div class="share-actions" style="display:flex;align-items:center;gap:8px;margin-top:10px">
+      <div class="challenge-actions">
         <button class="btn" id="checkChallengeBtn" disabled data-i18n="check">Перевірити</button>
         <span id="challengeStatus" class="muted"></span>
       </div>
     </div>
 
-    <div class="share-card" aria-label="Правила батлу" style="width:92%; margin:14px auto calc(var(--menu-h) + 20px);border-radius:16px; overflow:hidden;background:
+    <div class="battle-panel" aria-label="Правила батлу" style="width:92%; margin:14px auto calc(var(--menu-h) + 32px);border-radius:16px; overflow:hidden;background:
       linear-gradient(135deg, rgba(30,27,75,.85), rgba(37,99,235,.85)),
       url('data:image/svg+xml;utf8,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;280&quot; height=&quot;280&quot; viewBox=&quot;0 0 280 280&quot;><g fill=&quot;none&quot; stroke=&quot;%23ffffff22&quot;><path d=&quot;M0 40h280M0 80h280M0 120h280M0 160h280M0 200h280M0 240h280&quot;/><path d=&quot;M40 0v280M80 0v280M120 0v280M160 0v280M200 0v280M240 0v280&quot;/></g></svg>') center/280px repeat;
       border:1px solid rgba(255,255,255,.18);color:#eaf2ff; box-shadow:0 10px 30px rgba(0,0,0,.2)">
@@ -419,7 +449,7 @@
     </div>
   </div>
 
-  <!-- ===== FRIENDS / WALLET ===== -->
+  <!-- FRIENDS / WALLET -->
   <div id="friends" class="page themed">
     <div class="balance"><span data-i18n="balance">Баланс</span> ⭐ <span id="balance">0</span></div>
     <h2 class="wallet-title">💳 <span data-i18n="wallet">Гаманець</span></h2>
@@ -454,12 +484,12 @@
     </div>
   </div>
 
-  <!-- ===== SHOP ===== -->
+  <!-- SHOP -->
   <div id="shop" class="page themed">
     <h2 class="wallet-title" style="margin-top:12px">🛒 <span data-i18n="shop_announcements">Оголошення</span></h2>
 
     <div class="share-card shop-card" style="text-align:center; position:relative;">
-      <button class="info-btn" id="shopInfoBtn" aria-label="Info" style="position:absolute; right:12px; top:12px; width:28px;height:28px;border-radius:999px;border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.12); color:#000;">i</button>
+      <button class="info-btn" id="shopInfoBtn" aria-label="Info" style="position:absolute; right:12px; top:12px; width:28px;height:28px;border-radius:999px;border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.12); color:#fff;">i</button>
 
       <div class="info-pop" id="shopInfoPop" style="display:none; margin-top:8px;">
         <p data-i18n="shop_info_text">Якщо бажаєте продати NFT, зірки чи інші подарунки — пишіть у лс.</p>
@@ -472,7 +502,7 @@
     </div>
   </div>
 
-  <!-- ===== НИЖНЄ МЕНЮ ===== -->
+  <!-- ====== НИЖНЄ МЕНЮ ====== -->
   <div class="menu">
     <button onclick="showPage('game', this)" class="active">🎮</button>
     <button onclick="showPage('tasks', this)">📝</button>
@@ -482,12 +512,12 @@
     <button onclick="showPage('shop', this)">🛍️</button>
   </div>
 
-  <!-- Бібліотеки гри/реклами -->
+  <!-- ====== БІБЛІОТЕКИ ====== -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r83/three.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/latest/TweenMax.min.js"></script>
   <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
 
-  <!-- RichAds -->
+  <!-- RichAds (як було) -->
   <script src="https://richinfo.co/richpartners/telegram/js/tg-ob.js"></script>
   <script>
     window.TelegramAdsController = new TelegramAdsController();
@@ -727,11 +757,12 @@
     });
   </script>
 
-  <!-- Автотег + фото з Telegram -->
+  <!-- ===== АВТО-ТЕГ + ФОТО З TELEGRAM ===== -->
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const tg = window.Telegram?.WebApp;
       try { tg?.expand?.(); } catch(e) {}
+
       const user = tg?.initDataUnsafe?.user || null;
       const tagEl = document.getElementById('tgTag');
       const avatarEl = document.getElementById('tgAvatar');
@@ -742,7 +773,7 @@
 
       if (tagEl) tagEl.textContent = display;
 
-      // реальне фото гравця зліва від тега
+      // Реальне фото гравця зліва від тега
       if (user?.photo_url && avatarEl){
         avatarEl.src = user.photo_url;
         avatarEl.addEventListener('error', () => {
@@ -750,31 +781,24 @@
             .then(r => r.blob())
             .then(b => new Promise(res => {const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.readAsDataURL(b);} ))
             .then(dataUrl => { avatarEl.src = dataUrl; })
-            .catch(()=>{ /* лишаємо плейсхолдер */ });
+            .catch(()=>{ /* плейсхолдер лишається */ });
         }, {once:true});
       }
     });
   </script>
 
-  <!-- Основна логіка гри -->
+  <!-- ====== Основна логіка гри (твій файл) ====== -->
   <script src="./script.js"></script>
 
-  <!-- Генерація багатоповерхівок (щільніша) -->
+  <!-- ====== Генерація багатоповерхівок ====== -->
   <script>
     document.addEventListener('DOMContentLoaded', ()=>{
       const skyline = document.getElementById('citySkyline');
       if (!skyline) return;
 
-      function estimatedBldgWidth(){
-        const vw = window.innerWidth * 0.06; // 6vw
-        return Math.max(36, Math.min(vw, 80)); // як у CSS clamp(36px,6vw,80px)
-      }
-
       function buildSkyline(){
         skyline.innerHTML = '';
-        const gap = 6; // як у CSS
-        const w = estimatedBldgWidth();
-        const count = Math.ceil((window.innerWidth + gap) / (w + gap)); // набиваємо щільно
+        const count = Math.max(8, Math.round(window.innerWidth / 70));
         for (let i=0;i<count;i++){
           const b = document.createElement('div');
           b.className = 'bldg';
@@ -783,11 +807,11 @@
           skyline.appendChild(b);
         }
       }
-
       buildSkyline();
       window.addEventListener('resize', buildSkyline);
     });
   </script>
 </body>
 </html>
+
 
