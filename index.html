@@ -2,7 +2,7 @@
 <html lang="uk">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="theme-color" content="#0f172a" />
   <title>Stack Game</title>
 
@@ -19,10 +19,7 @@
     *{box-sizing:border-box}
     body{
       margin:0;font-family:Arial,sans-serif;background:#0f172a;
-      display:flex;flex-direction:column;
-      /* мобільно-безпечна висота */
-      min-height:100vh;height:100dvh;
-      padding-bottom:var(--menu-h);
+      display:flex;flex-direction:column;height:100vh;padding-bottom:var(--menu-h);
     }
     .page{flex:1;display:none;overflow:auto;padding:10px}
     .page.active{display:block}
@@ -30,20 +27,21 @@
     /* ===== ВЕРХНЯ ПАНЕЛЬ — ТІЛЬКИ ДЛЯ ВКЛАДКИ "ГРА" ===== */
     #game .topbar{
       position:fixed;top:0;left:0;right:0;height:var(--topbar-h);
-      display:flex;align-items:center;justify-content:space-between;gap:8px;
+      display:flex;align-items:center;justify-content:space-between;
       padding:8px 12px;background:rgba(15,23,42,.88);
       backdrop-filter:blur(6px);border-bottom:1px solid rgba(255,255,255,.15);
       z-index:1000;
     }
     .tb-left,.tb-mid,.tb-right{display:flex;align-items:center;gap:10px}
     .tb-left{min-width:0}
-    .tb-mid{gap:8px;min-width:0}
+    .tb-mid{gap:8px}
     .tb-right{gap:10px}
 
     .tb-left img{
       width:32px;height:32px;border-radius:50%;object-fit:cover;
       border:2px solid rgba(255,255,255,.9)
     }
+    /* Тег — білий + еліпсис */
     .tg-tag{
       color:#fff;font-weight:800;letter-spacing:.2px;
       max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1;
@@ -81,6 +79,7 @@
     /* --- ГРА: фон неба --- */
     #container{
       position:relative;width:100%;height:100%;overflow:hidden;
+      /* щоб інструкція/канвас не лізли під топбар: */
       padding-top:calc(var(--topbar-h) + 8px);
       background:
         url('data:image/svg+xml;utf8,\
@@ -99,13 +98,13 @@
     #container canvas{position:absolute!important;top:0;left:0;width:100%!important;height:100%!important;z-index:1!important;background:transparent!important}
 
     /* Підказки/модалки гри */
-    #instructions{position:absolute;top:calc(var(--topbar-h) + 14px);left:10px;color:#fff;font-size:16px;background:rgba(0,0,0,.4);padding:4px 8px;border-radius:6px;z-index:2;max-width:86%;}
+    #instructions{position:absolute;top:calc(var(--topbar-h) + 14px);left:10px;color:#fff;font-size:16px;background:rgba(0,0,0,.4);padding:4px 8px;border-radius:6px;z-index:2}
     .hide{display:none}
     .game-over,.ready{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;background:rgba(15,23,42,.95);color:#fff;padding:20px;border-radius:10px;display:none;z-index:3;min-width:260px;box-shadow:0 2px 5px rgba(0,0,0,.35)}
 
     /* ===== НЕПРОЗОРІ БАГАТОПОВЕРХІВКИ (нічний вид) ===== */
     .city-skyline{
-      position:fixed;left:0;right:0;bottom:calc(var(--menu-h));height:36vh;
+      position:fixed;left:0;right:0;bottom:var(--menu-h);height:36vh;
       display:flex;align-items:flex-end;gap:10px;padding:0 12px;
       z-index:0;pointer-events:none;
     }
@@ -136,12 +135,15 @@
       animation-delay:var(--twinkle-delay,0s);
       filter:saturate(1.05) contrast(1.02);
     }
-    @keyframes twinkle{ 0%,100%{opacity:1} 50%{opacity:.96} }
+    @keyframes twinkle{
+      0%,100%{opacity:1}
+      50%{opacity:.96}
+    }
 
     /* ТЕМИ ТА РЕШТА */
     .share-card{width:90%;margin:12px auto;background:#fff;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,.1);padding:16px}
     .share-row{display:flex;gap:8px;margin-top:8px}
-    .share-row input{flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px;min-width:0}
+    .share-row input{flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px}
     .share-actions{display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap}
     .btn{background:#007bff;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;text-decoration:none;display:inline-block}
     .muted{color:#c7d2fe;font-size:12px}
@@ -188,7 +190,6 @@
     #friends .balance{font-size:30px;font-weight:800;text-align:center;margin:16px 0;color:#eaf2ff}
     #friends h2.wallet-title{color:#eaf2ff;text-align:center;font-size:28px;margin:0 0 20px}
 
-    /* ===== БАТЛИ ===== */
     #tournaments{
       position:relative;color:#eef;padding-bottom:calc(var(--menu-h) + 20px);
       background-image:
@@ -201,19 +202,14 @@
     #tournaments .tour-hero{width:90%;margin:12px auto;padding:16px;border-radius:14px;color:#fff;background:linear-gradient(135deg, rgba(99,102,241,.9), rgba(90,200,250,.9));box-shadow:0 10px 30px rgba(0,0,0,.15)}
     .tour-hero-title{font-size:20px;font-weight:700}.tour-hero-sub{opacity:.95;margin-top:4px}
     #tournaments .challenge-card{width:90%;margin:12px auto;background:rgba(255,255,255,.06);border-radius:12px;border:1px solid rgba(255,255,255,.15);padding:14px;color:#eef;backdrop-filter:blur(6px);box-shadow:0 10px 30px rgba(0,0,0,.15)}
-    #tournaments .challenge-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:10px 0;min-width:0}
+    #tournaments .challenge-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:10px 0}
     #tournaments .opponent-score{font-weight:700;font-size:20px}
-    #stakeInput{flex:0 0 110px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px;min-width:0}
-    .stake-wrap{display:flex;gap:8px;align-items:center;flex:1;min-width:0}
+    #stakeInput{flex:0 0 110px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:14px}
+    .stake-wrap{display:flex;gap:8px;align-items:center;flex:1}
     .challenge-countdown{margin-top:6px;font-weight:600}
     .challenge-actions{display:flex;align-items:center;gap:8px;margin-top:10px}
     #tournaments .btn{background:#3b82f6;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
     #tournaments .btn:hover{filter:brightness(1.05)}
-
-    /* компактна кнопка тільки для батлів */
-    #tournaments .btn.btn-sm{
-      font-size:14px;padding:6px 10px;line-height:1;white-space:nowrap;flex:0 0 auto;
-    }
 
     /* ======= ЛІДЕРБОРД ======= */
     #leaderboard.themed{
@@ -251,50 +247,35 @@
     .rank-2{background:linear-gradient(135deg,rgba(148,163,184,.25),rgba(255,255,255,.06));border-color:rgba(148,163,184,.6)}
     .rank-3{background:linear-gradient(135deg,rgba(244,114,182,.25),rgba(255,255,255,.06));border-color:rgba(244,114,182,.6)}
 
-    /* ===== МОБІЛЬНІ АДАПТАЦІЇ ===== */
-    @media (max-width: 480px){
-      .page{padding:8px}
-      .tg-tag{max-width:120px}
-      #score,#highscore{font-size:13px;padding:0 10px}
-      .lang-btn{padding:0 10px;font-size:13px}
-
-      .city-skyline{height:30vh}
-
-      #tournaments .tour-hero{padding:14px}
-      .tour-hero-title{font-size:18px}
-      .tour-hero-sub{font-size:13px}
-
-      /* Рядок ставки переноситься, нічого не вилізає */
-      .stake-wrap{flex-wrap:wrap}
-      #stakeInput{flex:1 1 140px}
-      #tournaments .btn.btn-sm{font-size:13px;padding:6px 10px}
-      .challenge-row{gap:8px}
-      .challenge-info{font-size:13px}
-      .challenge-countdown{font-size:13px}
-
-      /* Плашки-правила стискаються */
-      .battle-panel .inner{flex-direction:column;align-items:stretch}
-      .battle-panel .rules .pill{font-size:12px}
-
-      /* Лідерборд: сховаємо бонус, сітку спростимо */
-      .lb-row{grid-template-columns:44px 1fr 74px}
-      .lb-bonus{display:none}
-      .lb-title{font-size:22px}
-      .lb-sub{font-size:13px}
-
-      /* Картки/кнопки не ширші за контейнер */
-      .share-card,.task,#tournaments .challenge-card,#tournaments .tour-hero{width:92%}
-      .btn{max-width:100%}
+    /* =====================
+       PATCH: мобільні правки для батлів
+       ===================== */
+    /* Кнопка компактна */
+    #tournaments .btn-sm{ /* PATCH */
+      font-size:14px;
+      padding:6px 10px;
+      line-height:1;
+      white-space:nowrap;
+      flex:0 0 auto;
     }
-
-    @media (max-width: 360px){
-      #instructions{font-size:14px;max-width:90%}
-      .tg-tag{max-width:100px}
-      #score,#highscore{font-size:12px}
-      .lang-btn{font-size:12px}
-      .city-skyline{height:28vh}
-      /* у блоці ставки кнопка може піти на свій рядок, full width */
-      .stake-wrap .btn{flex:1 1 100%}
+    /* Інпут компактний, рядок не ламається всередині stake-wrap */
+    .stake-wrap{ /* PATCH */
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex:1 1 auto;
+      min-width:0;
+      flex-wrap:nowrap;
+    }
+    #stakeInput{ /* PATCH */
+      width:90px;
+      flex:0 0 auto;
+    }
+    /* Дозволяємо самому рядку переноситись на мобілці (лейбл піде вгору) */
+    @media (max-width:420px){ /* PATCH */
+      #tournaments .challenge-row{ flex-wrap:wrap; }
+      #tournaments label[for="stakeInput"]{ margin-bottom:6px; }
+      #tournaments .btn-sm{ font-size:13px; padding:6px 10px; }
     }
   </style>
 
@@ -384,7 +365,7 @@
       </div>
 
       <div class="game-over" id="postAdTimer" style="display:none;">
-        <h2 data-i18n="pause_before_new_game">Пауза перед новою грою</h2>
+        <h2 data-i18n="pause_before_new_game">Пауза перед новою гророю</h2>
         <p><span data-i18n="you_can_start_in">Можна буде почати через:</span>
           <b id="postAdCountdown">15</b> <span data-i18n="sec_suffix">с</span></p>
       </div>
@@ -415,6 +396,7 @@
       <span>🎬 Adexium: +0.1⭐ — <b id="adExCounter">0</b>/25 сьогодні</span>
       <button id="watchAdexiumDailyBtn" class="btn">Дивитись</button>
     </div>
+    <!-- /ДЕННІ ТАСКИ -->
 
     <!-- Квести 5/10 реклам -->
     <div class="task" id="taskWatch5">
@@ -474,7 +456,7 @@
         <label for="stakeInput" class="muted" data-i18n="stake">Ставка ⭐</label>
         <div class="stake-wrap">
           <input id="stakeInput" type="number" min="1" step="0.5" value="1" />
-          <!-- Коротка й компактна кнопка -->
+          <!-- PATCH: коротка компактна кнопка -->
           <button class="btn btn-sm" id="startChallengeBtn" data-i18n="start_challenge">Старт</button>
         </div>
       </div>
@@ -695,7 +677,7 @@
         nice_try: "Ти молодець 👍",
         restart_hint: "Клікни або натисни пробіл, щоб почати знову",
         start_btn: "▶ Старт",
-        pause_before_new_game: "Пауза перед новою грою",
+        pause_before_new_game: "Пауза перед новою гророю",
         you_can_start_in: "Можна буде почати через:",
         sec_suffix: "с",
 
@@ -711,7 +693,7 @@
         opponent: "Суперник",
         generate: "Згенерувати",
         stake: "Ставка ⭐",
-        start_challenge: "Старт",
+        start_challenge: "Старт", /* PATCH: короткий текст */
         no_active_challenge: "Немає активного виклику.",
         time_left_prefix: "Залишилось:",
         rule_goal: "🎯 Мета: побий рекорд за 3 год",
@@ -762,7 +744,7 @@
         opponent: "Opponent",
         generate: "Generate",
         stake: "Stake ⭐",
-        start_challenge: "Start",
+        start_challenge: "Start", /* PATCH */
         no_active_challenge: "No active challenge.",
         time_left_prefix: "Time left:",
         rule_goal: "🎯 Goal: beat the score in 3 hours",
@@ -836,6 +818,7 @@
 
       if (tagEl) tagEl.textContent = display;
 
+      // Реальне фото гравця зліва від тега
       if (user?.photo_url && avatarEl){
         avatarEl.src = user.photo_url;
         avatarEl.addEventListener('error', () => {
@@ -843,7 +826,7 @@
             .then(r => r.blob())
             .then(b => new Promise(res => {const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.readAsDataURL(b);} ))
             .then(dataUrl => { avatarEl.src = dataUrl; })
-            .catch(()=>{});
+            .catch(()=>{ /* плейсхолдер лишається */ });
         }, {once:true});
       }
     });
@@ -876,7 +859,10 @@
           <defs>
             <filter id="glow" color-interpolation-filters="sRGB">
               <feGaussianBlur stdDeviation="0.7" result="b"/>
-              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+              <feMerge>
+                <feMergeNode in="b"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
             </filter>
           </defs>`;
 
@@ -909,7 +895,7 @@
         }
         for (let r = 1; r < rows; r++){
           const fy = Math.round(r * (winH + gapY) - gapY/2);
-          frames += `<rect x="0" y="${fy}" width="${w}" height="1" fill="rgba(5,8,15,.35)"/>`;
+          frames += `<rect x="0" y="${fy}" width="${w}" height="${1}" fill="rgba(5,8,15,.35)"/>`;
         }
 
         const svg = `
@@ -931,11 +917,13 @@
           const h = Math.floor(Math.random()*20)+12; // 12–32vh
           b.style.setProperty('--h', h+'vh');
 
+          // трішки різні ритми мерехтіння між будинками
           b.style.setProperty('--twinkle', (5 + Math.random()*4).toFixed(2) + 's');
           b.style.setProperty('--twinkle-delay', (Math.random()*3).toFixed(2) + 's');
 
           skyline.appendChild(b);
 
+          // розміри внутрішньої площі під вікна (інсет .win: 12px 8px 10px)
           const glassW = Math.max(20, b.clientWidth  - 16);
           const glassH = Math.max(20, b.clientHeight - 22);
 
@@ -952,4 +940,5 @@
   </script>
 </body>
 </html>
+
 
