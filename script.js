@@ -1,4 +1,4 @@
-// script.js — гра, таски, батли, Adsgram + Adexium (відновлено прямий показ), таймер до 00:00
+// script.js — гра, таски, батли, Adsgram + Adexium (ручний показ), таймер до 00:00
 "use strict";
 console.clear();
 
@@ -61,6 +61,31 @@ function formatHMS(ms){
   const mm = Math.floor((s%3600)/60);
   const ss = s%60;
   return (hh>0 ? String(hh).padStart(2,'0')+":" : "") + String(mm).padStart(2,'0')+":"+String(ss).padStart(2,'0');
+}
+
+/* ========= ЄДИНА ТОЧКА ДОБОВОГО РЕСЕТУ ========= */
+function ensureDailyReset() {
+  const today = _todayStamp();
+  const stored = localStorage.getItem('dailyStamp') || today;
+
+  if (stored !== today) {
+    // скидаємо обидва щоденні лічильники + таймстемпи
+    gramCount = 0; exCount = 0;
+    lastGramAt = 0; lastExAt = 0;
+    dailyStamp = today;
+
+    // синхрон у LS
+    localStorage.setItem('dailyGramCount', '0');
+    localStorage.setItem('dailyExCount', '0');
+    localStorage.setItem('lastGramAt', '0');
+    localStorage.setItem('lastExAt', '0');
+    localStorage.setItem('dailyStamp', today);
+
+    saveData();
+
+    // сповістити інші модулі (зокрема IIFE Adexium)
+    try { window.dispatchEvent(new CustomEvent('daily-reset', { detail: { day: today } })); } catch(e) {}
+  }
 }
 
 /* ========= СТАН ========= */
@@ -172,11 +197,8 @@ window.onload = function(){
   lastExAt   = parseInt(localStorage.getItem('lastExAt')||'0',10);
   dailyStamp = localStorage.getItem('dailyStamp') || _todayStamp();
 
-  if (dailyStamp !== _todayStamp()){
-    gramCount = 0; exCount = 0;
-    lastGramAt = 0; lastExAt = 0;
-    dailyStamp = _todayStamp();
-  }
+  // ЄДИНЕ скидання (важливо: до рендеру UI)
+  ensureDailyReset();
 
   setBalanceUI();
   const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
@@ -249,7 +271,7 @@ function subscribe(){
 }
 
 /* ========= Лідерборд-заглушка ========= */
-function initLeaderboard(){ /* no-op */ }
+function initLeaderboard(){ /* no-op (рендер робить index.html) */ }
 
 /* ========= Реклама: SDK Adsgram ========= */
 function initAds(){
@@ -289,13 +311,7 @@ function startDailyPlusTicker(){
 }
 
 function updateDailyUI(){
-  const today = _todayStamp();
-  if (dailyStamp !== today){
-    gramCount = 0; exCount = 0;
-    lastGramAt = 0; lastExAt = 0;
-    dailyStamp = today;
-    saveData();
-  }
+  ensureDailyReset(); // єдина точка істини
 
   // синхрон з LS (важливо для Adexium IIFE)
   const lsGram = parseInt(localStorage.getItem('dailyGramCount') || '0', 10);
@@ -312,7 +328,6 @@ function updateDailyUI(){
   const eBtn = $("watchAdexiumDailyBtn");
   const leftTxt = formatHMS(msUntilMidnightLocal());
 
-  // збережемо вихідні лейбли, але далі їх все одно підміняє i18n
   if (gBtn && !gBtn.dataset.label) gBtn.dataset.label = gBtn.innerText;
   if (eBtn && !eBtn.dataset.label) eBtn.dataset.label = eBtn.innerText;
 
@@ -717,16 +732,16 @@ function finishChallenge(){
   saveData();
 }
 
-/* ========= ADEXIUM — ручний показ по кліку (LIVE, КРЕДИТ тільки за повний перегляд) ========= */
+/* ========= ADEXIUM — ручний показ по кліку (LIVE, кредит лише за повний перегляд) ========= */
 (function () {
   const WID          = '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae';
   const BTN_ID       = 'watchAdexiumDailyBtn';
   const COUNTER_ID   = 'adExCounter';
   const BALANCE_ID   = 'balance';
 
-  const DAILY_CAP    = 25;
+  const DAILY_CAP_LOCAL = 25;
   const CREDIT       = 0.1;
-  const CREDIT_ON_CLOSE = false; // ← тільки за успішний перегляд!
+  const CREDIT_ON_CLOSE = false; // тільки за успішний перегляд
 
   const LS_EX_COUNT = 'dailyExCount';
   const LS_DAY      = 'dailyStamp';
@@ -734,6 +749,7 @@ function finishChallenge(){
 
   let inFlight = false;
   let creditedOnce = false;
+  let adex = null;
 
   function todayStamp() {
     const d = new Date();
@@ -766,9 +782,9 @@ function finishChallenge(){
 
   function updateCounterUI(exCount) {
     const cnt = document.getElementById(COUNTER_ID);
-    if (cnt) cnt.textContent = String(Math.min(exCount, DAILY_CAP));
+    if (cnt) cnt.textContent = String(Math.min(exCount, DAILY_CAP_LOCAL));
     const btn = document.getElementById(BTN_ID);
-    if (btn) btn.disabled = (exCount >= DAILY_CAP) || inFlight;
+    if (btn) btn.disabled = (exCount >= DAILY_CAP_LOCAL) || inFlight;
   }
 
   function creditOnce() {
@@ -778,7 +794,7 @@ function finishChallenge(){
     let { exCount, day } = loadDayAndCount();
     const t = todayStamp();
     if (day !== t) { exCount = 0; day = t; }
-    if (exCount >= DAILY_CAP) { inFlight = false; updateCounterUI(exCount); creditedOnce=false; return; }
+    if (exCount >= DAILY_CAP_LOCAL) { inFlight = false; updateCounterUI(exCount); creditedOnce=false; return; }
 
     exCount += 1;
     saveDayAndCount(exCount, day);
@@ -796,6 +812,39 @@ function finishChallenge(){
     setTimeout(() => { creditedOnce = false; }, 0);
   }
 
+  function attachHandlers(instance){
+    if (!instance) return;
+    // уникаємо подвійної реєстрації — ставимо прапорець
+    if (instance.__stackGameHandlersAttached) return;
+    instance.__stackGameHandlersAttached = true;
+
+    instance.on('adReceived', (ad) => {
+      try { instance.displayAd(ad); }
+      catch (e) {
+        console.error('[Adexium] displayAd error:', e);
+        inFlight = false;
+        const { exCount } = loadDayAndCount();
+        updateCounterUI(exCount);
+      }
+    });
+    instance.on('noAdFound', () => {
+      inFlight = false;
+      const { exCount } = loadDayAndCount();
+      updateCounterUI(exCount);
+    });
+    instance.on('adPlaybackCompleted', () => {
+      creditOnce(); // тільки повний перегляд дає +0.1 і прогрес
+    });
+    instance.on('adClosed', () => {
+      if (CREDIT_ON_CLOSE) creditOnce();
+      else {
+        inFlight = false;
+        const { exCount } = loadDayAndCount();
+        updateCounterUI(exCount);
+      }
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById(BTN_ID);
     if (!btn) return;
@@ -805,22 +854,47 @@ function finishChallenge(){
     updateCounterUI(s.exCount);
     if (typeof window.setBalanceUI !== 'function') setBalanceLS(getBalanceLS());
 
-    if (typeof window.AdexiumWidget !== 'function') {
-      console.error('[Adexium] SDK не завантажився. Перевір підключення у index.html');
-      return;
-    }
-
-    const adex = new AdexiumWidget({
-      wid: WID,
-      adFormat: 'interstitial'
+    // Реакція на глобальний добовий ресет з основного коду
+    window.addEventListener('daily-reset', (e) => {
+      try {
+        const day = (e && e.detail && e.detail.day) ? e.detail.day : todayStamp();
+        saveDayAndCount(0, day);
+      } catch (_) {}
+      creditedOnce = false;
+      inFlight = false;
+      updateCounterUI(0);
     });
+
+    // 1) Якщо є твій обгортчик — беремо з нього інстанс
+    if (typeof window.__getAdexium === 'function'){
+      window.__getAdexium((inst)=>{
+        adex = inst;
+        attachHandlers(adex);
+      });
+    } else if (typeof window.AdexiumWidget === 'function'){
+      // 2) Інакше створюємо власний віджет
+      try {
+        adex = new AdexiumWidget({ wid: WID, adFormat: 'interstitial', debug: false });
+        attachHandlers(adex);
+      } catch (e) {
+        console.error('[Adexium] SDK не ініціалізувався:', e);
+      }
+    } else {
+      console.error('[Adexium] SDK не завантажився. Перевір підключення у index.html');
+    }
 
     btn.addEventListener('click', () => {
       const { exCount } = loadDayAndCount();
-      if (inFlight || exCount >= DAILY_CAP) return;
+      if (inFlight || exCount >= DAILY_CAP_LOCAL) return;
       inFlight = true; creditedOnce = false;
       updateCounterUI(exCount);
       try {
+        if (!adex){
+          console.warn('[Adexium] ще не готовий');
+          inFlight = false;
+          updateCounterUI(exCount);
+          return;
+        }
         adex.requestAd('interstitial');
       } catch (e) {
         console.error('[Adexium] requestAd error:', e);
@@ -828,38 +902,6 @@ function finishChallenge(){
         updateCounterUI(exCount);
       }
     });
-
-    adex.on('adReceived', (ad) => {
-      try {
-        adex.displayAd(ad);
-      } catch (e) {
-        console.error('[Adexium] displayAd error:', e);
-        inFlight = false;
-        const { exCount } = loadDayAndCount();
-        updateCounterUI(exCount);
-      }
-    });
-
-    adex.on('noAdFound', () => {
-      inFlight = false;
-      const { exCount } = loadDayAndCount();
-      updateCounterUI(exCount);
-    });
-
-    adex.on('adPlaybackCompleted', () => {
-      creditOnce(); // ← тільки повний перегляд дає +0.1 і прогрес
-    });
-
-    adex.on('adClosed', () => {
-      if (CREDIT_ON_CLOSE) creditOnce();
-      else {
-        inFlight = false;
-        const { exCount } = loadDayAndCount();
-        updateCounterUI(exCount);
-      }
-    });
-
-    window.__adex = adex;
   });
 })();
 
@@ -1066,7 +1108,6 @@ class Game{
     this.scoreEl.innerHTML=String(this.blocks.length-1);
     const b=new Block(last); this.newBlocks.add(b.mesh); this.blocks.push(b);
     this.stage.setCamera(this.blocks.length*2);
-    // 👇 підказка тепер зникає не одразу, а після 5-го блоку
     if(this.blocks.length>=6) $("instructions")?.classList.add("hide");
   }
 
