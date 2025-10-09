@@ -211,18 +211,6 @@
     #tournaments .btn{background:#3b82f6;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
     #tournaments .btn:hover{filter:brightness(1.05)}
 
-    /* компактна кнопка тільки для батлів */
-    #tournaments .btn.btn-sm{
-      font-size:14px;
-      padding:6px 10px;
-      line-height:1;
-      white-space:nowrap;
-      flex:0 0 auto;
-    }
-    @media (max-width:360px){
-      #tournaments .btn.btn-sm{font-size:13px;padding:6px 10px;}
-    }
-
     /* ======= ЛІДЕРБОРД ======= */
     #leaderboard.themed{
       background-image:
@@ -437,8 +425,7 @@
         <label for="stakeInput" class="muted" data-i18n="stake">Ставка ⭐</label>
         <div class="stake-wrap">
           <input id="stakeInput" type="number" min="1" step="0.5" value="1" />
-          <!-- КНОПКА СКОРОЧЕНА І КОМПАКТНА -->
-          <button class="btn btn-sm" id="startChallengeBtn" data-i18n="start_challenge">Старт</button>
+          <button class="btn" id="startChallengeBtn" data-i18n="start_challenge">Почати виклик (3 год)</button>
         </div>
       </div>
 
@@ -674,7 +661,7 @@
         opponent: "Суперник",
         generate: "Згенерувати",
         stake: "Ставка ⭐",
-        start_challenge: "Старт",
+        start_challenge: "Почати виклик (3 год)",
         no_active_challenge: "Немає активного виклику.",
         time_left_prefix: "Залишилось:",
         rule_goal: "🎯 Мета: побий рекорд за 3 год",
@@ -725,7 +712,7 @@
         opponent: "Opponent",
         generate: "Generate",
         stake: "Stake ⭐",
-        start_challenge: "Start",
+        start_challenge: "Start challenge (3h)",
         no_active_challenge: "No active challenge.",
         time_left_prefix: "Time left:",
         rule_goal: "🎯 Goal: beat the score in 3 hours",
@@ -876,7 +863,7 @@
         }
         for (let r = 1; r < rows; r++){
           const fy = Math.round(r * (winH + gapY) - gapY/2);
-          frames += `<rect x="0" y="${fy}" width="${w}" height="${h ? 1 : 1}" fill="rgba(5,8,15,.35)"/>`;
+          frames += `<rect x="0" y="${fy}" width="${w}" height="1" fill="rgba(5,8,15,.35)"/>`;
         }
 
         const svg = `
@@ -921,4 +908,5 @@
   </script>
 </body>
 </html>
+
 
