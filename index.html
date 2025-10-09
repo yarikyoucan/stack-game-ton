@@ -211,6 +211,18 @@
     #tournaments .btn{background:#3b82f6;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
     #tournaments .btn:hover{filter:brightness(1.05)}
 
+    /* компактна кнопка тільки для батлів */
+    #tournaments .btn.btn-sm{
+      font-size:14px;
+      padding:6px 10px;
+      line-height:1;
+      white-space:nowrap;
+      flex:0 0 auto;
+    }
+    @media (max-width:360px){
+      #tournaments .btn.btn-sm{font-size:13px;padding:6px 10px;}
+    }
+
     /* ======= ЛІДЕРБОРД ======= */
     #leaderboard.themed{
       background-image:
@@ -246,90 +258,6 @@
     .rank-1{background:linear-gradient(135deg,rgba(250,204,21,.25),rgba(255,255,255,.06));border-color:rgba(250,204,21,.6)}
     .rank-2{background:linear-gradient(135deg,rgba(148,163,184,.25),rgba(255,255,255,.06));border-color:rgba(148,163,184,.6)}
     .rank-3{background:linear-gradient(135deg,rgba(244,114,182,.25),rgba(255,255,255,.06));border-color:rgba(244,114,182,.6)}
-  </style>
-
-  <!-- ===== FIX PACK: overflow-safe + responsive ===== -->
-  <style>
-    /* Кнопки: адаптивний шрифт, перенос тексту, центр */
-    .btn,
-    #tournaments .btn,
-    .task .btn {
-      max-width: 100%;
-      white-space: normal;          /* дозволяємо перенос */
-      word-break: break-word;
-      line-height: 1.15;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: clamp(13px, 3.6vw, 16px);
-      padding: clamp(8px, 2.5vw, 10px) clamp(12px, 4vw, 16px);
-      border-radius: 10px;
-    }
-
-    /* Tasks: дозволяємо перенос і контроль ширин */
-    .task { flex-wrap: wrap; gap: 8px; }
-    .task > span { flex: 1 1 220px; min-width: 0; }
-    .task > .btn { flex: 0 0 auto; }
-
-    /* Challenge card: адаптивні ряди */
-    #tournaments .challenge-row { flex-wrap: wrap; align-items: stretch; }
-    #tournaments .stake-wrap { display: flex; gap: 8px; flex: 1 1 260px; min-width: 0; }
-    #stakeInput {
-      flex: 0 0 clamp(96px, 30vw, 140px);
-      min-width: 0;
-    }
-    #startChallengeBtn {
-      flex: 1 1 auto;       /* кнопка займає решту ширини */
-      min-width: 0;
-      text-align: center;
-      padding: 10px 12px;
-    }
-
-    /* Дії під викликом: теж переносимі */
-    .challenge-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-    #challengeStatus { flex: 1 1 200px; word-break: break-word; }
-
-    /* Запобігти витіканню в картках */
-    #tournaments .challenge-card,
-    .share-card,
-    .task { overflow: hidden; }
-
-    /* Модалки гри: не ширші за екран */
-    .game-over, .ready {
-      max-width: calc(100vw - 24px);
-      width: max(260px, 80vw);
-      word-wrap: break-word;
-    }
-
-    /* Лідерборд: еластичні колонки + не рвемо ряд */
-    .lb-row {
-      grid-template-columns: 56px minmax(0,1fr) 70px 90px;
-    }
-    .lb-name .txt {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    /* Топбар: тег юзера клампимо по ширині */
-    .tg-tag { max-width: min(160px, 36vw); min-width: 0; }
-
-    /* Кнопка мови трохи адаптивна */
-    .lang-btn { font-size: clamp(12px, 3.2vw, 14px); }
-
-    /* Дуже вузькі екрани: стекуємо інпут і кнопку ставки */
-    @media (max-width: 400px) {
-      #tournaments .challenge-row { flex-direction: column; align-items: stretch; }
-      #tournaments label[for="stakeInput"] { margin-bottom: 4px; }
-      #tournaments .stake-wrap { flex-direction: column; }
-      #stakeInput, #startChallengeBtn { width: 100%; }
-    }
-
-    /* Safe area (iOS) — щоб меню/топбар не лізли під чубчик/джест бар */
-    @supports (padding: max(0px)) {
-      .menu { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
-      #game .topbar { padding-top: max(8px, env(safe-area-inset-top)); }
-    }
   </style>
 
   <!-- 2) Adexium SDK -->
@@ -509,7 +437,8 @@
         <label for="stakeInput" class="muted" data-i18n="stake">Ставка ⭐</label>
         <div class="stake-wrap">
           <input id="stakeInput" type="number" min="1" step="0.5" value="1" />
-          <button class="btn" id="startChallengeBtn" data-i18n="start_challenge">Почати виклик (3 год)</button>
+          <!-- КНОПКА СКОРОЧЕНА І КОМПАКТНА -->
+          <button class="btn btn-sm" id="startChallengeBtn" data-i18n="start_challenge">Старт</button>
         </div>
       </div>
 
@@ -745,7 +674,7 @@
         opponent: "Суперник",
         generate: "Згенерувати",
         stake: "Ставка ⭐",
-        start_challenge: "Почати виклик (3 год)",
+        start_challenge: "Старт",
         no_active_challenge: "Немає активного виклику.",
         time_left_prefix: "Залишилось:",
         rule_goal: "🎯 Мета: побий рекорд за 3 год",
@@ -796,7 +725,7 @@
         opponent: "Opponent",
         generate: "Generate",
         stake: "Stake ⭐",
-        start_challenge: "Start challenge (3h)",
+        start_challenge: "Start",
         no_active_challenge: "No active challenge.",
         time_left_prefix: "Time left:",
         rule_goal: "🎯 Goal: beat the score in 3 hours",
@@ -947,7 +876,7 @@
         }
         for (let r = 1; r < rows; r++){
           const fy = Math.round(r * (winH + gapY) - gapY/2);
-          frames += `<rect x="0" y="${fy}" width="${w}" height="${h}" fill="rgba(5,8,15,.35)" opacity="0.6"/>`.replace(`${h}"`, `${h}"`);
+          frames += `<rect x="0" y="${fy}" width="${w}" height="${h ? 1 : 1}" fill="rgba(5,8,15,.35)"/>`;
         }
 
         const svg = `
@@ -992,3 +921,4 @@
   </script>
 </body>
 </html>
+
