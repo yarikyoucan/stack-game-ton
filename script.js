@@ -15,7 +15,7 @@ const POST_AD_TIMER_MS = 15_000;
 const GAMES_TARGET = 100;
 const GAMES_REWARD = 5;
 
-const WITHDRAW_CHUNK = 50;
+const WITHDRAW_CHUNK = 1;
 
 /* --- Adsgram блоки --- */
 const ADSGRAM_BLOCK_ID_TASK_MINUTE = "int-13961";
