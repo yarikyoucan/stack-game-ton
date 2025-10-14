@@ -15,7 +15,7 @@ const POST_AD_TIMER_MS = 15_000;
 const GAMES_TARGET = 100;
 const GAMES_REWARD = 5;
 
-const WITHDRAW_CHUNK = 1;
+const WITHDRAW_CHUNK = 1; // 👈 сума виводу
 
 /* --- Adsgram блоки --- */
 const ADSGRAM_BLOCK_ID_TASK_MINUTE = "int-13961";
@@ -55,10 +55,7 @@ function formatHMS(ms){
   return (hh>0 ? String(hh).padStart(2,'0')+":" : "") + String(mm).padStart(2,'0')+":"+String(ss).padStart(2,'0');
 }
 
-/* ========= ХМАРНЕ СХОВИЩЕ (Google Sheets через GAS Web App) =========
-   Використовує window.CLOUD_URL і window.CLOUD_API_KEY з index.html.
-   Зберігаємо: balance, highscore, last_score, battle_record (+ id/username).
-   Все інше залишається у localStorage, як і було. */
+/* ========= ХМАРА (Google Sheets через GAS Web App) ========= */
 const CLOUD = {
   url: (typeof window !== 'undefined' && window.CLOUD_URL) || '',
   api: (typeof window !== 'undefined' && window.CLOUD_API_KEY) || '',
@@ -142,7 +139,7 @@ const CloudStore = (() => {
       balance = parseFloat(rem.balance.toFixed(2));
       setBalanceUI();
     }
-    // battle_record — максимум, зберігаємо лише у LS (для локальної логіки)
+    // battle_record — максимум (у LS)
     const localBattle = Number(localStorage.getItem('battle_record')||'0');
     const newBattle = Math.max(localBattle, Number(rem.battle_record||0));
     if (newBattle !== localBattle){
@@ -158,7 +155,6 @@ const CloudStore = (() => {
       const rem = await getRemote();
       st.lastRemote = rem;
       if (rem) applyRemoteToState(rem);
-      // якщо рядка ще не було — створимо
       if (!rem) queuePush({});
     }catch(e){ console.warn('[Cloud] hydrate failed', e); }
   }
@@ -182,7 +178,6 @@ const CloudStore = (() => {
     identify();
     hydrate().then(startPolling);
     window.addEventListener('beforeunload', ()=>{ try{ pushRemote({}); }catch(_){ } });
-    // невеличкий “пінг” через 1.5с щоб створити запис якщо його нема
     setTimeout(()=>queuePush({}), 1500);
   }
 
@@ -195,12 +190,10 @@ function ensureDailyReset() {
   const stored = localStorage.getItem('dailyStamp') || today;
 
   if (stored !== today) {
-    // скидаємо обидва щоденні лічильники + таймстемпи
     gramCount = 0; exCount = 0;
     lastGramAt = 0; lastExAt = 0;
     dailyStamp = today;
 
-    // синхрон у LS
     localStorage.setItem('dailyGramCount', '0');
     localStorage.setItem('dailyExCount', '0');
     localStorage.setItem('lastGramAt', '0');
@@ -208,8 +201,6 @@ function ensureDailyReset() {
     localStorage.setItem('dailyStamp', today);
 
     saveData();
-
-    // сповістити інші модулі (зокрема IIFE Adexium)
     try { window.dispatchEvent(new CustomEvent('daily-reset', { detail: { day: today } })); } catch(e) {}
   }
 }
@@ -254,7 +245,6 @@ let challengeOpp = 0;
 
 /* ========= ЗБЕРЕЖЕННЯ ========= */
 function saveData(){
-  // balance та highscore — НЕ зберігаємо у LS (джерело — таблиця)
   localStorage.setItem("subscribed", subscribed ? "true" : "false");
   localStorage.setItem("task50Completed", task50Completed ? "true" : "false");
   localStorage.setItem("gamesPlayedSinceClaim", String(gamesPlayedSinceClaim));
@@ -301,7 +291,7 @@ let dailyUiTicker = null;
 let challengeTicker = null;
 
 window.onload = function(){
-  // базові стейти (БЕЗ balance/highscore — вони приїдуть з хмари)
+  // базові стейти
   subscribed = localStorage.getItem("subscribed") === "true";
   task50Completed = localStorage.getItem("task50Completed") === "true";
   lastAnyAdAt      = parseInt(localStorage.getItem("lastAnyAdAt")  || "0", 10);
@@ -320,10 +310,8 @@ window.onload = function(){
   lastExAt   = parseInt(localStorage.getItem('lastExAt')||'0',10);
   dailyStamp = localStorage.getItem('dailyStamp') || _todayStamp();
 
-  // ЄДИНЕ скидання (важливо: до рендеру UI)
   ensureDailyReset();
 
-  // стартові значення (0 до гідрації)
   setBalanceUI();
   const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
   updateGamesTaskUI();
@@ -371,7 +359,7 @@ window.onload = function(){
   // батл UI
   setupChallengeUI();
 
-  // Ініт SDK Adsgram
+  // Adsgram SDK
   initAds();
 
   // 3D гра
@@ -382,14 +370,14 @@ window.onload = function(){
   updateAdTasksUI();
   updateDailyUI();
 
-  // Хмара: гідрація та пулінг
+  // Хмара
   try { CloudStore.initAndHydrate(); } catch(e){ console.warn(e); }
 };
 
 function addBalance(n){
   balance = parseFloat((balance + n).toFixed(2));
   setBalanceUI();
-  saveData();               // інше (не баланс/рекорд)
+  saveData();
   CloudStore.queuePush({ balance });
 }
 function subscribe(){
@@ -403,7 +391,7 @@ function subscribe(){
 }
 
 /* ========= Лідерборд-заглушка ========= */
-function initLeaderboard(){ /* no-op (рендер робить index.html) */ }
+function initLeaderboard(){ /* no-op */ }
 
 /* ========= Реклама: SDK Adsgram ========= */
 function initAds(){
@@ -443,9 +431,8 @@ function startDailyPlusTicker(){
 }
 
 function updateDailyUI(){
-  ensureDailyReset(); // єдина точка істини
+  ensureDailyReset();
 
-  // синхрон з LS (важливо для Adexium IIFE)
   const lsGram = parseInt(localStorage.getItem('dailyGramCount') || '0', 10);
   const lsEx   = parseInt(localStorage.getItem('dailyExCount')   || '0', 10);
   if (lsGram !== gramCount) gramCount = lsGram;
@@ -565,7 +552,6 @@ async function onWatchAd10(){
 }
 
 /* ========= Друзі / копіювання ========= */
-function openBotLink(e){ e.preventDefault(); const url="https://t.me/Stacktongame_bot"; if (window.Telegram?.WebApp?.openTelegramLink) Telegram.WebApp.openTelegramLink(url); else window.open(url,"_blank"); }
 async function copyToClipboard(text){
   try{
     if (navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(text); }
@@ -595,10 +581,10 @@ async function withdraw50ShareToGroup(){
   const amount = WITHDRAW_CHUNK;
 
   try{
-    // Запис у таблицю (StackGameCloud → K=tag, L=amount, M=timestamp)
+    // Запис у таблицю (K=tag, L=amount, M=timestamp)
     const res = await fetch(String(CLOUD.url), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "text/plain;charset=utf-8" }, // важливо для GAS
       body: JSON.stringify({
         api: String(CLOUD.api || ""),
         action: "withdraw",
@@ -613,14 +599,14 @@ async function withdraw50ShareToGroup(){
       throw new Error(json?.error || ("HTTP "+res.status));
     }
 
-    // Локальний список лише для відображення (без кодів)
-    const entry = { ts: Date.now(), amount };
+    // локальний список для UI
+    const entry = { ts: Date.now(), amount, tag };
     const arr = JSON.parse(localStorage.getItem("payouts") || "[]");
     arr.unshift(entry);
     localStorage.setItem("payouts", JSON.stringify(arr));
     renderPayoutList();
 
-    // Списуємо 50⭐, пушимо у хмару
+    // списуємо після успіху
     addBalance(-amount);
 
     if (statusEl){ statusEl.className="ok"; statusEl.textContent="✅ Заявку створено"; }
@@ -747,7 +733,6 @@ function setupChallengeUI(){
       statusEl.textContent = "✅ Виконано! Нараховано " + (challengeStake*1.5).toFixed(2) + "⭐";
       checkBtn.disabled = true;
 
-      // фіксуємо battle_record (максимум цілі)
       const prevBattle = Number(localStorage.getItem('battle_record')||'0');
       const newBattle = Math.max(prevBattle, challengeOpp);
       localStorage.setItem('battle_record', String(newBattle));
@@ -807,11 +792,10 @@ function finishChallenge(){
 
   const DAILY_CAP_LOCAL = 25;
   const CREDIT       = 0.1;
-  const CREDIT_ON_CLOSE = false; // тільки за успішний перегляд
+  const CREDIT_ON_CLOSE = false;
 
   const LS_EX_COUNT = 'dailyExCount';
   const LS_DAY      = 'dailyStamp';
-  const LS_BAL      = 'balance'; // використовується тільки як fallback для UI
 
   let inFlight = false;
   let creditedOnce = false;
@@ -836,14 +820,13 @@ function finishChallenge(){
   }
 
   function setBalanceUI_LocalOnlyFallback(){
-    // реально баланс з хмари; тут лише оновлюємо DOM
     const el = document.getElementById(BALANCE_ID);
     if (el) el.textContent = Number.isInteger(balance) ? String(balance) : balance.toFixed(2);
   }
   function addBalanceLocal(delta) {
     balance = parseFloat((balance + delta).toFixed(2));
     setBalanceUI_LocalOnlyFallback();
-    CloudStore.queuePush({ balance }); // справжнє збереження в таблицю
+    CloudStore.queuePush({ balance });
   }
 
   function updateCounterUI(exCount) {
@@ -919,7 +902,6 @@ function finishChallenge(){
     updateCounterUI(s.exCount);
     setBalanceUI_LocalOnlyFallback();
 
-    // Реакція на глобальний добовий ресет з основного коду
     window.addEventListener('daily-reset', (e) => {
       try {
         const day = (e && e.detail && e.detail.day) ? e.detail.day : todayStamp();
