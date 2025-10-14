@@ -1,4 +1,4 @@
-// script.js — гра, таски, батли, Adsgram + Adexium (ручний показ), жорсткий ресет о 00:00
+// script.js — гра, таски, батли, Adsgram + Adexium, синхронізація з Google Sheets
 "use strict";
 console.clear();
 
@@ -39,53 +39,21 @@ const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 const $ = id => document.getElementById(id);
 const formatStars = v => Number.isInteger(Number(v)) ? String(Number(v)) : Number(v).toFixed(2);
 
-/* === КЛЮЧІ LS === */
-const LS = {
-  balance: "balance",
-  subscribed: "subscribed",
-  task50Completed: "task50Completed",
-  highscore: "highscore",
-  gamesPlayedSinceClaim: "gamesPlayedSinceClaim",
-  lastAnyAdAt: "lastAnyAdAt",
-
-  // 5/10
-  ad5Count: "ad5Count",
-  ad10Count: "ad10Count",
-  lastTask5RewardAt: "lastTask5RewardAt",
-  lastTask10RewardAt: "lastTask10RewardAt",
-
-  // daily
-  gramCount: "dailyGramCount",
-  exCount: "dailyExCount",
-  lastGramAt: "lastGramAt",
-  lastExAt: "lastExAt",
-  day: "dailyStamp",
-  resetAt: "dailyResetAt", // НОВЕ: мітка наступної півночі в мс
-
-  // батл
-  oppScorePending: "oppScorePending",
-  challengeActive: "challengeActive",
-  challengeStartAt: "challengeStartAt",
-  challengeDeadline: "challengeDeadline",
-  challengeStake: "challengeStake",
-  challengeOpp: "challengeOpp",
-
-  payouts: "payouts",
-};
-
-/* === Дата/час === */
+function setBalanceUI(){
+  const el = $("balance");
+  if (el) el.innerText = formatStars(balance);
+}
 function _todayStamp(){
   const d = new Date();
   const m = String(d.getMonth()+1).padStart(2,'0');
   const day = String(d.getDate()).padStart(2,'0');
   return `${d.getFullYear()}-${m}-${day}`;
 }
-function _nextMidnightMs(){
+function msUntilMidnightLocal(){
   const now = new Date();
   const next = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1, 0, 0, 0, 0);
-  return next.getTime();
+  return next - now;
 }
-function _now(){ return Date.now(); }
 function formatHMS(ms){
   ms = Math.max(0, ms|0);
   const s = Math.ceil(ms/1000);
@@ -93,6 +61,165 @@ function formatHMS(ms){
   const mm = Math.floor((s%3600)/60);
   const ss = s%60;
   return (hh>0 ? String(hh).padStart(2,'0')+":" : "") + String(mm).padStart(2,'0')+":"+String(ss).padStart(2,'0');
+}
+
+/* ========= ХМАРНЕ СХОВИЩЕ (Google Sheets через GAS Web App) =========
+   Використовує window.CLOUD_URL і window.CLOUD_API_KEY з index.html.
+   Зберігаємо: balance, highscore, last_score, battle_record (+ id/username).
+   Все інше залишається у localStorage, як і було. */
+const CLOUD = {
+  url: (typeof window !== 'undefined' && window.CLOUD_URL) || '',
+  api: (typeof window !== 'undefined' && window.CLOUD_API_KEY) || '',
+};
+
+const CloudStore = (() => {
+  const st = {
+    enabled: !!(CLOUD.url && CLOUD.api),
+    uid: '',
+    username: '',
+    lastRemote: null,
+    pollTimer: null,
+    pollMs: 10_000,
+    debounceTimer: null,
+    pushing: false,
+  };
+
+  function tgUser(){
+    return (window.Telegram?.WebApp?.initDataUnsafe?.user) || null;
+  }
+  function identify(){
+    const u = tgUser() || {};
+    st.uid = String(u.id || 'guest');
+    st.username = (u.username || [u.first_name||'', u.last_name||''].filter(Boolean).join(' ') || 'Guest');
+  }
+
+  function makeTag(){
+    if (st.username) return st.username.startsWith('@') ? st.username : '@'+st.username;
+    return st.uid ? 'id'+st.uid : 'Guest';
+  }
+
+  async function getRemote(){
+    if (!st.enabled || !st.uid) return null;
+    const url = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(st.uid)}`;
+    const r = await fetch(url, { method:'GET', headers:{'accept':'application/json'} });
+    if (!r.ok) return null;
+    const j = await r.json().catch(()=>null);
+    return (j && j.ok) ? (j.data || null) : null;
+  }
+
+  async function pushRemote(partial){
+    if (!st.enabled || !st.uid) return;
+    const body = {
+      api: CLOUD.api,
+      user_id: st.uid,
+      username: st.username.replace(/^@/,''),
+      tg_tag: makeTag(),
+      balance: (partial.balance!=null ? Number(partial.balance) : Number(balance||0)),
+      highscore: (partial.highscore!=null ? Number(partial.highscore) : Number(highscore||0)),
+      last_score: (partial.last_score!=null ? Number(partial.last_score) : Number(parseInt($("score")?.innerText||"0",10))),
+      battle_record: (partial.battle_record!=null ? Number(partial.battle_record) : Number(localStorage.getItem('battle_record')||'0')),
+    };
+    st.pushing = true;
+    try{
+      const r = await fetch(CLOUD.url, {
+        method:'POST',
+        headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json().catch(()=>null);
+      if (j && j.ok) st.lastRemote = j.data || null;
+    }catch(_){}
+    finally { st.pushing = false; }
+  }
+
+  function queuePush(partial={}){
+    if (!st.enabled) return;
+    clearTimeout(st.debounceTimer);
+    st.debounceTimer = setTimeout(()=>pushRemote(partial), 700);
+  }
+
+  function applyRemoteToState(rem){
+    if (!rem) return;
+    // highscore — максимум
+    if (typeof rem.highscore === 'number' && rem.highscore > (highscore||0)){
+      highscore = rem.highscore;
+      const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
+    }
+    // balance — істина з хмари
+    if (typeof rem.balance === 'number' && rem.balance !== balance){
+      balance = parseFloat(rem.balance.toFixed(2));
+      setBalanceUI();
+    }
+    // battle_record — максимум, зберігаємо лише у LS (для локальної логіки)
+    const localBattle = Number(localStorage.getItem('battle_record')||'0');
+    const newBattle = Math.max(localBattle, Number(rem.battle_record||0));
+    if (newBattle !== localBattle){
+      localStorage.setItem('battle_record', String(newBattle));
+    }
+  }
+
+  async function hydrate(){
+    if (!st.enabled) return;
+    identify();
+    if (!st.uid) return;
+    try{
+      const rem = await getRemote();
+      st.lastRemote = rem;
+      if (rem) applyRemoteToState(rem);
+      // якщо рядка ще не було — створимо
+      if (!rem) queuePush({});
+    }catch(e){ console.warn('[Cloud] hydrate failed', e); }
+  }
+
+  function startPolling(){
+    if (!st.enabled) return;
+    clearInterval(st.pollTimer);
+    st.pollTimer = setInterval(async()=>{
+      try{
+        const rem = await getRemote();
+        if (rem) applyRemoteToState(rem);
+      }catch(_){}
+    }, st.pollMs);
+  }
+
+  function initAndHydrate(){
+    if (!st.enabled){
+      console.warn('[Cloud] disabled: CLOUD_URL / CLOUD_API_KEY не задані');
+      return;
+    }
+    identify();
+    hydrate().then(startPolling);
+    window.addEventListener('beforeunload', ()=>{ try{ pushRemote({}); }catch(_){ } });
+    // невеличкий “пінг” через 1.5с щоб створити запис якщо його нема
+    setTimeout(()=>queuePush({}), 1500);
+  }
+
+  return { initAndHydrate, queuePush, tgUser };
+})();
+
+/* ========= ЄДИНА ТОЧКА ДОБОВОГО РЕСЕТУ ========= */
+function ensureDailyReset() {
+  const today = _todayStamp();
+  const stored = localStorage.getItem('dailyStamp') || today;
+
+  if (stored !== today) {
+    // скидаємо обидва щоденні лічильники + таймстемпи
+    gramCount = 0; exCount = 0;
+    lastGramAt = 0; lastExAt = 0;
+    dailyStamp = today;
+
+    // синхрон у LS
+    localStorage.setItem('dailyGramCount', '0');
+    localStorage.setItem('dailyExCount', '0');
+    localStorage.setItem('lastGramAt', '0');
+    localStorage.setItem('lastExAt', '0');
+    localStorage.setItem('dailyStamp', today);
+
+    saveData();
+
+    // сповістити інші модулі (зокрема IIFE Adexium)
+    try { window.dispatchEvent(new CustomEvent('daily-reset', { detail: { day: today } })); } catch(e) {}
+  }
 }
 
 /* ========= СТАН ========= */
@@ -108,7 +235,6 @@ let lastTask5RewardAt = 0, lastTask10RewardAt = 0;
 let gramCount = 0, exCount = 0;
 let lastGramAt = 0, lastExAt = 0;
 let dailyStamp = "";
-let dailyResetAt = 0; // НОВЕ
 
 /* --- пострекламний таймер --- */
 let postAdTimerActive = false;
@@ -135,39 +261,33 @@ let challengeStake = 0;
 let challengeOpp = 0;
 
 /* ========= ЗБЕРЕЖЕННЯ ========= */
-function setBalanceUI(){
-  const el = $("balance");
-  if (el) el.innerText = formatStars(balance);
-}
 function saveData(){
-  localStorage.setItem(LS.balance, String(balance));
-  localStorage.setItem(LS.subscribed, subscribed ? "true" : "false");
-  localStorage.setItem(LS.task50Completed, task50Completed ? "true" : "false");
-  localStorage.setItem(LS.highscore, String(highscore));
-  localStorage.setItem(LS.gamesPlayedSinceClaim, String(gamesPlayedSinceClaim));
-  localStorage.setItem(LS.lastAnyAdAt, String(lastAnyAdAt));
+  // balance та highscore — НЕ зберігаємо у LS (джерело — таблиця)
+  localStorage.setItem("subscribed", subscribed ? "true" : "false");
+  localStorage.setItem("task50Completed", task50Completed ? "true" : "false");
+  localStorage.setItem("gamesPlayedSinceClaim", String(gamesPlayedSinceClaim));
+  localStorage.setItem("lastAnyAdAt", String(lastAnyAdAt));
 
   // 5/10
-  localStorage.setItem(LS.ad5Count, String(ad5Count));
-  localStorage.setItem(LS.ad10Count, String(ad10Count));
-  localStorage.setItem(LS.lastTask5RewardAt, String(lastTask5RewardAt));
-  localStorage.setItem(LS.lastTask10RewardAt, String(lastTask10RewardAt));
+  localStorage.setItem("ad5Count", String(ad5Count));
+  localStorage.setItem("ad10Count", String(ad10Count));
+  localStorage.setItem("lastTask5RewardAt", String(lastTask5RewardAt));
+  localStorage.setItem("lastTask10RewardAt", String(lastTask10RewardAt));
 
   // daily +0.1
-  localStorage.setItem(LS.gramCount, String(gramCount));
-  localStorage.setItem(LS.exCount, String(exCount));
-  localStorage.setItem(LS.lastGramAt, String(lastGramAt));
-  localStorage.setItem(LS.lastExAt, String(lastExAt));
-  localStorage.setItem(LS.day, dailyStamp);
-  localStorage.setItem(LS.resetAt, String(dailyResetAt));
+  localStorage.setItem("dailyGramCount", String(gramCount));
+  localStorage.setItem("dailyExCount", String(exCount));
+  localStorage.setItem("lastGramAt", String(lastGramAt));
+  localStorage.setItem("lastExAt", String(lastExAt));
+  localStorage.setItem("dailyStamp", dailyStamp);
 
   // батл
-  localStorage.setItem(LS.oppScorePending, oppScorePending==null ? "" : String(oppScorePending));
-  localStorage.setItem(LS.challengeActive, challengeActive ? "true" : "false");
-  localStorage.setItem(LS.challengeStartAt, String(challengeStartAt));
-  localStorage.setItem(LS.challengeDeadline, String(challengeDeadline));
-  localStorage.setItem(LS.challengeStake, String(challengeStake));
-  localStorage.setItem(LS.challengeOpp, String(challengeOpp));
+  localStorage.setItem("oppScorePending", oppScorePending==null ? "" : String(oppScorePending));
+  localStorage.setItem("challengeActive", challengeActive ? "true" : "false");
+  localStorage.setItem("challengeStartAt", String(challengeStartAt));
+  localStorage.setItem("challengeDeadline", String(challengeDeadline));
+  localStorage.setItem("challengeStake", String(challengeStake));
+  localStorage.setItem("challengeOpp", String(challengeOpp));
 }
 
 function getTelegramUser(){
@@ -184,81 +304,34 @@ function getUserTag(){
   return "Гравець";
 }
 
-/* ========= ЄДИНА ТОЧКА ДОБОВОГО РЕСЕТУ ========= */
-/* — ПРАВКА: додаємо мітку exact-часу resetAt і ресетимось або по зміні дати, або коли now >= resetAt — */
-function _loadResetAt(){
-  const v = parseInt(localStorage.getItem(LS.resetAt) || "0", 10);
-  return Number.isFinite(v) && v > 0 ? v : 0;
-}
-function _setNextResetAt(){
-  dailyResetAt = _nextMidnightMs();
-  localStorage.setItem(LS.resetAt, String(dailyResetAt));
-  return dailyResetAt;
-}
-function performDailyReset(reason="auto"){
-  // обнулити лічильники
-  gramCount = 0; exCount = 0;
-  lastGramAt = 0; lastExAt = 0;
-  dailyStamp = _todayStamp();
-  _setNextResetAt();
-
-  saveData();
-
-  // Сповістити інші модулі (Adexium IIFE і т.д.)
-  try {
-    window.dispatchEvent(new CustomEvent('daily-reset', { detail: { day: dailyStamp, resetAt: dailyResetAt, reason } }));
-  } catch (_) {}
-}
-function ensureDailyReset(){
-  const today = _todayStamp();
-  const storedDay = localStorage.getItem(LS.day) || today;
-  const resetAtLS = _loadResetAt();
-  const now = _now();
-
-  // якщо немає resetAt — ініціалізуємо
-  if (!resetAtLS) {
-    dailyResetAt = _setNextResetAt();
-    if (storedDay !== today) performDailyReset("no_resetAt_and_old_day");
-    return;
-  }
-  dailyResetAt = resetAtLS;
-
-  // новий день або час перевищив resetAt — жорсткий ресет
-  if (storedDay !== today || now >= resetAtLS) {
-    performDailyReset(storedDay !== today ? "day_changed" : "resetAt_reached");
-  }
-}
-
 /* ========= ІНІЦІАЛІЗАЦІЯ ========= */
 let dailyUiTicker = null;
 let challengeTicker = null;
 
 window.onload = function(){
-  // базові стейти
-  balance = parseFloat(localStorage.getItem(LS.balance) || "0");
-  subscribed = localStorage.getItem(LS.subscribed) === "true";
-  task50Completed = localStorage.getItem(LS.task50Completed) === "true";
-  highscore = parseInt(localStorage.getItem(LS.highscore) || "0", 10);
-  lastAnyAdAt = parseInt(localStorage.getItem(LS.lastAnyAdAt) || "0", 10);
-  gamesPlayedSinceClaim = parseInt(localStorage.getItem(LS.gamesPlayedSinceClaim) || "0", 10);
+  // базові стейти (БЕЗ balance/highscore — вони приїдуть з хмари)
+  subscribed = localStorage.getItem("subscribed") === "true";
+  task50Completed = localStorage.getItem("task50Completed") === "true";
+  lastAnyAdAt      = parseInt(localStorage.getItem("lastAnyAdAt")  || "0", 10);
+  gamesPlayedSinceClaim = parseInt(localStorage.getItem("gamesPlayedSinceClaim") || "0", 10);
 
   // 5/10
-  ad5Count = parseInt(localStorage.getItem(LS.ad5Count) || "0", 10);
-  ad10Count = parseInt(localStorage.getItem(LS.ad10Count) || "0", 10);
-  lastTask5RewardAt = parseInt(localStorage.getItem(LS.lastTask5RewardAt) || "0", 10);
-  lastTask10RewardAt = parseInt(localStorage.getItem(LS.lastTask10RewardAt) || "0", 10);
+  ad5Count = parseInt(localStorage.getItem("ad5Count") || "0", 10);
+  ad10Count = parseInt(localStorage.getItem("ad10Count") || "0", 10);
+  lastTask5RewardAt = parseInt(localStorage.getItem("lastTask5RewardAt") || "0", 10);
+  lastTask10RewardAt = parseInt(localStorage.getItem("lastTask10RewardAt") || "0", 10);
 
   // daily +0.1
-  gramCount  = parseInt(localStorage.getItem(LS.gramCount)||'0',10);
-  exCount    = parseInt(localStorage.getItem(LS.exCount)||'0',10);
-  lastGramAt = parseInt(localStorage.getItem(LS.lastGramAt)||'0',10);
-  lastExAt   = parseInt(localStorage.getItem(LS.lastExAt)||'0',10);
-  dailyStamp = localStorage.getItem(LS.day) || _todayStamp();
-  dailyResetAt = _loadResetAt() || _setNextResetAt();
+  gramCount  = parseInt(localStorage.getItem('dailyGramCount')||'0',10);
+  exCount    = parseInt(localStorage.getItem('dailyExCount')||'0',10);
+  lastGramAt = parseInt(localStorage.getItem('lastGramAt')||'0',10);
+  lastExAt   = parseInt(localStorage.getItem('lastExAt')||'0',10);
+  dailyStamp = localStorage.getItem('dailyStamp') || _todayStamp();
 
   // ЄДИНЕ скидання (важливо: до рендеру UI)
   ensureDailyReset();
 
+  // стартові значення (0 до гідрації)
   setBalanceUI();
   const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
   updateGamesTaskUI();
@@ -316,9 +389,17 @@ window.onload = function(){
   startDailyPlusTicker();
   updateAdTasksUI();
   updateDailyUI();
+
+  // Хмара: гідрація та пулінг
+  try { CloudStore.initAndHydrate(); } catch(e){ console.warn(e); }
 };
 
-function addBalance(n){ balance = parseFloat((balance + n).toFixed(2)); setBalanceUI(); saveData(); }
+function addBalance(n){
+  balance = parseFloat((balance + n).toFixed(2));
+  setBalanceUI();
+  saveData();               // інше (не баланс/рекорд)
+  CloudStore.queuePush({ balance });
+}
 function subscribe(){
   if (subscribed) return;
   const url = "https://t.me/stackofficialgame";
@@ -370,12 +451,11 @@ function startDailyPlusTicker(){
 }
 
 function updateDailyUI(){
-  // єдина точка істини
-  ensureDailyReset();
+  ensureDailyReset(); // єдина точка істини
 
   // синхрон з LS (важливо для Adexium IIFE)
-  const lsGram = parseInt(localStorage.getItem(LS.gramCount) || '0', 10);
-  const lsEx   = parseInt(localStorage.getItem(LS.exCount)   || '0', 10);
+  const lsGram = parseInt(localStorage.getItem('dailyGramCount') || '0', 10);
+  const lsEx   = parseInt(localStorage.getItem('dailyExCount')   || '0', 10);
   if (lsGram !== gramCount) gramCount = lsGram;
   if (lsEx   !== exCount)   exCount   = lsEx;
 
@@ -386,13 +466,10 @@ function updateDailyUI(){
 
   const gBtn = $("watchAdsgramDailyBtn");
   const eBtn = $("watchAdexiumDailyBtn");
+  const leftTxt = formatHMS(msUntilMidnightLocal());
 
   if (gBtn && !gBtn.dataset.label) gBtn.dataset.label = gBtn.innerText;
   if (eBtn && !eBtn.dataset.label) eBtn.dataset.label = eBtn.innerText;
-
-  // новий leftTxt від resetAt
-  const resetAt = _loadResetAt() || _setNextResetAt();
-  const leftTxt = formatHMS(resetAt - _now());
 
   if (gBtn){
     gBtn.disabled = (gramCount >= DAILY_CAP);
@@ -405,11 +482,10 @@ function updateDailyUI(){
 }
 
 async function onWatchGramDaily(){
-  ensureDailyReset();
   if (gramCount >= DAILY_CAP) return;
   const res = await showAdsgram(AdTaskMinute);
   if (!res.shown) return;
-  lastGramAt = _now();
+  lastGramAt = Date.now();
   gramCount += 1;
   addBalance(0.1);
   saveData();
@@ -423,7 +499,7 @@ function updateAdTasksUI(){
   const fiveCnt  = $("ad5Counter");
   const fiveCDt  = $("ad5CooldownText");
 
-  const now = _now();
+  const now = Date.now();
   const left5 = TASK_DAILY_COOLDOWN_MS - (now - lastTask5RewardAt);
 
   if (fiveCnt) fiveCnt.textContent = `${Math.min(ad5Count, TASK5_TARGET)}/${TASK5_TARGET}`;
@@ -456,7 +532,7 @@ function updateAdTasksUI(){
   }
 }
 async function onWatchAd5(){
-  const now = _now();
+  const now = Date.now();
   if (now - lastTask5RewardAt < TASK_DAILY_COOLDOWN_MS) return;
 
   if (adInFlightTask5) return;
@@ -469,14 +545,14 @@ async function onWatchAd5(){
     if (ad5Count >= TASK5_TARGET){
       addBalance(1);
       ad5Count = 0;
-      lastTask5RewardAt = _now();
+      lastTask5RewardAt = Date.now();
     }
     saveData();
     updateAdTasksUI();
   } finally { adInFlightTask5 = false; }
 }
 async function onWatchAd10(){
-  const now = _now();
+  const now = Date.now();
   if (now - lastTask10RewardAt < TASK_DAILY_COOLDOWN_MS) return;
 
   if (adInFlightTask10) return;
@@ -489,7 +565,7 @@ async function onWatchAd10(){
     if (ad10Count >= TASK10_TARGET){
       addBalance(1.85);
       ad10Count = 0;
-      lastTask10RewardAt = _now();
+      lastTask10RewardAt = Date.now();
     }
     saveData();
     updateAdTasksUI();
@@ -612,11 +688,12 @@ function withdraw50ShareToGroup(){
 
   balance = Number((balance - WITHDRAW_CHUNK).toFixed(2));
   setBalanceUI(); saveData();
+  CloudStore.queuePush({ balance });
 
-  const entry = { ts: _now(), amount: WITHDRAW_CHUNK, code1, code2 };
-  const arr = JSON.parse(localStorage.getItem(LS.payouts) || "[]");
+  const entry = { ts: Date.now(), amount: WITHDRAW_CHUNK, code1, code2 };
+  const arr = JSON.parse(localStorage.getItem("payouts") || "[]");
   arr.unshift(entry);
-  localStorage.setItem(LS.payouts, JSON.stringify(arr));
+  localStorage.setItem("payouts", JSON.stringify(arr));
   renderPayoutList();
 
   if (OPEN_MODE === "group" && GROUP_LINK) {
@@ -640,7 +717,7 @@ function withdraw50ShareToGroup(){
 function renderPayoutList(){
   const ul = $("payoutList");
   if (!ul) return;
-  const arr = JSON.parse(localStorage.getItem(LS.payouts) || "[]");
+  const arr = JSON.parse(localStorage.getItem("payouts") || "[]");
   ul.innerHTML = "";
   if (arr.length === 0){
     const li = document.createElement("li");
@@ -688,7 +765,7 @@ function setupChallengeUI(){
   const leftEl = $("challengeLeft");
   const statusEl = $("challengeStatus");
 
-  const storedOpp = localStorage.getItem(LS.oppScorePending);
+  const storedOpp = localStorage.getItem("oppScorePending");
   if (storedOpp && !isNaN(+storedOpp)) oppScorePending = +storedOpp;
   if (scoreBox) scoreBox.textContent = oppScorePending!=null ? String(oppScorePending) : "—";
 
@@ -715,9 +792,10 @@ function setupChallengeUI(){
     }
     balance = parseFloat((balance - stake).toFixed(2));
     setBalanceUI();
+    CloudStore.queuePush({ balance });
 
     challengeActive = true;
-    challengeStartAt = _now();
+    challengeStartAt = Date.now();
     challengeDeadline = challengeStartAt + 3*60*60*1000;
     challengeStake = stake;
     challengeOpp = oppScorePending;
@@ -730,7 +808,7 @@ function setupChallengeUI(){
 
     if (challengeTicker) clearInterval(challengeTicker);
     challengeTicker = setInterval(()=>{
-      const left = Math.max(0, challengeDeadline - _now());
+      const left = Math.max(0, challengeDeadline - Date.now());
       leftEl.textContent = formatHMS(left);
       if (left<=0){
         clearInterval(challengeTicker);
@@ -743,7 +821,7 @@ function setupChallengeUI(){
       statusEl.textContent = "Немає активного виклику.";
       return;
     }
-    const now = _now();
+    const now = Date.now();
     const won = (highscore > challengeOpp) && (now <= challengeDeadline);
     const expired = now > challengeDeadline;
 
@@ -751,6 +829,13 @@ function setupChallengeUI(){
       addBalance(challengeStake * 1.5);
       statusEl.textContent = "✅ Виконано! Нараховано " + (challengeStake*1.5).toFixed(2) + "⭐";
       checkBtn.disabled = true;
+
+      // фіксуємо battle_record (максимум цілі)
+      const prevBattle = Number(localStorage.getItem('battle_record')||'0');
+      const newBattle = Math.max(prevBattle, challengeOpp);
+      localStorage.setItem('battle_record', String(newBattle));
+      CloudStore.queuePush({ battle_record: newBattle });
+
       finishChallenge();
     } else if (expired){
       statusEl.textContent = "❌ Час вичерпано. Ставка втрачена.";
@@ -761,20 +846,20 @@ function setupChallengeUI(){
     }
   };
 
-  const storedActive = localStorage.getItem(LS.challengeActive)==="true";
+  const storedActive = localStorage.getItem("challengeActive")==="true";
   if (storedActive){
     challengeActive = true;
-    challengeStartAt  = parseInt(localStorage.getItem(LS.challengeStartAt) || "0", 10);
-    challengeDeadline = parseInt(localStorage.getItem(LS.challengeDeadline) || "0", 10);
-    challengeStake    = parseFloat(localStorage.getItem(LS.challengeStake) || "0");
-    challengeOpp      = parseInt(localStorage.getItem(LS.challengeOpp) || "0", 10);
+    challengeStartAt  = parseInt(localStorage.getItem("challengeStartAt") || "0", 10);
+    challengeDeadline = parseInt(localStorage.getItem("challengeDeadline") || "0", 10);
+    challengeStake    = parseFloat(localStorage.getItem("challengeStake") || "0");
+    challengeOpp      = parseInt(localStorage.getItem("challengeOpp") || "0", 10);
 
     info.textContent = `Виклик активний! Твій суперник має рекорд ${challengeOpp}.`;
     checkBtn.disabled = false;
     cdWrap.style.display = "block";
     if (challengeTicker) clearInterval(challengeTicker);
     challengeTicker = setInterval(()=>{
-      const left = Math.max(0, challengeDeadline - _now());
+      const left = Math.max(0, challengeDeadline - Date.now());
       leftEl.textContent = formatHMS(left);
       if (left<=0){
         clearInterval(challengeTicker);
@@ -796,7 +881,7 @@ function finishChallenge(){
   saveData();
 }
 
-/* ========= ADEXIUM — ручний показ по кліку (LIVE, кредит лише за повний перегляд) ========= */
+/* ========= ADEXIUM — ручний показ по кліку ========= */
 (function () {
   const WID          = '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae';
   const BTN_ID       = 'watchAdexiumDailyBtn';
@@ -807,15 +892,20 @@ function finishChallenge(){
   const CREDIT       = 0.1;
   const CREDIT_ON_CLOSE = false; // тільки за успішний перегляд
 
-  const LS_EX_COUNT = LS.exCount; // вирівнюємо ключі з основним кодом
-  const LS_DAY      = LS.day;
-  const LS_BAL      = LS.balance;
+  const LS_EX_COUNT = 'dailyExCount';
+  const LS_DAY      = 'dailyStamp';
+  const LS_BAL      = 'balance'; // використовується тільки як fallback для UI
 
   let inFlight = false;
   let creditedOnce = false;
   let adex = null;
 
-  function todayStamp() { return _todayStamp(); }
+  function todayStamp() {
+    const d = new Date();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate() + 0).padStart(2, '0');
+    return `${d.getFullYear()}-${mm}-${dd}`;
+  }
   function loadDayAndCount() {
     let exCount = parseInt(localStorage.getItem(LS_EX_COUNT) || '0', 10);
     let day = localStorage.getItem(LS_DAY) || todayStamp();
@@ -828,15 +918,15 @@ function finishChallenge(){
     localStorage.setItem(LS_DAY, day || todayStamp());
   }
 
-  function getBalanceLS() { return parseFloat(localStorage.getItem(LS_BAL) || '0'); }
-  function setBalanceLS(v) {
-    localStorage.setItem(LS_BAL, String(v));
+  function setBalanceUI_LocalOnlyFallback(){
+    // реально баланс з хмари; тут лише оновлюємо DOM
     const el = document.getElementById(BALANCE_ID);
-    if (el) el.textContent = Number.isInteger(v) ? String(v) : v.toFixed(2);
+    if (el) el.textContent = Number.isInteger(balance) ? String(balance) : balance.toFixed(2);
   }
   function addBalanceLocal(delta) {
-    const next = parseFloat((getBalanceLS() + delta).toFixed(2));
-    setBalanceLS(next);
+    balance = parseFloat((balance + delta).toFixed(2));
+    setBalanceUI_LocalOnlyFallback();
+    CloudStore.queuePush({ balance }); // справжнє збереження в таблицю
   }
 
   function updateCounterUI(exCount) {
@@ -891,7 +981,7 @@ function finishChallenge(){
       updateCounterUI(exCount);
     });
     instance.on('adPlaybackCompleted', () => {
-      creditOnce(); // тільки повний перегляд дає +0.1 і прогрес
+      creditOnce();
     });
     instance.on('adClosed', () => {
       if (CREDIT_ON_CLOSE) creditOnce();
@@ -910,7 +1000,7 @@ function finishChallenge(){
     const s = loadDayAndCount();
     saveDayAndCount(s.exCount, s.day);
     updateCounterUI(s.exCount);
-    if (typeof window.setBalanceUI !== 'function') setBalanceLS(getBalanceLS());
+    setBalanceUI_LocalOnlyFallback();
 
     // Реакція на глобальний добовий ресет з основного коду
     window.addEventListener('daily-reset', (e) => {
@@ -923,14 +1013,12 @@ function finishChallenge(){
       updateCounterUI(0);
     });
 
-    // 1) Якщо є твій обгортчик — беремо з нього інстанс
     if (typeof window.__getAdexium === 'function'){
       window.__getAdexium((inst)=>{
         adex = inst;
         attachHandlers(adex);
       });
     } else if (typeof window.AdexiumWidget === 'function'){
-      // 2) Інакше створюємо власний віджет
       try {
         adex = new AdexiumWidget({ wid: WID, adFormat: 'interstitial', debug: false });
         attachHandlers(adex);
@@ -942,16 +1030,6 @@ function finishChallenge(){
     }
 
     btn.addEventListener('click', () => {
-      // ПІДСТРАХОВКА: якщо вже настав час ресету — скидаємо відразу
-      if ((_loadResetAt() || 0) <= _now()) {
-        if (typeof window.performDailyReset === 'function') performDailyReset("adex_btn_pressed_after_midnight");
-        else {
-          // локальний скидання, якщо global недоступний
-          saveDayAndCount(0, todayStamp());
-          localStorage.setItem(LS.resetAt, String(_nextMidnightMs()));
-        }
-      }
-
       const { exCount } = loadDayAndCount();
       if (inFlight || exCount >= DAILY_CAP_LOCAL) return;
       inFlight = true; creditedOnce = false;
@@ -971,9 +1049,6 @@ function finishChallenge(){
       }
     });
   });
-
-  // Експортуємо глобально, якщо треба
-  window.performDailyReset = window.performDailyReset || performDailyReset;
 })();
 
 /* ========= 3D Stack (гра) ========= */
@@ -1187,13 +1262,13 @@ class Game{
     updateHighscore(currentScore);
     gamesPlayedSinceClaim += 1; saveData(); updateGamesTaskUI();
 
-    const now = _now();
+    const now = Date.now();
     if (!adInFlightGameover && (now - lastGameoverAdAt >= Math.max(MIN_BETWEEN_SAME_CTX_MS, GAME_AD_COOLDOWN_MS))){
       adInFlightGameover = true;
       try{
         const r = await showAdsgram(AdGameover);
         if (r.shown){
-          lastGameoverAdAt = _now();
+          lastGameoverAdAt = Date.now();
           lastAnyAdAt = lastGameoverAdAt;
           saveData();
         }
@@ -1232,8 +1307,8 @@ class Game{
 function updateHighscore(currentScore){
   if(currentScore>highscore){
     highscore=currentScore;
-    localStorage.setItem(LS.highscore, String(highscore));
     const hs=$("highscore"); if (hs) hs.innerText="🏆 "+highscore;
   }
+  CloudStore.queuePush({ highscore, last_score: currentScore });
 }
 
