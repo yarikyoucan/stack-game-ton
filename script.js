@@ -22,18 +22,10 @@ const ADSGRAM_BLOCK_ID_TASK_MINUTE = "int-13961";
 const ADSGRAM_BLOCK_ID_TASK_510    = "int-15276";
 const ADSGRAM_BLOCK_ID_GAMEOVER    = "int-15275";
 
-/* --- Відкриття при виводі --- */
-const OPEN_MODE = "group";
-const GROUP_LINK = "https://t.me/+Z6PMT40dYClhOTQ6";
-
 /* --- Квести на рекламу 5 і 10 --- */
 const TASK5_TARGET = 5;
 const TASK10_TARGET = 10;
 const TASK_DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
-
-/* ========= АЛФАВІТ ДЛЯ КОДІВ ========= */
-const ALPH = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-const LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
 
 /* ========= ХЕЛПЕРИ ========= */
 const $ = id => document.getElementById(id);
@@ -582,135 +574,60 @@ async function copyToClipboard(text){
   }catch{ alert("Не вдалося копіювати 😕"); }
 }
 
-/* ========= КОДИ для виводу ========= */
-function genCore16() {
-  const rnd = new Uint8Array(12);
-  if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(rnd);
-  else rnd.fill(Date.now() % 256);
-
-  const u = (window.Telegram?.WebApp?.initDataUnsafe?.user?.id) || 0;
-  const mix = ((Number(u) ^ (Date.now() & 0xffffffff)) >>> 0);
-  rnd[8]  ^= (mix       ) & 0xff;
-  rnd[9]  ^= (mix >>>  8) & 0xff;
-  rnd[10] ^= (mix >>> 16) & 0xff;
-  rnd[11] ^= (mix >>> 24) & 0xff;
-
-  let bits=0, value=0, out="";
-  for (let i=0;i<rnd.length;i++){
-    let b=rnd[i]; if (b<0) b+=256;
-    bits+=8; value=(value<<8)|b;
-    while(bits>=5){ out+=ALPH[(value >>> (bits-5)) & 31]; bits-=5; }
-  }
-  if(bits>0) out+=ALPH[(value << (5-bits)) & 31];
-  while(out.length<16) out+=ALPH[Math.floor(Math.random()*ALPH.length)];
-  return out.slice(0,16);
-}
-function checksumState(core){
-  let s=0;
-  for(let i=0;i<core.length;i++){
-    const v=ALPH.indexOf(core[i]);
-    s=((s*37)+(v+7))%9677;
-  }
-  return s;
-}
-function versionCharFor(core){
-  let sumEven=0,sumOdd=0;
-  for(let i=0;i<core.length;i++){
-    const v = LETTERS.indexOf(core[i]);
-    if (v>=0){ if((i%2)===0) sumEven=(sumEven+v)%32; else sumOdd=(sumOdd+v)%32; }
-  }
-  const idx0 = Math.max(0, LETTERS.indexOf(core[0]));
-  const idx15 = Math.max(0, LETTERS.indexOf(core[15]));
-  const verIdx = ((sumEven*11)+(sumOdd*7)+(idx0*3)+(idx15*5)+13)%32;
-  return ALPH[verIdx];
-}
-function checkTail(core){
-  const s=checksumState(core);
-  const ch1=ALPH[s%32], ch2=ALPH[(s*31+3)%32], ch3=ALPH[(s*17+5)%32];
-  return ch1+ch2+ch3;
-}
-function generateCode20(){
-  const core=genCore16();
-  const ver=versionCharFor(core);
-  const chk=checkTail(core);
-  return core.slice(0,8)+ver+core.slice(8)+chk;
-}
-
-/* ======= Трансформ у КОД2 ======= */
-const DIGIT_MAP = { "2":"6","6":"3","3":"8","8":"5","5":"9","9":"4","4":"7","7":"2" };
-const LETTER_MAP = {
-  "A":"Q","B":"T","C":"M","D":"R","E":"K","F":"X","G":"A","H":"V",
-  "J":"C","K":"Z","L":"E","M":"H","N":"Y","P":"S","Q":"D","R":"B",
-  "S":"U","T":"F","U":"J","V":"G","W":"N","X":"P","Y":"W","Z":"L"
-};
-const PERM1 = [11, 2,17, 6,14,19, 0, 8, 4,16, 1,13, 9, 3,18, 5,12, 7,15,10];
-const PERM2 = [15, 0, 9,13, 6,18, 3,11, 1,16, 4,14, 8, 2,19, 5,12, 7,17,10];
-
-function transformCodeHeavy(code){
-  if (typeof code!=="string" || code.length!==20) return "";
-  const sub = Array.from(code).map(ch=>{
-    if (DIGIT_MAP[ch]) return DIGIT_MAP[ch];
-    if (LETTER_MAP[ch]) return LETTER_MAP[ch];
-    return ch;
-  });
-  const i2 = ALPH.indexOf(code[2])  >>> 0;
-  const i7 = ALPH.indexOf(code[7])  >>> 0;
-  const i13= ALPH.indexOf(code[13]) >>> 0;
-  const i19= ALPH.indexOf(code[19]) >>> 0;
-  const choose = ((i2 + i7 + i13 + i19) % 2) === 0 ? PERM1 : PERM2;
-
-  const out = new Array(20);
-  for (let i=0;i<20;i++) out[i] = sub[ choose[i] ];
-  return out.join("");
-}
-
-/* ========= Вивід ========= */
-function withdraw50ShareToGroup(){
+/* ========= Вивід (cloud-only, без кодів, без відкриття групи) ========= */
+async function withdraw50ShareToGroup(){
   const statusEl = $("withdrawStatus");
+  const btn = $("withdrawBtn");
 
   if (balance < WITHDRAW_CHUNK) {
     if (statusEl){ statusEl.className="err"; statusEl.textContent=`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`; }
     return;
   }
+  if (!CLOUD.url || !CLOUD.api){
+    if (statusEl){ statusEl.className="err"; statusEl.textContent="Налаштуй CLOUD_URL та API_KEY у index.html"; }
+    return;
+  }
 
-  const code1 = generateCode20();
-  const code2 = transformCodeHeavy(code1);
+  if (btn) btn.disabled = true;
+  if (statusEl){ statusEl.className="muted"; statusEl.textContent="Створюємо заявку…"; }
 
-  const u = getTelegramUser();
   const tag = getUserTag();
-  const text =
-    `🔔 Заявка на вивід\n` +
-    `👤 Гравець: ${tag}${u.id ? " (id"+u.id+")" : ""}\n` +
-    `⭐ Сума: ${WITHDRAW_CHUNK}\n` +
-    `🏆 Highscore: ${highscore}\n` +
-    `🔐 Код1: ${code1}\n` +
-    `🔁 Код2: ${code2}`;
+  const amount = WITHDRAW_CHUNK;
 
-  balance = Number((balance - WITHDRAW_CHUNK).toFixed(2));
-  setBalanceUI(); saveData();
-  CloudStore.queuePush({ balance });
+  try{
+    // Запис у таблицю (StackGameCloud → K=tag, L=amount, M=timestamp)
+    const res = await fetch(String(CLOUD.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api: String(CLOUD.api || ""),
+        action: "withdraw",
+        tag,
+        amount,
+        ts: Date.now()
+      })
+    });
 
-  const entry = { ts: Date.now(), amount: WITHDRAW_CHUNK, code1, code2 };
-  const arr = JSON.parse(localStorage.getItem("payouts") || "[]");
-  arr.unshift(entry);
-  localStorage.setItem("payouts", JSON.stringify(arr));
-  renderPayoutList();
-
-  if (OPEN_MODE === "group" && GROUP_LINK) {
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text).catch(()=>{});
+    const json = await res.json().catch(()=>({ok:false, error:"bad_json"}));
+    if (!res.ok || !json.ok){
+      throw new Error(json?.error || ("HTTP "+res.status));
     }
-    if (window.Telegram?.WebApp?.openTelegramLink) {
-      Telegram.WebApp.openTelegramLink(GROUP_LINK);
-    } else {
-      window.open(GROUP_LINK, "_blank");
-    }
-    if (statusEl){ statusEl.className="ok"; statusEl.textContent="Текст скопійовано. Встав у групі та надішли."; }
-  } else {
-    const shareUrl = "https://t.me/share/url?text=" + encodeURIComponent(text);
-    if (window.Telegram?.WebApp?.openTelegramLink) Telegram.WebApp.openTelegramLink(shareUrl);
-    else window.open(shareUrl, "_blank");
-    if (statusEl){ statusEl.className="ok"; statusEl.textContent="Вибери групу у «Поділитися» та надішли."; }
+
+    // Локальний список лише для відображення (без кодів)
+    const entry = { ts: Date.now(), amount };
+    const arr = JSON.parse(localStorage.getItem("payouts") || "[]");
+    arr.unshift(entry);
+    localStorage.setItem("payouts", JSON.stringify(arr));
+    renderPayoutList();
+
+    // Списуємо 50⭐, пушимо у хмару
+    addBalance(-amount);
+
+    if (statusEl){ statusEl.className="ok"; statusEl.textContent="✅ Заявку створено"; }
+  } catch (err){
+    if (statusEl){ statusEl.className="err"; statusEl.textContent="❌ Помилка створення заявки: " + String(err?.message || err); }
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -728,7 +645,7 @@ function renderPayoutList(){
   arr.forEach(e=>{
     const d = new Date(e.ts);
     const li = document.createElement("li");
-    li.innerHTML = `🗓 ${d.toLocaleString()} — 💸 ${e.amount}⭐<br><span class="muted">Код1: ${e.code1} • Код2: ${e.code2}</span>`;
+    li.innerHTML = `🗓 ${d.toLocaleString()} — 💸 ${e.amount}⭐`;
     ul.appendChild(li);
   });
 }
