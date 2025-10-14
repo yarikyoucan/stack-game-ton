@@ -832,7 +832,15 @@
     });
   </script>
 
-  <!-- ====== Основна логіка гри (твій файл) ====== -->
+  <!-- === CLOUD CONFIG (GAS Web App URL + API KEY) === -->
+  <script>
+    // TODO: ВСТАВ СЮДИ ПОВНИЙ URL з вікна деплою (скрін обрізає рядок)
+    // Приклад: "https://script.google.com/macros/s/AKfycbx.../exec"
+    window.CLOUD_URL = "PASTE_FULL_GAS_WEB_APP_URL_HERE";
+    window.CLOUD_API_KEY = "cgdhggfgf45d6e45wsd6w3sd5";
+  </script>
+
+  <!-- ====== Основна логіка гри (оновлений файл) ====== -->
   <script src="./script.js"></script>
 
   <!-- ====== Генерація багатоповерхівок (нічні вікна) ====== -->
@@ -917,13 +925,11 @@
           const h = Math.floor(Math.random()*20)+12; // 12–32vh
           b.style.setProperty('--h', h+'vh');
 
-          // трішки різні ритми мерехтіння між будинками
           b.style.setProperty('--twinkle', (5 + Math.random()*4).toFixed(2) + 's');
           b.style.setProperty('--twinkle-delay', (Math.random()*3).toFixed(2) + 's');
 
           skyline.appendChild(b);
 
-          // розміри внутрішньої площі під вікна (інсет .win: 12px 8px 10px)
           const glassW = Math.max(20, b.clientWidth  - 16);
           const glassH = Math.max(20, b.clientHeight - 22);
 
@@ -940,5 +946,6 @@
   </script>
 </body>
 </html>
+
 
 
