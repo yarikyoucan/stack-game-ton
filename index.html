@@ -250,16 +250,14 @@
     /* =====================
        PATCH: мобільні правки для батлів
        ===================== */
-    /* Кнопка компактна */
-    #tournaments .btn-sm{ /* PATCH */
+    #tournaments .btn-sm{
       font-size:14px;
       padding:6px 10px;
       line-height:1;
       white-space:nowrap;
       flex:0 0 auto;
     }
-    /* Інпут компактний, рядок не ламається всередині stake-wrap */
-    .stake-wrap{ /* PATCH */
+    .stake-wrap{
       display:flex;
       align-items:center;
       gap:8px;
@@ -267,12 +265,11 @@
       min-width:0;
       flex-wrap:nowrap;
     }
-    #stakeInput{ /* PATCH */
+    #stakeInput{
       width:90px;
       flex:0 0 auto;
     }
-    /* Дозволяємо самому рядку переноситись на мобілці (лейбл піде вгору) */
-    @media (max-width:420px){ /* PATCH */
+    @media (max-width:420px){
       #tournaments .challenge-row{ flex-wrap:wrap; }
       #tournaments label[for="stakeInput"]{ margin-bottom:6px; }
       #tournaments .btn-sm{ font-size:13px; padding:6px 10px; }
@@ -285,7 +282,7 @@
   <!-- Adexium Wrapper (manual click-only, без autoMode) -->
   <script>
     (function () {
-      const WID    = '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae'; // твій widget id
+      const WID    = '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae';
       const FORMAT = 'interstitial';
 
       const _adex = window.__adex = window.__adex || { ready:false, widget:null, queue:[], pendingAd:undefined };
@@ -456,7 +453,6 @@
         <label for="stakeInput" class="muted" data-i18n="stake">Ставка ⭐</label>
         <div class="stake-wrap">
           <input id="stakeInput" type="number" min="1" step="0.5" value="1" />
-          <!-- PATCH: коротка компактна кнопка -->
           <button class="btn btn-sm" id="startChallengeBtn" data-i18n="start_challenge">Старт</button>
         </div>
       </div>
@@ -693,7 +689,7 @@
         opponent: "Суперник",
         generate: "Згенерувати",
         stake: "Ставка ⭐",
-        start_challenge: "Старт", /* PATCH: короткий текст */
+        start_challenge: "Старт",
         no_active_challenge: "Немає активного виклику.",
         time_left_prefix: "Залишилось:",
         rule_goal: "🎯 Мета: побий рекорд за 3 год",
@@ -744,7 +740,7 @@
         opponent: "Opponent",
         generate: "Generate",
         stake: "Stake ⭐",
-        start_challenge: "Start", /* PATCH */
+        start_challenge: "Start",
         no_active_challenge: "No active challenge.",
         time_left_prefix: "Time left:",
         rule_goal: "🎯 Goal: beat the score in 3 hours",
@@ -818,7 +814,6 @@
 
       if (tagEl) tagEl.textContent = display;
 
-      // Реальне фото гравця зліва від тега
       if (user?.photo_url && avatarEl){
         avatarEl.src = user.photo_url;
         avatarEl.addEventListener('error', () => {
@@ -826,86 +821,60 @@
             .then(r => r.blob())
             .then(b => new Promise(res => {const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.readAsDataURL(b);} ))
             .then(dataUrl => { avatarEl.src = dataUrl; })
-            .catch(()=>{ /* плейсхолдер лишається */ });
+            .catch(()=>{});
         }, {once:true});
       }
     });
   </script>
 
-  <!-- === CLOUD CONFIG (GAS Web App URL + API KEY) === -->
+  <!-- === CLOUD CONFIG (дві таблиці: основна + ВИВОДИ) === -->
   <script>
-    // Робочий GAS endpoint, який ти надіслав:
-    window.CLOUD_URL = "https://script.google.com/macros/s/AKfycbwj9v8p8BddvX3xSa5EvsWf5aggD8HXxM6GYXlc0GLoCcqULNxbsOv_tpSPdFjruRDNgQ/exec";
-    window.CLOUD_API_KEY = ""; // не використовується зараз
-  </script>
+    // 1) Стара таблиця (для зберігання/відображення даних) — залишаємо як було
+    window.CLOUD_URL = "https://script.google.com/macros/s/AKfycbxgak6ZgIqIY2mDkGUOCzYnksnSanjjM4UMryAdI1vV-ReFopFPoowg3muuvSBHrOILwA/exec";
+    window.CLOUD_API_KEY = "cgdhggfgf45d6e45wsd6w3sd5";
 
-  <!-- === Відправка запису «Вивід» у Google Sheets (перед script.js) === -->
-  <script>
-    // Відправка запису в Google Sheets: { tag, tg_id, amount }
-    document.addEventListener('DOMContentLoaded', () => {
-      const btn      = document.getElementById('withdrawBtn');
-      const statusEl = document.getElementById('withdrawStatus');
-      const listEl   = document.getElementById('payoutList');
+    // 2) Нова таблиця ТІЛЬКИ ДЛЯ ВИВОДІВ (3 колонки: tag, tg_id, amount)
+    window.CLOUD_URL_PAYOUTS = "https://script.google.com/macros/s/AKfycbwj9v8p8BddvX3xSa5EvsWf5aggD8HXxM6GYXlc0GLoCcqULNxbsOv_tpSPdFjruRDNgQ/exec";
 
-      const tg   = window.Telegram?.WebApp;
-      const user = tg?.initDataUnsafe?.user || {};
-      const tag  = user?.username ? '@' + user.username : '';   // може бути порожнім
-      const tgId = user?.id || null;
+    // Хто користувач у Telegram
+    window.getTGIdentity = function () {
+      const tg = window.Telegram?.WebApp;
+      const u  = tg?.initDataUnsafe?.user || {};
+      const tag   = u?.username ? ('@' + u.username) : '';
+      const tg_id = u?.id ?? null;
+      return { tag, tg_id };
+    };
 
-      async function logWithdrawalToSheet(amountNumber){
-        if (!window.CLOUD_URL){
-          if (statusEl) statusEl.textContent = '❌ CLOUD_URL не вказано';
-          return;
-        }
-        if (!tgId){
-          if (statusEl) statusEl.textContent = '❌ Немає tg_id (Telegram WebApp user)';
-          return;
-        }
-        if (statusEl) statusEl.textContent = '⏳ Надсилаю...';
+    /**
+     * Запис виводу до НОВОЇ таблиці:
+     * Відправляємо рівно 3 поля: { tag, tg_id, amount }
+     * Викликається зі script.js: await window.logWithdrawalToSheet(50)
+     */
+    window.logWithdrawalToSheet = async function (amount) {
+      try {
+        const { tag, tg_id } = window.getTGIdentity();
+        if (!tg_id) return { ok: false, error: "no_tg_id" };
 
-        const payload = { tag, tg_id: tgId, amount: Number(amountNumber) };
+        const payload = { tag, tg_id, amount: Number(amount) };
 
-        try{
-          const r = await fetch(window.CLOUD_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
-          const data = await r.json().catch(()=> ({}));
+        const r = await fetch(window.CLOUD_URL_PAYOUTS, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
 
-          if (r.ok && data?.ok){
-            if (statusEl) statusEl.textContent = '✅ Збережено';
-            // Додаємо у локальний список «Список виводів»
-            if (listEl){
-              const li = document.createElement('li');
-              const ts = new Date().toLocaleString('uk-UA');
-              li.textContent = `${ts}: ${tag || ('id:'+tgId)} → ${payload.amount}⭐`;
-              listEl.prepend(li);
-            }
-          } else {
-            if (statusEl) statusEl.textContent = '❌ Помилка: ' + (data?.error || ('HTTP ' + r.status));
-          }
-        } catch(e){
-          if (statusEl) statusEl.textContent = '❌ Мережа: ' + e.message;
-        } finally {
-          setTimeout(()=>{ if (statusEl) statusEl.textContent=''; }, 4000);
-        }
+        // Якщо GAS повертає JSON { ok:true } — добре; якщо просто 200 — теж приймаємо як ок
+        const data = await r.json().catch(() => null);
+        if (r.ok && (data?.ok ?? true)) return { ok: true };
+
+        return { ok: false, error: data?.error || ("HTTP " + r.status) };
+      } catch (e) {
+        return { ok: false, error: e?.message || "network_error" };
       }
-
-      // Кнопка «Вивести» — списуємо 50⭐ і логуємо 50 у таблицю
-      btn?.addEventListener('click', (e) => {
-        e.preventDefault();
-        const AMOUNT = 50; // якщо треба — зробимо динамічно в script.js
-        logWithdrawalToSheet(AMOUNT);
-        // TODO: змінити баланс у UI — підв'яжемо в script.js
-      });
-
-      // Експорт у глобал — раптом знадобиться викликати з інших місць
-      window.logWithdrawalToSheet = logWithdrawalToSheet;
-    });
+    };
   </script>
 
-  <!-- ====== Основна логіка гри (оновлений файл) ====== -->
+  <!-- ====== Основна логіка гри ====== -->
   <script src="./script.js"></script>
 
   <!-- ====== Генерація багатоповерхівок (нічні вікна) ====== -->
@@ -1011,7 +980,5 @@
   </script>
 </body>
 </html>
-
-
 
 
