@@ -1131,4 +1131,3 @@ function updateHighscore(currentScore){
 
 
 
-
