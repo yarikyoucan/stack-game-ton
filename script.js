@@ -54,8 +54,6 @@ function formatHMS(ms){
   return (hh>0 ? String(hh).padStart(2,'0')+":" : "") + String(mm).padStart(2,'0')+":"+String(ss).padStart(2,'0');
 }
 function isoToLocal(iso){
-  // ВАЖЛИВО: якщо в таблиці "0" — показуємо "0", а не 1970-01-01
-  if (iso === 0 || iso === "0" || iso == null || iso === "") return "0";
   try{ return new Date(iso).toLocaleString(); }catch{ return String(iso||""); }
 }
 
@@ -65,8 +63,8 @@ const CLOUD = {
   api: (typeof window !== 'undefined' && window.CLOUD_API_KEY) || '',
 };
 
-// масив рівно 15 елементів: ISO-часи або "0"
-let serverWithdraws = new Array(15).fill("0");
+// Тепер завжди 15 слотів, заповнених з таблиці ('0' або ISO)
+let serverWithdraws = new Array(15).fill('0');
 
 const CloudStore = (() => {
   const st = {
@@ -150,11 +148,11 @@ const CloudStore = (() => {
     if (newBattle !== localBattle){
       localStorage.setItem('battle_record', String(newBattle));
     }
-    // withdraws (J..X)
+    // withdraws J..X (15 шт.) — беремо як є ('0' або ISO)
     if (Array.isArray(rem.withdraws)){
-      const arr = rem.withdraws.slice(0,15);
-      for (let i = arr.length; i < 15; i++) arr.push("0");
-      serverWithdraws = arr;
+      serverWithdraws = rem.withdraws.slice(0,15);
+      // гарантуємо довжину 15
+      while (serverWithdraws.length < 15) serverWithdraws.push('0');
       renderPayoutList();
     }
   }
@@ -168,7 +166,6 @@ const CloudStore = (() => {
       st.lastRemote = rem;
       if (rem) applyRemoteToState(rem);
       if (!rem) {
-        // створимо профіль, якщо його немає (без форс-скидання балансу)
         queuePush({});
       }
     }catch(e){ console.warn('[Cloud] hydrate failed', e); }
@@ -192,7 +189,6 @@ const CloudStore = (() => {
     }
     identify();
     hydrate().then(startPolling);
-    // без автопуша на 1.5с — щоб не перетирати баланс
     window.addEventListener('beforeunload', ()=>{ try{ /*pushRemote({});*/ }catch(_){ } });
   }
 
@@ -296,9 +292,9 @@ function getUserTag(){
   return "Гравець";
 }
 
-/* ========= ВИВОДИ (напряму в таблицю, без локальної черги) ========= */
+/* ========= ВИВОДИ (без LocalStorage, тільки таблиця J..X) ========= */
 
-/** POST → GAS: запис у перший вільний Windraw N (J..X) */
+// POST → GAS: запис часу у перший вільний слот
 async function submitWithdrawalToCloud15({ user_id, tag, username, amount }) {
   if (!CLOUD.url || !CLOUD.api) return { ok:false, error:"CLOUD_URL / CLOUD_API_KEY not set" };
   const payload = {
@@ -317,33 +313,34 @@ async function submitWithdrawalToCloud15({ user_id, tag, username, amount }) {
       body: JSON.stringify(payload)
     });
     let j=null; try { j = await r.json(); } catch {}
-    if (r.ok && j && j.ok) return { ok:true, slot: j.slot || null, ts: j.ts || payload.ts };
+    if (r.ok && j && j.ok) return { ok:true, slot: j.slotIndex || null, ts: j.ts || null };
     return { ok:false, error: (j?.error || `HTTP ${r.status}`) };
   } catch(e){
     return { ok:false, error: String(e?.message || e) };
   }
 }
 
-/** Рендер №1..15 (із serverWithdraws), тег після номера, час "0" як 0 */
+// Рендеримо 15 слотів завжди: '0' або ISO → локальний час
 function renderPayoutList(){
   const ul = $("payoutList");
   if (!ul) return;
   ul.innerHTML = "";
 
   const tag = getUserTag();
-  const arr = Array.isArray(serverWithdraws) ? serverWithdraws.slice(0,15) : [];
-  for (let i = arr.length; i < 15; i++) arr.push("0");
+  const arr = Array.isArray(serverWithdraws) ? serverWithdraws.slice(0,15) : new Array(15).fill('0');
+  while (arr.length < 15) arr.push('0');
 
-  arr.forEach((ts, idx)=>{
+  for (let i=0; i<15; i++){
+    const cell = arr[i];
+    const timeText = (cell && String(cell) !== '0') ? isoToLocal(cell) : '0';
     const li = document.createElement("li");
-    const human = isoToLocal(ts);
-    li.innerHTML = `№${idx+1} ${tag} — 🗓 ${human} — 💸 ${WITHDRAW_CHUNK}⭐`;
+    li.innerHTML = `№${i+1} — ${tag} — 🗓 ${timeText} — 💸 ${WITHDRAW_CHUNK}⭐`;
     ul.appendChild(li);
-  });
+  }
 }
 
-/** Клік «Вивести»: одразу шлемо у GAS і оновлюємо список */
-async function withdraw50Direct(){
+// Клік «Вивести»: прямо в таблицю, без локального буфера
+async function withdraw50LocalFirst(){
   const statusEl = $("withdrawStatus");
   const btn = $("withdrawBtn");
 
@@ -351,37 +348,29 @@ async function withdraw50Direct(){
     if (statusEl){ statusEl.className="err"; statusEl.textContent=`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`; }
     return;
   }
-  if (!CLOUD.url || !CLOUD.api){
-    if (statusEl){ statusEl.className="err"; statusEl.textContent="Налаштуй CLOUD_URL та CLOUD_API_KEY у index.html"; }
-    return;
-  }
-
   if (btn) btn.disabled = true;
-  if (statusEl){ statusEl.className="muted"; statusEl.textContent="Поставлено на вивід"; }
+  if (statusEl){ statusEl.className="muted"; statusEl.textContent="Обробка…"; }
 
   const u = getTelegramUser();
   const tag = u.username ? ("@"+u.username) : getUserTag();
   const id  = u.id || "";
   const uname = u.username || [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
 
-  const res = await submitWithdrawalToCloud15({ user_id:id, tag, username:uname, amount:WITHDRAW_CHUNK });
+  const res = await submitWithdrawalToCloud15({
+    user_id: id, tag, username: uname, amount: WITHDRAW_CHUNK
+  });
 
   if (res.ok){
-    // списуємо баланс після успіху
-    balance = parseFloat((balance - WITHDRAW_CHUNK).toFixed(2));
-    setBalanceUI();
-    saveData();
-    CloudStore.queuePush({ balance });
-
-    if (statusEl){ statusEl.className="ok"; statusEl.textContent=`✅ Заявку записано (слот №${res.slot||"?"})`; }
-
-    // підтягнути актуальні дані (щоб «0» у слоту став часом)
+    // Підтягнути свіжі J..X і перемалювати
     try{
       const rem = await CloudStore.getRemote();
       if (rem) CloudStore.applyRemoteToState(rem);
     }catch(_){}
+    // Списати баланс тільки після успіху
+    addBalance(-WITHDRAW_CHUNK);
+    if (statusEl){ statusEl.className="ok"; statusEl.textContent="Поставлено на вивід"; }
   } else {
-    if (statusEl){ statusEl.className="err"; statusEl.textContent="❌ Помилка: " + res.error; }
+    if (statusEl){ statusEl.className="err"; statusEl.textContent = "Помилка: " + (res.error || "невідома"); }
   }
 
   if (btn) btn.disabled = false;
@@ -415,7 +404,7 @@ window.onload = function(){
   const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
   updateGamesTaskUI();
 
-  // одразу покажемо 15 заготовок з "0"
+  // одразу покажемо 15 слотів (0 поки не підтягнули хмару)
   renderPayoutList();
 
   const subBtn = $("subscribeBtn");
@@ -442,7 +431,7 @@ window.onload = function(){
   if (g100Btn) g100Btn.addEventListener("click", onCheckGames100);
 
   const withdrawBtn = $("withdrawBtn");
-  if (withdrawBtn) withdrawBtn.addEventListener("click", withdraw50Direct);
+  if (withdrawBtn) withdrawBtn.addEventListener("click", withdraw50LocalFirst);
 
   // таски 5/10
   $("watchAd5Btn")?.addEventListener("click", onWatchAd5);
@@ -894,8 +883,8 @@ class Block{
 
       placed.position.set(this.position.x,this.position.y,this.position.z);
       chopped.position.set(choppedPos.x,choppedPos.y,choppedPos.z);
-      if(!ret.bonus) ret.chopped=chopped;
       ret.placed=placed;
+      if(!ret.bonus) ret.chopped=chopped;
     } else {
       this.state=this.STATES.MISSED;
     }
@@ -1052,4 +1041,6 @@ function updateHighscore(currentScore){
   }
   CloudStore.queuePush({ highscore, last_score: currentScore });
 }
+</script>
+
 
