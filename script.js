@@ -1,3 +1,4 @@
+<script>
 "use strict";
 console.clear();
 
@@ -1042,5 +1043,6 @@ function updateHighscore(currentScore){
   CloudStore.queuePush({ highscore, last_score: currentScore });
 }
 </script>
+
 
 
