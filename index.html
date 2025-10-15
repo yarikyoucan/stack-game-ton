@@ -828,51 +828,57 @@
   </script>
 
   <!-- === CLOUD CONFIG (дві таблиці: основна + ВИВОДИ) === -->
-  <script>
-    // 1) Стара таблиця (для зберігання/відображення даних) — залишаємо як було
-    window.CLOUD_URL = "https://script.google.com/macros/s/AKfycbxgak6ZgIqIY2mDkGUOCzYnksnSanjjM4UMryAdI1vV-ReFopFPoowg3muuvSBHrOILwA/exec";
-    window.CLOUD_API_KEY = "cgdhggfgf45d6e45wsd6w3sd5";
+<script>
+  /* 1) Основна таблиця (стата/збереження) — як і було */
+  window.CLOUD_URL = "https://script.google.com/macros/s/AKfycbxgak6ZgIqIY2mDkGUOCzYnksnSanjjM4UMryAdI1vV-ReFopFPoowg3muuvSBHrOILwA/exec";
+  window.CLOUD_API_KEY = "cgdhggfgf45d6e45wsd6w3sd5";
 
-    // 2) Нова таблиця ТІЛЬКИ ДЛЯ ВИВОДІВ (3 колонки: tag, tg_id, amount)
-    window.CLOUD_URL_PAYOUTS = "https://script.google.com/macros/s/AKfycbwj9v8p8BddvX3xSa5EvsWf5aggD8HXxM6GYXlc0GLoCcqULNxbsOv_tpSPdFjruRDNgQ/exec";
+  /* 2) НОВА таблиця ТІЛЬКИ ДЛЯ ВИВОДІВ (3 колонки: @tag, tg_id, amount) */
+  window.CLOUD_URL_PAYOUTS   = "https://script.google.com/macros/s/AKfycbwj9v8p8BddvX3xSa5EvsWf5aggD8HXxM6GYXlc0GLoCcqULNxbsOv_tpSPdFjruRDNgQ/exec";
+  window.CLOUD_API_PAYOUTS   = "vgkgfghfgdxkyovbyuofyuf767f67ed54j"; /* 👈 твій новий API код для цієї таблиці */
 
-    // Хто користувач у Telegram
-    window.getTGIdentity = function () {
-      const tg = window.Telegram?.WebApp;
-      const u  = tg?.initDataUnsafe?.user || {};
-      const tag   = u?.username ? ('@' + u.username) : '';
-      const tg_id = u?.id ?? null;
-      return { tag, tg_id };
-    };
+  /* Хто користувач у Telegram */
+  window.getTGIdentity = function () {
+    const tg = window.Telegram?.WebApp;
+    const u  = tg?.initDataUnsafe?.user || {};
+    const tag   = u?.username ? ('@' + u.username) : '';
+    const tg_id = u?.id ?? null;
+    return { tag, tg_id };
+  };
 
-    /**
-     * Запис виводу до НОВОЇ таблиці:
-     * Відправляємо рівно 3 поля: { tag, tg_id, amount }
-     * Викликається зі script.js: await window.logWithdrawalToSheet(50)
-     */
-    window.logWithdrawalToSheet = async function (amount) {
-      try {
-        const { tag, tg_id } = window.getTGIdentity();
-        if (!tg_id) return { ok: false, error: "no_tg_id" };
+  /**
+   * Запис виводу до НОВОЇ таблиці.
+   * Відправляємо рівно 3+1 поля: { api, tag, tg_id, amount }
+   */
+  window.logWithdrawalToSheet = async function (amount) {
+    try {
+      const { tag, tg_id } = window.getTGIdentity();
+      if (!tg_id) return { ok: false, error: "no_tg_id" };
 
-        const payload = { tag, tg_id, amount: Number(amount) };
+      const payload = {
+        api: window.CLOUD_API_PAYOUTS,   // 👈 обов'язково передаємо API для GAS
+        tag,
+        tg_id,
+        amount: Number(amount)
+      };
 
-        const r = await fetch(window.CLOUD_URL_PAYOUTS, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
+      const r = await fetch(window.CLOUD_URL_PAYOUTS, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
 
-        // Якщо GAS повертає JSON { ok:true } — добре; якщо просто 200 — теж приймаємо як ок
-        const data = await r.json().catch(() => null);
-        if (r.ok && (data?.ok ?? true)) return { ok: true };
+      let data = null;
+      try { data = await r.json(); } catch (_) {}
+      if (r.ok && (!data || data.ok)) return { ok: true };
 
-        return { ok: false, error: data?.error || ("HTTP " + r.status) };
-      } catch (e) {
-        return { ok: false, error: e?.message || "network_error" };
-      }
-    };
-  </script>
+      return { ok: false, error: data?.error || ("HTTP " + r.status) };
+    } catch (e) {
+      return { ok: false, error: e?.message || "network_error" };
+    }
+  };
+</script>
+
 
   <!-- ====== Основна логіка гри ====== -->
   <script src="./script.js"></script>
