@@ -15,7 +15,7 @@ const POST_AD_TIMER_MS = 15_000;
 const GAMES_TARGET = 100;
 const GAMES_REWARD = 5;
 
-const WITHDRAW_CHUNK = 0; // 👈 сума виводу
+const WITHDRAW_CHUNK = 50; // 👈 рівно 50⭐, як у підказці в інтерфейсі
 
 /* --- Adsgram блоки --- */
 const ADSGRAM_BLOCK_ID_TASK_MINUTE = "int-13961";
@@ -59,6 +59,11 @@ function formatHMS(ms){
 const CLOUD = {
   url: (typeof window !== 'undefined' && window.CLOUD_URL) || '',
   api: (typeof window !== 'undefined' && window.CLOUD_API_KEY) || '',
+};
+
+/* === ОКРЕМА ТАБЛИЦЯ ДЛЯ ВИВОДІВ === */
+const PAYOUTS = {
+  url: (typeof window !== 'undefined' && window.PAYOUTS_URL) || '' // <-- ТУТ ІДЕ НОВА ТАБЛИЦЯ
 };
 
 const CloudStore = (() => {
@@ -347,7 +352,7 @@ window.onload = function(){
   if ($("copyShareBtn")) $("copyShareBtn").addEventListener("click", ()=>copyToClipboard(link));
 
   const withdrawBtn = $("withdrawBtn");
-  if (withdrawBtn) withdrawBtn.addEventListener("click", withdraw50ShareToGroup);
+  if (withdrawBtn) withdrawBtn.addEventListener("click", withdraw50ToNewSheet);
 
   // таски 5/10
   $("watchAd5Btn")?.addEventListener("click", onWatchAd5);
@@ -560,8 +565,43 @@ async function copyToClipboard(text){
   }catch{ alert("Не вдалося копіювати 😕"); }
 }
 
-/* ========= Вивід (cloud-only, без кодів, без відкриття групи) ========= */
-async function withdraw50ShareToGroup(){
+/* ========= Вивід у НОВУ таблицю (3 колонки: @tag, id, sum) ========= */
+async function submitWithdrawalToNewSheet({ tag, id, sum }){
+  if (!PAYOUTS.url){
+    return { ok:false, error:"PAYOUTS_URL not set" };
+  }
+  // 1) пробуємо JSON POST (Content-Type: application/json)
+  try{
+    const r = await fetch(String(PAYOUTS.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tag, id, sum })
+    });
+    const t = await r.text().catch(()=> "");
+    let j=null; try { j = JSON.parse(t); } catch {}
+    if (r.ok) return { ok:true, data: j ?? t };
+    // 2) фолбек — GET із querystring (часто найпростіше для GAS)
+    const qs = new URLSearchParams({ tag, id: String(id||""), sum: String(sum||0) });
+    const r2 = await fetch(`${String(PAYOUTS.url)}?${qs.toString()}`, { method:"GET" });
+    const t2 = await r2.text().catch(()=> "");
+    if (r2.ok) return { ok:true, data: t2 };
+    return { ok:false, error:`HTTP ${r.status} / ${r2.status}` };
+  }catch(e){
+    // крайній фолбек — GET
+    try{
+      const qs = new URLSearchParams({ tag, id: String(id||""), sum: String(sum||0) });
+      const r3 = await fetch(`${String(PAYOUTS.url)}?${qs.toString()}`, { method:"GET" });
+      const t3 = await r3.text().catch(()=> "");
+      if (r3.ok) return { ok:true, data: t3 };
+      return { ok:false, error:String(e?.message || e) };
+    }catch(e2){
+      return { ok:false, error:String(e2?.message || e2) };
+    }
+  }
+}
+
+/* ========= Вивід (без кодів/груп) ========= */
+async function withdraw50ToNewSheet(){
   const statusEl = $("withdrawStatus");
   const btn = $("withdrawBtn");
 
@@ -569,45 +609,32 @@ async function withdraw50ShareToGroup(){
     if (statusEl){ statusEl.className="err"; statusEl.textContent=`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`; }
     return;
   }
-  if (!CLOUD.url || !CLOUD.api){
-    if (statusEl){ statusEl.className="err"; statusEl.textContent="Налаштуй CLOUD_URL та API_KEY у index.html"; }
+  if (!PAYOUTS.url){
+    if (statusEl){ statusEl.className="err"; statusEl.textContent="Налаштуй PAYOUTS_URL у index.html"; }
     return;
   }
 
   if (btn) btn.disabled = true;
   if (statusEl){ statusEl.className="muted"; statusEl.textContent="Створюємо заявку…"; }
 
-  const tag = getUserTag();
-  const amount = WITHDRAW_CHUNK;
+  const u = getTelegramUser();
+  const tag = u.username ? ("@"+u.username) : getUserTag();
+  const id  = u.id || "";
 
   try{
-    // Запис у таблицю (K=tag, L=amount, M=timestamp)
-    const res = await fetch(String(CLOUD.url), {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" }, // важливо для GAS
-      body: JSON.stringify({
-        api: String(CLOUD.api || ""),
-        action: "withdraw",
-        tag,
-        amount,
-        ts: Date.now()
-      })
-    });
-
-    const json = await res.json().catch(()=>({ok:false, error:"bad_json"}));
-    if (!res.ok || !json.ok){
-      throw new Error(json?.error || ("HTTP "+res.status));
-    }
+    // Пишемо у НОВУ таблицю: @tag, id, sum
+    const res = await submitWithdrawalToNewSheet({ tag, id, sum: WITHDRAW_CHUNK });
+    if (!res.ok) throw new Error(res.error || "write_failed");
 
     // локальний список для UI
-    const entry = { ts: Date.now(), amount, tag };
+    const entry = { ts: Date.now(), amount: WITHDRAW_CHUNK, tag, id };
     const arr = JSON.parse(localStorage.getItem("payouts") || "[]");
     arr.unshift(entry);
     localStorage.setItem("payouts", JSON.stringify(arr));
     renderPayoutList();
 
     // списуємо після успіху
-    addBalance(-amount);
+    addBalance(-WITHDRAW_CHUNK);
 
     if (statusEl){ statusEl.className="ok"; statusEl.textContent="✅ Заявку створено"; }
   } catch (err){
@@ -631,7 +658,7 @@ function renderPayoutList(){
   arr.forEach(e=>{
     const d = new Date(e.ts);
     const li = document.createElement("li");
-    li.innerHTML = `🗓 ${d.toLocaleString()} — 💸 ${e.amount}⭐`;
+    li.innerHTML = `🗓 ${d.toLocaleString()} — ${e.tag} (id:${e.id||"—"}) — 💸 ${e.amount}⭐`;
     ul.appendChild(li);
   });
 }
@@ -1210,4 +1237,5 @@ function updateHighscore(currentScore){
   }
   CloudStore.queuePush({ highscore, last_score: currentScore });
 }
+
 
