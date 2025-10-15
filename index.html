@@ -834,10 +834,75 @@
 
   <!-- === CLOUD CONFIG (GAS Web App URL + API KEY) === -->
   <script>
-    // TODO: ВСТАВ СЮДИ ПОВНИЙ URL з вікна деплою (скрін обрізає рядок)
-    // Приклад: "https://script.google.com/macros/s/AKfycbx.../exec"
-    window.CLOUD_URL = "https://script.google.com/macros/s/AKfycbxgak6ZgIqIY2mDkGUOCzYnksnSanjjM4UMryAdI1vV-ReFopFPoowg3muuvSBHrOILwA/exec";
-    window.CLOUD_API_KEY = "cgdhggfgf45d6e45wsd6w3sd5";
+    // Робочий GAS endpoint, який ти надіслав:
+    window.CLOUD_URL = "https://script.google.com/macros/s/AKfycbwj9v8p8BddvX3xSa5EvsWf5aggD8HXxM6GYXlc0GLoCcqULNxbsOv_tpSPdFjruRDNgQ/exec";
+    window.CLOUD_API_KEY = ""; // не використовується зараз
+  </script>
+
+  <!-- === Відправка запису «Вивід» у Google Sheets (перед script.js) === -->
+  <script>
+    // Відправка запису в Google Sheets: { tag, tg_id, amount }
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn      = document.getElementById('withdrawBtn');
+      const statusEl = document.getElementById('withdrawStatus');
+      const listEl   = document.getElementById('payoutList');
+
+      const tg   = window.Telegram?.WebApp;
+      const user = tg?.initDataUnsafe?.user || {};
+      const tag  = user?.username ? '@' + user.username : '';   // може бути порожнім
+      const tgId = user?.id || null;
+
+      async function logWithdrawalToSheet(amountNumber){
+        if (!window.CLOUD_URL){
+          if (statusEl) statusEl.textContent = '❌ CLOUD_URL не вказано';
+          return;
+        }
+        if (!tgId){
+          if (statusEl) statusEl.textContent = '❌ Немає tg_id (Telegram WebApp user)';
+          return;
+        }
+        if (statusEl) statusEl.textContent = '⏳ Надсилаю...';
+
+        const payload = { tag, tg_id: tgId, amount: Number(amountNumber) };
+
+        try{
+          const r = await fetch(window.CLOUD_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await r.json().catch(()=> ({}));
+
+          if (r.ok && data?.ok){
+            if (statusEl) statusEl.textContent = '✅ Збережено';
+            // Додаємо у локальний список «Список виводів»
+            if (listEl){
+              const li = document.createElement('li');
+              const ts = new Date().toLocaleString('uk-UA');
+              li.textContent = `${ts}: ${tag || ('id:'+tgId)} → ${payload.amount}⭐`;
+              listEl.prepend(li);
+            }
+          } else {
+            if (statusEl) statusEl.textContent = '❌ Помилка: ' + (data?.error || ('HTTP ' + r.status));
+          }
+        } catch(e){
+          if (statusEl) statusEl.textContent = '❌ Мережа: ' + e.message;
+        } finally {
+          setTimeout(()=>{ if (statusEl) statusEl.textContent=''; }, 4000);
+        }
+      }
+
+      // Кнопка «Вивести» — списуємо 50⭐ і логуємо 50 у таблицю
+      btn?.addEventListener('click', (e) => {
+        e.preventDefault();
+        const AMOUNT = 50; // якщо треба — зробимо динамічно в script.js
+        logWithdrawalToSheet(AMOUNT);
+        // TODO: змінити баланс у UI — підв'яжемо в script.js
+      });
+
+      // Експорт у глобал — раптом знадобиться викликати з інших місць
+      window.logWithdrawalToSheet = logWithdrawalToSheet;
+    });
   </script>
 
   <!-- ====== Основна логіка гри (оновлений файл) ====== -->
@@ -946,6 +1011,7 @@
   </script>
 </body>
 </html>
+
 
 
 
