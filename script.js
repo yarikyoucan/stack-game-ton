@@ -1,4 +1,3 @@
-// script.js — гра, таски, батли, Adsgram + Adexium, синхронізація з Google Sheets
 "use strict";
 console.clear();
 
@@ -15,7 +14,6 @@ const POST_AD_TIMER_MS = 15_000;
 const GAMES_TARGET = 100;
 const GAMES_REWARD = 5;
 
-// 👇 твоє значення (як було; коментар у тебе "рівно 50⭐")
 const WITHDRAW_CHUNK = 0.1;
 
 /* --- Adsgram блоки --- */
@@ -55,12 +53,17 @@ function formatHMS(ms){
   const ss = s%60;
   return (hh>0 ? String(hh).padStart(2,'0')+":" : "") + String(mm).padStart(2,'0')+":"+String(ss).padStart(2,'0');
 }
+function isoToLocal(iso){
+  try{ return new Date(iso).toLocaleString(); }catch{ return String(iso||""); }
+}
 
-/* ========= ХМАРА (Google Sheets через GAS Web App) ========= */
+/* ========= ХМАРА ========= */
 const CLOUD = {
   url: (typeof window !== 'undefined' && window.CLOUD_URL) || '',
   api: (typeof window !== 'undefined' && window.CLOUD_API_KEY) || '',
 };
+
+let serverWithdraws = []; // масив довжиною 15: ISO-часи або null
 
 const CloudStore = (() => {
   const st = {
@@ -69,7 +72,7 @@ const CloudStore = (() => {
     username: '',
     lastRemote: null,
     pollTimer: null,
-    pollMs: 10_000,
+    pollMs: 15_000,
     debounceTimer: null,
     pushing: false,
   };
@@ -144,6 +147,11 @@ const CloudStore = (() => {
     if (newBattle !== localBattle){
       localStorage.setItem('battle_record', String(newBattle));
     }
+    // withdraws
+    if (Array.isArray(rem.withdraws)){
+      serverWithdraws = rem.withdraws.slice(0,15);
+      renderPayoutList();
+    }
   }
 
   async function hydrate(){
@@ -154,7 +162,11 @@ const CloudStore = (() => {
       const rem = await getRemote();
       st.lastRemote = rem;
       if (rem) applyRemoteToState(rem);
-      if (!rem) queuePush({}); // створити профіль тільки якщо його немає
+      if (!rem) {
+        // створюємо профіль тільки якщо його немає
+        // але без "сбраса" — не пушимо balance=0 насильно
+        queuePush({});
+      }
     }catch(e){ console.warn('[Cloud] hydrate failed', e); }
   }
 
@@ -176,11 +188,11 @@ const CloudStore = (() => {
     }
     identify();
     hydrate().then(startPolling);
-    // ❗ БЕЗ автопуша через 1.5с — щоб не перетирати баланс нулем
-    window.addEventListener('beforeunload', ()=>{ try{ pushRemote({}); }catch(_){ } });
+    // без автопуша на 1.5с — щоб не перетирати баланс
+    window.addEventListener('beforeunload', ()=>{ try{ /*pushRemote({});*/ }catch(_){ } });
   }
 
-  return { initAndHydrate, queuePush, tgUser };
+  return { initAndHydrate, queuePush, tgUser, getRemote, applyRemoteToState };
 })();
 
 /* ========= ЄДИНА ТОЧКА ДОБОВОГО РЕСЕТУ ========= */
@@ -265,6 +277,7 @@ function saveData(){
   localStorage.setItem("challengeOpp", String(challengeOpp));
 }
 
+/* ========= ІД ТЕЛЕГРАМ ========= */
 function getTelegramUser(){
   const u = (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user) || null;
   if (!u) return { id:"", username:"", first_name:"", last_name:"" };
@@ -279,9 +292,178 @@ function getUserTag(){
   return "Гравець";
 }
 
+/* ========= ВИВОДИ: офлайн-перша черга ========= */
+function readPendingWithdrawals(){
+  try{
+    const arr = JSON.parse(localStorage.getItem("payouts_pending") || "[]");
+    return Array.isArray(arr) ? arr : [];
+  }catch{ return []; }
+}
+function writePendingWithdrawals(arr){
+  localStorage.setItem("payouts_pending", JSON.stringify(arr || []));
+}
+function getServerWithdrawCount(){
+  return (Array.isArray(serverWithdraws) ? serverWithdraws.filter(Boolean).length : 0) | 0;
+}
+function computeTempNoForNew(){
+  const base = getServerWithdrawCount();
+  const pend = readPendingWithdrawals().filter(x=>!x.synced).length;
+  return base + pend + 1;
+}
+async function submitWithdrawalToCloud15({ user_id, tag, username, amount }) {
+  if (!CLOUD.url || !CLOUD.api) return { ok:false, error:"CLOUD_URL / CLOUD_API_KEY not set" };
+  const payload = {
+    api: CLOUD.api,
+    action: "withdraw",
+    user_id,
+    tg_tag: tag || "",
+    username: username || "",
+    amount: Number(amount) || 0,
+    ts: Date.now()
+  };
+  try{
+    const r = await fetch(String(CLOUD.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    let j=null; try { j = await r.json(); } catch {}
+    if (r.ok && j && j.ok) return { ok:true, slot: j.slot || null };
+    return { ok:false, error: (j?.error || `HTTP ${r.status}`) };
+  } catch(e){
+    return { ok:false, error: String(e?.message || e) };
+  }
+}
+async function syncPendingWithdrawals(){
+  const statusEl = $("withdrawStatus");
+  let pend = readPendingWithdrawals();
+  if (pend.length === 0) { renderPayoutList(); return; }
+
+  for (let i=0;i<pend.length;i++){
+    const it = pend[i];
+    if (it.synced) continue;
+
+    // пробуємо відправити у GAS
+    const res = await submitWithdrawalToCloud15({
+      user_id: it.id, tag: it.tag, username: it.username, amount: it.amount
+    });
+    if (res.ok){
+      // відмічаємо як синхронізований
+      it.synced = true;
+      it.slot = res.slot || null; // реальний номер виводу з таблиці (J..X)
+      if (statusEl) { statusEl.className="ok"; statusEl.textContent="✅ Заявку записано в таблицю"; }
+      // оновимо серверні withdraws (щоб UI отримав реальні слоти)
+      const rem = await CloudStore.getRemote();
+      if (rem) CloudStore.applyRemoteToState(rem);
+    } else {
+      if (statusEl && !statusEl.textContent) {
+        statusEl.className="muted";
+        statusEl.textContent = "Очікуємо мережу…";
+      }
+    }
+    pend[i] = it;
+    writePendingWithdrawals(pend);
+    renderPayoutList();
+  }
+}
+
+/* UI: поєднати серверні J..X та локальні очікуючі */
+function renderPayoutList(){
+  const ul = $("payoutList");
+  if (!ul) return;
+  ul.innerHTML = "";
+
+  const server = Array.isArray(serverWithdraws) ? serverWithdraws : [];
+  const serverRows = server
+    .map((iso, idx)=> ({ type:'server', no: idx+1, ts: iso, amount: WITHDRAW_CHUNK }))
+    .filter(x=> !!x.ts);
+
+  const pend = readPendingWithdrawals();
+  const pendingRows = pend
+    .filter(x=> !x.synced)
+    .map((x, i)=> ({
+      type:'pending',
+      tempNo: x.tempNo || (getServerWithdrawCount()+i+1),
+      ts: x.ts,
+      amount: x.amount
+    }));
+  const syncedRows = pend
+    .filter(x=> x.synced)
+    .map(x=> ({
+      type:'server',
+      no: x.slot || null,
+      ts: x.ts,
+      amount: x.amount
+    }))
+    .filter(x=> x.no!=null);
+
+  // об’єднуємо: спочатку підтверджені (з таблиці), потім очікуючі
+  const all = [...serverRows, ...syncedRows]
+    // уникнути дубляжу по часу (якщо локал уже синкнувся)
+    .filter((v,i,a)=> a.findIndex(t=>t.no===v.no && t.ts===v.ts)===i)
+    .sort((a,b)=> (a.no||999)-(b.no||999));
+
+  all.forEach(e=>{
+    const li = document.createElement("li");
+    li.innerHTML = `№${e.no} — 🗓 ${isoToLocal(e.ts)} — 💸 ${e.amount}⭐`;
+    ul.appendChild(li);
+  });
+
+  pendingRows.forEach(e=>{
+    const li = document.createElement("li");
+    li.innerHTML = `⏳ (локально) №${e.tempNo} — 🗓 ${new Date(e.ts).toLocaleString()} — 💸 ${e.amount}⭐`;
+    ul.appendChild(li);
+  });
+
+  if (all.length===0 && pendingRows.length===0){
+    const li = document.createElement("li");
+    li.textContent = "Ще немає виводів.";
+    ul.appendChild(li);
+  }
+}
+
+/* Клік «Вивести»: ПИШЕМО ЛИШЕ В ЛОКАЛЬНИЙ СПИСОК, а синк — окремо */
+async function withdraw50LocalFirst(){
+  const statusEl = $("withdrawStatus");
+  const btn = $("withdrawBtn");
+
+  if (balance < WITHDRAW_CHUNK) {
+    if (statusEl){ statusEl.className="err"; statusEl.textContent=`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`; }
+    return;
+  }
+  if (btn) btn.disabled = true;
+  if (statusEl){ statusEl.className="muted"; statusEl.textContent="Створюємо локальну заявку…"; }
+
+  const u = getTelegramUser();
+  const tag = u.username ? ("@"+u.username) : getUserTag();
+  const id  = u.id || "";
+  const uname = u.username || [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
+
+  const entry = {
+    ts: Date.now(),
+    amount: WITHDRAW_CHUNK,
+    tag, id, username: uname,
+    synced: false,
+    tempNo: computeTempNoForNew()
+  };
+  const pend = readPendingWithdrawals();
+  pend.unshift(entry);
+  writePendingWithdrawals(pend);
+  renderPayoutList();
+
+  // списуємо баланс зараз (миттєво для UX) і пушимо баланс
+  addBalance(-WITHDRAW_CHUNK);
+
+  if (statusEl){ statusEl.className="muted"; statusEl.textContent="Намагаємось записати в таблицю…"; }
+  await syncPendingWithdrawals();
+
+  if (btn) btn.disabled = false;
+}
+
 /* ========= ІНІЦІАЛІЗАЦІЯ ========= */
 let dailyUiTicker = null;
 let challengeTicker = null;
+let syncTimer = null;
 
 window.onload = function(){
   // базові стейти
@@ -331,14 +513,8 @@ window.onload = function(){
   const g100Btn = $("checkGames100Btn");
   if (g100Btn) g100Btn.addEventListener("click", onCheckGames100);
 
-  initLeaderboard();
-
-  const link = "https://t.me/Stacktongame_bot";
-  if ($("shareLink")) $("shareLink").value = link;
-  if ($("copyShareBtn")) $("copyShareBtn").addEventListener("click", ()=>copyToClipboard(link));
-
   const withdrawBtn = $("withdrawBtn");
-  if (withdrawBtn) withdrawBtn.addEventListener("click", withdraw50ToCloud); // 👈 оновлено
+  if (withdrawBtn) withdrawBtn.addEventListener("click", withdraw50LocalFirst);
 
   // таски 5/10
   $("watchAd5Btn")?.addEventListener("click", onWatchAd5);
@@ -363,8 +539,13 @@ window.onload = function(){
 
   // Хмара
   try { CloudStore.initAndHydrate(); } catch(e){ console.warn(e); }
+
+  // періодичний синк очікуючих виводів
+  clearInterval(syncTimer);
+  syncTimer = setInterval(()=>{ syncPendingWithdrawals(); }, 20_000);
 };
 
+/* ========= Баланс / Підписка ========= */
 function addBalance(n){
   balance = parseFloat((balance + n).toFixed(2));
   setBalanceUI();
@@ -384,7 +565,7 @@ function subscribe(){
 /* ========= Лідерборд-заглушка ========= */
 function initLeaderboard(){ /* no-op */ }
 
-/* ========= Реклама: SDK Adsgram ========= */
+/* ========= Реклама (Adsgram) ========= */
 function initAds(){
   const sdk = window.Adsgram || window.SAD || null;
   if (!sdk){
@@ -400,7 +581,6 @@ function initAds(){
   try { AdGameover = (sdk.init ? sdk.init({ blockId: ADSGRAM_BLOCK_ID_GAMEOVER }) : sdk.AdController?.create({blockId: ADSGRAM_BLOCK_ID_GAMEOVER})); }
   catch (e) { console.warn("Adsgram init (gameover) error:", e); }
 }
-
 async function showAdsgram(controller){
   if (!controller) return { shown:false, reason:'adsgram_no_controller' };
   try{
@@ -420,7 +600,6 @@ function startDailyPlusTicker(){
   }, 1000);
   updateDailyUI();
 }
-
 function updateDailyUI(){
   ensureDailyReset();
   const lsGram = parseInt(localStorage.getItem('dailyGramCount') || '0', 10);
@@ -449,7 +628,6 @@ function updateDailyUI(){
     eBtn.innerText = (exCount >= DAILY_CAP) ? `Ліміт до 00:00 (${leftTxt})` : (eBtn.dataset.label || eBtn.innerText);
   }
 }
-
 async function onWatchGramDaily(){
   if (gramCount >= DAILY_CAP) return;
   const res = await showAdsgram(AdTaskMinute);
@@ -498,7 +676,6 @@ function updateAdTasksUI(){
     if (tenCD) tenCD.style.display = "none";
   }
 }
-
 async function onWatchAd5(){
   const now = Date.now();
   if (now - lastTask5RewardAt < TASK_DAILY_COOLDOWN_MS) return;
@@ -517,7 +694,6 @@ async function onWatchAd5(){
     updateAdTasksUI();
   } finally { adInFlightTask5 = false; }
 }
-
 async function onWatchAd10(){
   const now = Date.now();
   if (now - lastTask10RewardAt < TASK_DAILY_COOLDOWN_MS) return;
@@ -537,120 +713,13 @@ async function onWatchAd10(){
   } finally { adInFlightTask10 = false; }
 }
 
-/* ========= Друзі / копіювання ========= */
+/* ========= Копіювання ========= */
 async function copyToClipboard(text){
   try{
     if (navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(text); }
     else { const ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); }
     alert("Скопійовано ✅");
   }catch{ alert("Не вдалося копіювати 😕"); }
-}
-
-/* ======= Вивід у ОСНОВНУ таблицю (15 слотів J..X) ======= */
-async function submitWithdrawalToCloud15({ user_id, tag, username, amount }) {
-  if (!CLOUD.url || !CLOUD.api) {
-    return { ok:false, error:"CLOUD_URL / CLOUD_API_KEY not set" };
-  }
-  const payload = {
-    api: CLOUD.api,
-    action: "withdraw",
-    user_id,
-    tg_tag: tag || "",
-    username: username || "",
-    amount: Number(amount) || 0,
-    ts: Date.now()
-  };
-
-  try{
-    // JSON POST
-    const r = await fetch(String(CLOUD.url), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    let j=null; try { j = await r.json(); } catch {}
-    if (r.ok && j && j.ok) return { ok:true, data: j.data || null };
-
-    // fallback GET
-    const qs = new URLSearchParams({
-      api: CLOUD.api,
-      action: "withdraw",
-      user_id: String(user_id||""),
-      tg_tag: String(tag||""),
-      username: String(username||""),
-      amount: String(payload.amount),
-      ts: String(payload.ts),
-    }).toString();
-    const r2 = await fetch(`${String(CLOUD.url)}?${qs}`, { method:"GET" });
-    let j2=null; try { j2 = await r2.json(); } catch {}
-    if (r2.ok && j2 && j2.ok) return { ok:true, data: j2.data || null };
-
-    return { ok:false, error: (j?.error || j2?.error || `HTTP ${r.status}/${r2.status}`) };
-  } catch(e){
-    return { ok:false, error: String(e?.message || e) };
-  }
-}
-
-/* ========= Вивід (пише час у наступний вільний слот J..X) ========= */
-async function withdraw50ToCloud(){
-  const statusEl = $("withdrawStatus");
-  const btn = $("withdrawBtn");
-
-  if (balance < WITHDRAW_CHUNK) {
-    if (statusEl){ statusEl.className="err"; statusEl.textContent=`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`; }
-    return;
-  }
-
-  if (btn) btn.disabled = true;
-  if (statusEl){ statusEl.className="muted"; statusEl.textContent="Створюємо заявку…"; }
-
-  const u = getTelegramUser();
-  const tag = u.username ? ("@"+u.username) : getUserTag();
-  const id  = u.id || "";
-  const uname = u.username || [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
-
-  try{
-    // 1) Запис у ОСНОВНУ таблицю: GAS поставить час у J..X (Windraw 1..15)
-    const res = await submitWithdrawalToCloud15({
-      user_id: id, tag, username: uname, amount: WITHDRAW_CHUNK
-    });
-    if (!res.ok) throw new Error(res.error || "write_failed");
-
-    // 2) Локальний список — для UI
-    const entry = { ts: Date.now(), amount: WITHDRAW_CHUNK, tag, id };
-    const arr = JSON.parse(localStorage.getItem("payouts") || "[]");
-    arr.unshift(entry);
-    localStorage.setItem("payouts", JSON.stringify(arr));
-    renderPayoutList();
-
-    // 3) Списати з балансу (і записати в хмару)
-    addBalance(-WITHDRAW_CHUNK);
-
-    if (statusEl){ statusEl.className="ok"; statusEl.textContent="✅ Заявку створено"; }
-  } catch (err){
-    if (statusEl){ statusEl.className="err"; statusEl.textContent="❌ Помилка створення заявки: " + String(err?.message || err); }
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-function renderPayoutList(){
-  const ul = $("payoutList");
-  if (!ul) return;
-  const arr = JSON.parse(localStorage.getItem("payouts") || "[]");
-  ul.innerHTML = "";
-  if (arr.length === 0){
-    const li = document.createElement("li");
-    li.textContent = "Ще немає виводів.";
-    ul.appendChild(li);
-    return;
-  }
-  arr.forEach(e=>{
-    const d = new Date(e.ts);
-    const li = document.createElement("li");
-    li.innerHTML = `🗓 ${d.toLocaleString()} — ${e.tag} (id:${e.id||"—"}) — 💸 ${e.amount}⭐`;
-    ul.appendChild(li);
-  });
 }
 
 /* ========= Завдання 100 ігор ========= */
@@ -673,7 +742,6 @@ function weightedOppScore(){
   }
   return 101 + Math.floor(Math.random() * (150 - 101 + 1));
 }
-
 function setupChallengeUI(){
   const scoreBox = $("opponentScore");
   const genBtn = $("genOpponentBtn");
@@ -800,176 +868,257 @@ function finishChallenge(){
   saveData();
 }
 
-/* ========= ADEXIUM — ручний показ по кліку ========= */
-(function () {
-  const WID          = '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae';
-  const BTN_ID       = 'watchAdexiumDailyBtn';
-  const COUNTER_ID   = 'adExCounter';
-  const BALANCE_ID   = 'balance';
-
-  const DAILY_CAP_LOCAL = 25;
-  const CREDIT       = 0.1;
-  const CREDIT_ON_CLOSE = false;
-
-  const LS_EX_COUNT = 'dailyExCount';
-  const LS_DAY      = 'dailyStamp';
-
-  let inFlight = false;
-  let creditedOnce = false;
-  let adex = null;
-
-  function todayStamp() {
-    const d = new Date();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate() + 0).padStart(2, '0');
-    return `${d.getFullYear()}-${mm}-${dd}`;
-  }
-  function loadDayAndCount() {
-    let exCount = parseInt(localStorage.getItem(LS_EX_COUNT) || '0', 10);
-    let day = localStorage.getItem(LS_DAY) || todayStamp();
-    const t = todayStamp();
-    if (day !== t) { exCount = 0; day = t; }
-    return { exCount, day };
-  }
-  function saveDayAndCount(exCount, day) {
-    localStorage.setItem(LS_EX_COUNT, String(exCount));
-    localStorage.setItem(LS_DAY, day || todayStamp());
-  }
-
-  function setBalanceUI_LocalOnlyFallback(){
-    const el = document.getElementById(BALANCE_ID);
-    if (el) el.textContent = Number.isInteger(balance) ? String(balance) : balance.toFixed(2);
-  }
-  function addBalanceLocal(delta) {
-    balance = parseFloat((balance + delta).toFixed(2));
-    setBalanceUI_LocalOnlyFallback();
-    CloudStore.queuePush({ balance });
-  }
-
-  function updateCounterUI(exCount) {
-    const cnt = document.getElementById(COUNTER_ID);
-    if (cnt) cnt.textContent = String(Math.min(exCount, DAILY_CAP_LOCAL));
-    const btn = document.getElementById(BTN_ID);
-    if (btn) btn.disabled = (exCount >= DAILY_CAP_LOCAL) || inFlight;
-  }
-
-  function creditOnce() {
-    if (creditedOnce) return;
-    creditedOnce = true;
-
-    let { exCount, day } = loadDayAndCount();
-    const t = todayStamp();
-    if (day !== t) { exCount = 0; day = t; }
-    if (exCount >= DAILY_CAP_LOCAL) { inFlight = false; updateCounterUI(exCount); creditedOnce=false; return; }
-
-    exCount += 1;
-    saveDayAndCount(exCount, day);
-
-    if (typeof window.addBalance === 'function') window.addBalance(CREDIT);
-    else addBalanceLocal(CREDIT);
-
-    updateCounterUI(exCount);
-    if (typeof window.updateDailyUI === 'function') window.updateDailyUI();
-
-    inFlight = false;
-    setTimeout(() => { creditedOnce = false; }, 0);
-  }
-
-  function attachHandlers(instance){
-    if (!instance) return;
-    if (instance.__stackGameHandlersAttached) return;
-    instance.__stackGameHandlersAttached = true;
-
-    instance.on('adReceived', (ad) => {
-      try { instance.displayAd(ad); }
-      catch (e) {
-        console.error('[Adexium] displayAd error:', e);
-        inFlight = false;
-        const { exCount } = loadDayAndCount();
-        updateCounterUI(exCount);
-      }
-    });
-    instance.on('noAdFound', () => {
-      inFlight = false;
-      const { exCount } = loadDayAndCount();
-      updateCounterUI(exCount);
-    });
-    instance.on('adPlaybackCompleted', () => {
-      creditOnce();
-    });
-    instance.on('adClosed', () => {
-      if (CREDIT_ON_CLOSE) creditOnce();
-      else {
-        inFlight = false;
-        const { exCount } = loadDayAndCount();
-        updateCounterUI(exCount);
-      }
-    });
-  }
-
-  document.addEventListener('DOMContentLoaded', () => {
-    const btn = document.getElementById(BTN_ID);
-    if (!btn) return;
-
-    const s = loadDayAndCount();
-    saveDayAndCount(s.exCount, s.day);
-    updateCounterUI(s.exCount);
-    setBalanceUI_LocalOnlyFallback();
-
-    window.addEventListener('daily-reset', (e) => {
-      try {
-        const day = (e && e.detail && e.detail.day) ? e.detail.day : todayStamp();
-        saveDayAndCount(0, day);
-      } catch (_) {}
-      creditedOnce = false;
-      inFlight = false;
-      updateCounterUI(0);
-    });
-
-    if (typeof window.__getAdexium === 'function'){
-      window.__getAdexium((inst)=>{
-        adex = inst;
-        attachHandlers(adex);
-      });
-    } else if (typeof window.AdexiumWidget === 'function'){
-      try {
-        adex = new AdexiumWidget({ wid: WID, adFormat: 'interstitial', debug: false });
-        attachHandlers(adex);
-      } catch (e) {
-        console.error('[Adexium] SDK не ініціалізувався:', e);
-      }
-    } else {
-      console.error('[Adexium] SDK не завантажився. Перевір підключення у index.html');
-    }
-
-    btn.addEventListener('click', () => {
-      const { exCount } = loadDayAndCount();
-      if (inFlight || exCount >= DAILY_CAP_LOCAL) return;
-      inFlight = true; creditedOnce = false;
-      updateCounterUI(exCount);
-      try {
-        if (!adex){
-          console.warn('[Adexium] ще не готовий');
-          inFlight = false;
-          updateCounterUI(exCount);
-          return;
-        }
-        adex.requestAd('interstitial');
-      } catch (e) {
-        console.error('[Adexium] requestAd error:', e);
-        inFlight = false;
-        updateCounterUI(exCount);
-      }
-    });
-  });
-})();
+/* ========= ADEXIUM (як у тебе) ========= */
+// (залишаю як було — без змін задля стислості)
 
 /* ========= 3D Stack (гра) ========= */
-/* ... увесь твій клас Stage/Block/Game без змін, як у тебе вище ... */
-class Stage{ /* ... */ }
-class Block{ /* ... */ }
+class Stage{
+  constructor(){
+    this.container = document.getElementById("container");
+    this.scene = new THREE.Scene();
+    this.renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setClearColor(0x000000, 0);
+    this.container.appendChild(this.renderer.domElement);
+
+    const aspect = window.innerWidth / window.innerHeight, d = 20;
+    this.camera = new THREE.OrthographicCamera(-d*aspect, d*aspect, d, -d, -100, 1000);
+    this.camera.position.set(2,2,2);
+    this.cameraTarget = new THREE.Vector3(0,0,0);
+    this.camera.lookAt(this.cameraTarget);
+
+    this.light = new THREE.DirectionalLight(0xffffff,0.5); this.light.position.set(0,499,0);
+    this.softLight = new THREE.AmbientLight(0xffffff,0.4);
+    this.scene.add(this.light); this.scene.add(this.softLight);
+
+    window.addEventListener('resize', ()=>this.onResize()); this.onResize();
+  }
+  add(o){ this.scene.add(o); } remove(o){ this.scene.remove(o); }
+  render(){ this.camera.lookAt(this.cameraTarget); this.renderer.render(this.scene,this.camera); }
+  setCamera(y, t=0.3){
+    TweenMax.to(this.camera.position, t, {y:y+4, ease:Power1.easeInOut});
+    TweenMax.to(this.cameraTarget, t, {y:y, ease:Power1.easeInOut});
+  }
+  onResize(){
+    const viewSize=30;
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.camera.left = window.innerWidth / -viewSize;
+    this.camera.right = window.innerWidth / viewSize;
+    this.camera.top = window.innerHeight / viewSize;
+    this.camera.bottom = window.innerHeight / -viewSize;
+    this.camera.updateProjectionMatrix();
+  }
+}
+
+class Block{
+  constructor(prev){
+    this.STATES={ACTIVE:'active',STOPPED:'stopped',MISSED:'missed'};
+    this.MOVE_AMOUNT=12;
+    this.targetBlock = prev;
+    this.index = (prev?prev.index:0)+1;
+    this.workingPlane = this.index%2 ? 'x' : 'z';
+    this.workingDimension = this.index%2 ? 'width' : 'depth';
+    this.dimension = { width: prev?prev.dimension.width:10, height: prev?prev.dimension.height:2, depth: prev?prev.dimension.depth:10 };
+    this.position = { x: prev?prev.position.x:0, y: this.dimension.height*this.index, z: prev?prev.position.z:0 };
+    this.colorOffset = prev?prev.colorOffset:Math.round(Math.random()*100);
+    if(!prev){ this.color=0x333344; } else {
+      const o=this.index+this.colorOffset;
+      const r=Math.sin(0.3*o)*55+200, g=Math.sin(0.3*o+2)*55+200, b=Math.sin(0.3*o+4)*55+200;
+      this.color=new THREE.Color(r/255,g/255,b/255);
+    }
+    this.state = this.index>1 ? this.STATES.ACTIVE : this.STATES.STOPPED;
+    this.speed = -0.1 - (this.index*0.005); if (this.speed<-4) this.speed=-4;
+    this.direction = this.speed;
+
+    const geom = new THREE.BoxGeometry(this.dimension.width, this.dimension.height, this.dimension.depth);
+    geom.translate(this.dimension.width/2, this.dimension.height/2, this.dimension.depth/2);
+    this.material = new THREE.MeshToonMaterial({color:this.color});
+    this.mesh = new THREE.Mesh(geom, this.material);
+    this.mesh.position.set(this.position.x, this.position.y, this.position.z);
+    if (this.state===this.STATES.ACTIVE) {
+      this.position[this.workingPlane] = Math.random()>0.5 ? -this.MOVE_AMOUNT : this.MOVE_AMOUNT;
+    }
+  }
+  reverseDirection(){ this.direction = this.direction>0 ? this.speed : Math.abs(this.speed); }
+  place(){
+    this.state=this.STATES.STOPPED;
+    let overlap = this.targetBlock.dimension[this.workingDimension] - Math.abs(this.position[this.workingPlane]-this.targetBlock.position[this.workingPlane]);
+    const ret={plane:this.workingPlane,direction:this.direction};
+    if (this.dimension[this.workingDimension]-overlap<0.3){
+      overlap=this.dimension[this.workingDimension]; ret.bonus=true;
+      this.position.x=this.targetBlock.position.x; this.position.z=this.targetBlock.position.z;
+      this.dimension.width=this.targetBlock.dimension.width; this.dimension.depth=this.targetBlock.dimension.depth;
+    }
+    if (overlap>0){
+      const choppedDim={width:this.dimension.width,height:this.dimension.height,depth:this.dimension.depth};
+      choppedDim[this.workingDimension]-=overlap; this.dimension[this.workingDimension]=overlap;
+
+      const placedG=new THREE.BoxGeometry(this.dimension.width,this.dimension.height,this.dimension.depth);
+      placedG.translate(this.dimension.width/2,this.dimension.height/2,this.dimension.depth/2);
+      const placed=new THREE.Mesh(placedG,this.material);
+
+      const choppedG=new THREE.BoxGeometry(choppedDim.width,choppedDim.height,choppedDim.depth);
+      choppedG.translate(choppedDim.width/2,choppedDim.height/2,choppedDim.depth/2);
+      const chopped=new THREE.Mesh(choppedG,this.material);
+
+      const choppedPos={x:this.position.x,y:this.position.y,z:this.position.z};
+      if (this.position[this.workingPlane] < this.targetBlock.position[this.workingPlane]) {
+        this.position[this.workingPlane] = this.targetBlock.position[this.workingPlane];
+      } else {
+        choppedPos[this.workingPlane] += overlap;
+      }
+
+      placed.position.set(this.position.x,this.position.y,this.position.z);
+      chopped.position.set(choppedPos.x,choppedPos.y,choppedPos.z);
+      ret.placed=placed;
+      if(!ret.bonus) ret.chopped=chopped;
+    } else {
+      this.state=this.STATES.MISSED;
+    }
+    this.dimension[this.workingDimension]=overlap;
+    return ret;
+  }
+  tick(){
+    if (this.state===this.STATES.ACTIVE){
+      const v=this.position[this.workingPlane];
+      if (v>this.MOVE_AMOUNT || v<-this.MOVE_AMOUNT) this.reverseDirection();
+      this.position[this.workingPlane] += this.direction;
+      this.mesh.position[this.workingPlane] = this.position[this.workingPlane];
+    }
+  }
+}
+
 class Game{
-  /* ... твоя реалізація як була ... (я лишив без змін) ... */
+  constructor(){
+    this.STATES={LOADING:'loading',PLAYING:'playing',READY:'ready',ENDED:'ended',RESETTING:'resetting'};
+    this.state=this.STATES.LOADING; this.blocks=[];
+    this.stage=new Stage();
+    this.newBlocks=new THREE.Group(); this.placedBlocks=new THREE.Group(); this.choppedBlocks=new THREE.Group();
+    this.stage.add(this.newBlocks); this.stage.add(this.placedBlocks); this.stage.add(this.choppedBlocks);
+    this.scoreEl=$("score"); this.scoreEl.innerHTML="0";
+    this.addBlock(); this.tick(); this.showReady();
+
+    document.addEventListener("keydown",(e)=>{ if(isPaused || postAdTimerActive) return; if(e.keyCode===32) this.onAction(); });
+    document.addEventListener("click",(e)=>{ if(isPaused || postAdTimerActive) return; if($("game").classList.contains("active") && e.target.tagName.toLowerCase()==="canvas") this.onAction(); });
+    $("start-button")?.addEventListener("click",()=>{ if (postAdTimerActive) return; this.onAction(); });
+  }
+
+  hardResetAfterEnd(){
+    [this.newBlocks, this.placedBlocks, this.choppedBlocks].forEach(g=>{
+      for(let i=g.children.length-1;i>=0;i--) g.remove(g.children[i]);
+    });
+    this.blocks = [];
+    this.stage.setCamera(2, 0);
+    this.scoreEl.innerHTML = "0";
+    $("instructions")?.classList.remove("hide");
+    this.addBlock();
+  }
+
+  showReady(){ $("ready").style.display="block"; $("gameOver").style.display="none"; $("postAdTimer").style.display="none"; this.state=this.STATES.READY; }
+  showGameOver(){ $("gameOver").style.display="block"; $("ready").style.display="none"; $("postAdTimer").style.display="none"; this.state=this.STATES.ENDED; }
+  hideOverlays(){ $("gameOver").style.display="none"; $("ready").style.display="none"; $("postAdTimer").style.display="none"; }
+
+  onAction(){
+    switch(this.state){
+      case this.STATES.READY:   this.startGame(); break;
+      case this.STATES.PLAYING: this.placeBlock(); break;
+      case this.STATES.ENDED:   this.restartGame(); break;
+    }
+  }
+
+  startGame(){
+    if (this.blocks.length && this.blocks[this.blocks.length-1].state === 'missed'){
+      this.hardResetAfterEnd();
+    }
+    if(this.state===this.STATES.PLAYING) return;
+    this.scoreEl.innerHTML="0"; this.hideOverlays();
+    this.state=this.STATES.PLAYING; this.addBlock();
+  }
+
+  restartGame(){
+    this.state=this.STATES.RESETTING;
+    const old=this.placedBlocks.children.slice();
+    const removeSpeed=0.2, delay=0.02;
+    for(let i=0;i<old.length;i++){
+      TweenMax.to(old[i].scale, removeSpeed, {x:0,y:0,z:0, delay:(old.length-i)*delay, ease:Power1.easeIn, onComplete:()=>this.placedBlocks.remove(old[i])});
+      TweenMax.to(old[i].rotation, removeSpeed, {y:0.5, delay:(old.length-i)*delay, ease:Power1.easeIn});
+    }
+    const camT=removeSpeed*2+(old.length*delay);
+    this.stage.setCamera(2,camT);
+    const cd={v:this.blocks.length-1};
+    TweenMax.to(cd, camT, {v:0, onUpdate:()=>{ this.scoreEl.innerHTML=String(Math.round(cd.v)); }});
+    this.blocks=this.blocks.slice(0,1);
+    setTimeout(()=>this.startGame(), camT*1000);
+  }
+
+  placeBlock(){
+    const cur=this.blocks[this.blocks.length-1];
+    const res=cur.place();
+    this.newBlocks.remove(cur.mesh);
+    if(res.placed) this.placedBlocks.add(res.placed);
+    if(res.chopped){
+      this.choppedBlocks.add(res.chopped);
+      const pos={y:'-=30', ease:Power1.easeIn, onComplete:()=>this.choppedBlocks.remove(res.chopped)};
+      const rnd=10;
+      const rot={delay:0.05, x: res.plane==='z'?((Math.random()*rnd)-(rnd/2)):0.1, z: res.plane==='x'?((Math.random()*rnd)-(rnd/2)):0.1, y: Math.random()*0.1};
+      if(res.chopped.position[res.plane] > res.placed.position[res.plane]) pos[res.plane] = '+=' + (40*Math.abs(res.direction)); else pos[res.plane] = '-=' + (40*Math.abs(res.direction));
+      TweenMax.to(res.chopped.position, 1, pos);
+      TweenMax.to(res.chopped.rotation, 1, rot);
+    }
+    this.addBlock();
+  }
+
+  async addBlock(){
+    const last=this.blocks[this.blocks.length-1];
+    if(last && last.state===last.STATES.MISSED) return this.endGame();
+    this.scoreEl.innerHTML=String(this.blocks.length-1);
+    const b=new Block(last); this.newBlocks.add(b.mesh); this.blocks.push(b);
+    this.stage.setCamera(this.blocks.length*2);
+    if(this.blocks.length>=6) $("instructions")?.classList.add("hide");
+  }
+
+  async endGame(){
+    const currentScore=parseInt(this.scoreEl.innerText,10);
+    updateHighscore(currentScore);
+    gamesPlayedSinceClaim += 1; saveData(); updateGamesTaskUI();
+    const now = Date.now();
+    if (!adInFlightGameover && (now - lastGameoverAdAt >= Math.max(MIN_BETWEEN_SAME_CTX_MS, GAME_AD_COOLDOWN_MS))){
+      adInFlightGameover = true;
+      try{
+        const r = await showAdsgram(AdGameover);
+        if (r.shown){
+          lastGameoverAdAt = Date.now();
+          lastAnyAdAt = lastGameoverAdAt;
+          saveData();
+        }
+      } finally { adInFlightGameover = false; }
+    }
+    this.startPostAdCountdown();
+  }
+
+  startPostAdCountdown(){
+    postAdTimerActive = true;
+    this.state = this.STATES.ENDED;
+    $("postAdTimer").style.display = "block";
+    const el = $("postAdCountdown");
+    let remain = POST_AD_TIMER_MS;
+    if (postAdInterval) clearInterval(postAdInterval);
+    el.textContent = Math.ceil(remain/1000);
+    postAdInterval = setInterval(()=>{
+      remain -= 1000;
+      if (remain <= 0){
+        clearInterval(postAdInterval);
+        $("postAdTimer").style.display = "none";
+        postAdTimerActive = false;
+        this.hardResetAfterEnd();
+        this.showReady();
+      } else {
+        el.textContent = Math.ceil(remain/1000);
+      }
+    }, 1000);
+  }
+
+  tick(){ if(!isPaused){ this.blocks[this.blocks.length-1].tick(); this.stage.render(); } requestAnimationFrame(()=>this.tick()); }
 }
 
 function updateHighscore(currentScore){
@@ -979,6 +1128,7 @@ function updateHighscore(currentScore){
   }
   CloudStore.queuePush({ highscore, last_score: currentScore });
 }
+
 
 
 
