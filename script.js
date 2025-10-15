@@ -63,7 +63,16 @@ const CLOUD = {
   api: (typeof window !== 'undefined' && window.CLOUD_API_KEY) || '',
 };
 
-let serverWithdraws = []; // з таблиці J..X (доведу до 15 нижче)
+let serverWithdraws = []; // з таблиці J..X (довжина 15, значення як у таблиці: '0' / ISO / епоха / будь-що)
+
+/* перший вільний (0/порожній) слот J..X */
+function firstFreeWithdrawIndex(){
+  const arr = Array.isArray(serverWithdraws) ? serverWithdraws : [];
+  for (let i = 0; i < 15; i++){
+    if (!arr[i] || String(arr[i]) === '0') return i;
+  }
+  return -1;
+}
 
 const CloudStore = (() => {
   const st = {
@@ -131,6 +140,7 @@ const CloudStore = (() => {
 
   function applyRemoteToState(rem){
     if (!rem) return;
+
     // highscore — максимум
     if (typeof rem.highscore === 'number' && rem.highscore > (highscore||0)){
       highscore = rem.highscore;
@@ -147,7 +157,7 @@ const CloudStore = (() => {
     if (newBattle !== localBattle){
       localStorage.setItem('battle_record', String(newBattle));
     }
-    // withdraws J..X (15 шт.) — беремо як є ('0' або ISO)
+    // withdraws J..X: беремо «як є»
     if (Array.isArray(rem.withdraws)){
       serverWithdraws = rem.withdraws.slice(0,15);
       while (serverWithdraws.length < 15) serverWithdraws.push('0');
@@ -290,7 +300,7 @@ function getUserTag(){
   return "Гравець";
 }
 
-/* ========= ВИВОДИ: офлайн-функції залишив (нічого не ріжу), але не використовуємо ========= */
+/* ========= ВИВОДИ: офлайн-функції (залишені для сумісності) ========= */
 function readPendingWithdrawals(){
   try{
     const arr = JSON.parse(localStorage.getItem("payouts_pending") || "[]");
@@ -309,8 +319,8 @@ function computeTempNoForNew(){
   return base + pend + 1;
 }
 
-/* === НОВА логіка виводу: пишемо напряму в GAS у перший вільний J..X === */
-async function submitWithdrawalToCloud15({ user_id, tag, username, amount }) {
+/* === Надсилання в GAS: запис у перший вільний J..X === */
+async function submitWithdrawalToCloud15({ user_id, tag, username, amount, ts }) {
   if (!CLOUD.url || !CLOUD.api) return { ok:false, error:"CLOUD_URL / CLOUD_API_KEY not set" };
   const payload = {
     api: CLOUD.api,
@@ -319,7 +329,7 @@ async function submitWithdrawalToCloud15({ user_id, tag, username, amount }) {
     tg_tag: tag || "",
     username: username || "",
     amount: Number(amount) || 0,
-    ts: Date.now()
+    ts // передаємо як є (епоха/ISO/число)
   };
   try{
     const r = await fetch(String(CLOUD.url), {
@@ -328,14 +338,17 @@ async function submitWithdrawalToCloud15({ user_id, tag, username, amount }) {
       body: JSON.stringify(payload)
     });
     let j=null; try { j = await r.json(); } catch {}
-    if (r.ok && j && j.ok) return { ok:true, slot: j.slotIndex || null, ts: j.ts || null };
+    if (r.ok && j && j.ok) {
+      const slot = j.slot ?? j.slotIndex ?? null;
+      return { ok:true, slot, ts: j.ts ?? ts ?? null };
+    }
     return { ok:false, error: (j?.error || `HTTP ${r.status}`) };
   } catch(e){
     return { ok:false, error: String(e?.message || e) };
   }
 }
 
-/* Рендер 15 слотів завжди з таблиці: '0' → показуємо 0, ISO → локальний час */
+/* Рендер 15 слотів (сирі значення з таблиці) */
 function renderPayoutList(){
   const ul = $("payoutList");
   if (!ul) return;
@@ -347,14 +360,14 @@ function renderPayoutList(){
 
   for (let i=0; i<15; i++){
     const cell = arr[i];
-    const timeText = (cell && String(cell) !== '0') ? isoToLocal(cell) : '0';
+    const timeText = (cell==null || cell==='') ? '0' : String(cell); // показуємо як є
     const li = document.createElement("li");
     li.innerHTML = `№${i+1} — ${tag} — 🗓 ${timeText} — 💸 ${WITHDRAW_CHUNK}⭐`;
     ul.appendChild(li);
   }
 }
 
-/* Клік «Вивести»: напряму у таблицю; списання балансу — лише після успіху */
+/* Клік «Вивести»: спершу візуал у грі, далі запис у таблицю; на фейл — відкот */
 async function withdraw50LocalFirst(){
   const statusEl = $("withdrawStatus");
   const btn = $("withdrawBtn");
@@ -363,35 +376,56 @@ async function withdraw50LocalFirst(){
     if (statusEl){ statusEl.className="err"; statusEl.textContent=`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`; }
     return;
   }
+
+  const freeIdx = firstFreeWithdrawIndex();
+  if (freeIdx < 0){
+    if (statusEl){ statusEl.className="err"; statusEl.textContent="Немає вільних слотів для виводу"; }
+    return;
+  }
+
   if (btn) btn.disabled = true;
-  if (statusEl){ statusEl.className="muted"; statusEl.textContent="Обробка…"; }
 
   const u = getTelegramUser();
   const tag = u.username ? ("@"+u.username) : getUserTag();
   const id  = u.id || "";
   const uname = u.username || [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
 
+  // значення часу, що ставимо у візуал і в таблицю (тут — мс епохи)
+  const nowValue = String(Date.now());
+
+  // оптимістично оновлюємо візуал списку виводів
+  const prevValue = serverWithdraws[freeIdx];
+  serverWithdraws[freeIdx] = nowValue;
+  renderPayoutList();
+  if (statusEl){ statusEl.className="ok"; statusEl.textContent="Поставлено на вивід"; }
+
+  // списуємо баланс (на фейл — повернемо)
+  const oldBalance = balance;
+  addBalance(-WITHDRAW_CHUNK);
+
+  // надсилаємо у GAS
   const res = await submitWithdrawalToCloud15({
-    user_id: id, tag, username: uname, amount: WITHDRAW_CHUNK
+    user_id: id, tag, username: uname, amount: WITHDRAW_CHUNK, ts: nowValue
   });
 
   if (res.ok){
-    // оновлюємо дані з хмари (щоб побачити новий час у J..X)
     try{
       const rem = await CloudStore.getRemote();
       if (rem) CloudStore.applyRemoteToState(rem);
     }catch(_){}
-    // списуємо баланс після успіху
-    addBalance(-WITHDRAW_CHUNK);
     if (statusEl){ statusEl.className="ok"; statusEl.textContent="Поставлено на вивід"; }
   } else {
+    // відкочуємо
+    serverWithdraws[freeIdx] = prevValue ?? '0';
+    renderPayoutList();
+    balance = oldBalance; setBalanceUI(); saveData();
     if (statusEl){ statusEl.className="err"; statusEl.textContent = "Помилка: " + (res.error || "невідома"); }
   }
 
   if (btn) btn.disabled = false;
 }
 
-/* ========= СИНК ОЧІКУЮЧИХ (залишив як є, але зараз не використовується) ========= */
+/* ========= СИНК ОЧІКУЮЧИХ (залишено, але зараз не використовується) ========= */
 async function syncPendingWithdrawals(){
   const statusEl = $("withdrawStatus");
   let pend = readPendingWithdrawals();
@@ -401,7 +435,7 @@ async function syncPendingWithdrawals(){
     const it = pend[i];
     if (it.synced) continue;
     const res = await submitWithdrawalToCloud15({
-      user_id: it.id, tag: it.tag, username: it.username, amount: it.amount
+      user_id: it.id, tag: it.tag, username: it.username, amount: it.amount, ts: String(Date.now())
     });
     if (res.ok){
       it.synced = true;
@@ -450,7 +484,7 @@ window.onload = function(){
   const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
   updateGamesTaskUI();
 
-  // одразу показуємо 15 слотів (0), поки не підтяне хмара
+  // одразу показуємо 15 слотів (поки що як '0'), доки не прийде хмара
   renderPayoutList();
 
   const subBtn = $("subscribeBtn");
@@ -461,7 +495,7 @@ window.onload = function(){
 
   const t50 = $("checkTask50");
   if (t50){
-    if (task50Completed){ t50.innerText=(document.documentElement.lang==='ен'?"Done":"Виконано"); t50.classList.add("done"); }
+    if (task50Completed){ t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); t50.classList.add("done"); }
     t50.addEventListener("click", ()=>{
       if (highscore >= 75 && !task50Completed){
         addBalance(5.15);
@@ -503,7 +537,7 @@ window.onload = function(){
   // Хмара
   try { CloudStore.initAndHydrate(); } catch(e){ console.warn(e); }
 
-  // періодичний синк очікуючих виводів (залишив; зараз пусто — нічого не робить)
+  // періодичний синк очікуючих виводів (зараз, по суті, холостий)
   clearInterval(syncTimer);
   syncTimer = setInterval(()=>{ syncPendingWithdrawals(); }, 20_000);
 };
@@ -831,8 +865,8 @@ function finishChallenge(){
   saveData();
 }
 
-/* ========= ADEXIUM (як у тебе) ========= */
-// (залишаю як було — без змін задля стислості)
+/* ========= ADEXIUM (місце для інтеграції) ========= */
+// (залишено без змін)
 
 /* ========= 3D Stack (гра) ========= */
 class Stage{
@@ -1023,7 +1057,7 @@ class Game{
       this.choppedBlocks.add(res.chopped);
       const pos={y:'-=30', ease:Power1.easeIn, onComplete:()=>this.choppedBlocks.remove(res.chopped)};
       const rnd=10;
-      const rot={delay:0.05, x: res.plane==='з'?((Math.random()*rnd)-(rnd/2)):0.1, z: res.plane==='x'?((Math.random()*rnd)-(rnd/2)):0.1, y: Math.random()*0.1};
+      const rot={delay:0.05, x: res.plane==='z'?((Math.random()*rnd)-(rnd/2)):0.1, z: res.plane==='x'?((Math.random()*rnd)-(rnd/2)):0.1, y: Math.random()*0.1};
       if(res.chopped.position[res.plane] > res.placed.position[res.plane]) pos[res.plane] = '+=' + (40*Math.abs(res.direction)); else pos[res.plane] = '-=' + (40*Math.abs(res.direction));
       TweenMax.to(res.chopped.position, 1, pos);
       TweenMax.to(res.chopped.rotation, 1, rot);
@@ -1091,6 +1125,7 @@ function updateHighscore(currentScore){
   }
   CloudStore.queuePush({ highscore, last_score: currentScore });
 }
+
 
 
 
