@@ -117,7 +117,7 @@ const CloudStore = (() => {
 
   async function getRemote(){
     if (!st.enabled || !st.uid) return null;
-    const nocache = "&_=" + Date.now(); // anti-cache, щоб тягнути свіжі J..X
+    const nocache = "&_=" + Date.now(); // anti-cache
     const url = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(st.uid)}${nocache}`;
     const r = await fetch(url, { method:'GET', headers:{'accept':'application/json'} });
     if (!r.ok) return null;
@@ -163,18 +163,26 @@ const CloudStore = (() => {
       highscore = rem.highscore;
       const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
     }
-    // balance — істина з хмари
-    if (typeof rem.balance === 'number' && rem.balance !== balance){
-      balance = parseFloat(rem.balance.toFixed(2));
-      setBalanceUI();
+
+    // balance — НЕ дозволяємо затерти локальний >0 нулем із хмари
+    if (typeof rem.balance === 'number') {
+      const cloudBal = Number(rem.balance);
+      if (cloudBal === 0 && balance > 0) {
+        queuePush({ balance }); // підштовхуємо локальне значення нагору
+      } else if (cloudBal !== balance) {
+        balance = parseFloat(cloudBal.toFixed(2));
+        setBalanceUI();
+      }
     }
+
     // battle_record — максимум (у LS)
     const localBattle = Number(localStorage.getItem('battle_record')||'0');
     const newBattle = Math.max(localBattle, Number(rem.battle_record||0));
     if (newBattle !== localBattle){
       localStorage.setItem('battle_record', String(newBattle));
     }
-    // withdraws J..X: беремо «як є»
+
+    // withdraws J..X: беремо «як є» з таблиці і малюємо
     if (Array.isArray(rem.withdraws)){
       serverWithdraws = rem.withdraws.slice(0,15);
       while (serverWithdraws.length < 15) serverWithdraws.push('0');
@@ -317,225 +325,124 @@ function getUserTag(){
   return "Гравець";
 }
 
-/* ===================== ВИВОДИ (J..X прив'язка до таблиці) ===================== */
-/* ПЕРЕД ВИКОРИСТАННЯМ:
-   1) у HTML мають бути елементи з id: "payoutList" (UL/OL) і "withdrawBtn" (кнопка)
-   2) глобально має бути задано:
-      window.CLOUD_URL = "https://script.google.com/macros/s/.../exec";
-      window.CLOUD_API_KEY = "YOUR_KEY";
-   3) бажано мати функції/змінні:
-      - addBalance(n)  // необов'язково; якщо є — списуємо 50⭐ локально
-      - WITHDRAW_CHUNK (за замовчуванням 50)
-*/
+/* ========= ВИВОДИ (глобально, прив’язка до J..X) ========= */
+function renderPayoutList(){
+  const ul = $("payoutList");
+  if (!ul) return;
 
-(() => {
-  const WITHDRAW_COUNT = 15;
-  const WITHDRAW_CHUNK = (typeof window.WITHDRAW_CHUNK === "number") ? window.WITHDRAW_CHUNK : 50;
+  ul.innerHTML = "";
+  const tag = getUserTag();
 
-  const CLOUD = {
-    url: (typeof window !== 'undefined' && window.CLOUD_URL) || '',
-    api: (typeof window !== 'undefined' && window.CLOUD_API_KEY) || '',
+  const arr = Array.isArray(serverWithdraws) ? serverWithdraws.slice(0, 15) : [];
+  while (arr.length < 15) arr.push('0');
+
+  for (let i=0; i<15; i++){
+    const timeText = formatWithdrawCell(arr[i]);
+    const li = document.createElement("li");
+    li.innerHTML = `№${i+1} — ${tag} — 🗓 ${timeText} — 💸 ${WITHDRAW_CHUNK}⭐`;
+    ul.appendChild(li);
+  }
+}
+
+async function submitWithdrawalToCloud15({ user_id, tag, username, amount, ts }) {
+  if (!CLOUD.url || !CLOUD.api) return { ok:false, error:"CLOUD_URL / CLOUD_API_KEY not set" };
+  const payload = {
+    api: CLOUD.api,
+    action: "withdraw",
+    user_id,
+    tg_tag: tag || "",
+    username: username || "",
+    amount: Number(amount) || 0,
+    ts // епоха (мс) або ISO — бек все одно збереже ISO
   };
-
-  let serverWithdraws = new Array(WITHDRAW_COUNT).fill('0');
-
-  /* ===== Helpers ===== */
-  const $ = (id) => document.getElementById(id);
-
-  function getTelegramUser(){
-    const u = (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user) || null;
-    if (!u) return { id:"", username:"", first_name:"", last_name:"" };
-    return { id:u.id||"", username:u.username||"", first_name:u.first_name||"", last_name:u.last_name||"" };
-  }
-  function makeTag(){
-    const u = getTelegramUser();
-    if (u.username) return '@' + u.username;
-    const name = [u.first_name||'', u.last_name||''].filter(Boolean).join(' ');
-    if (name) return name;
-    if (u.id) return 'id' + u.id;
-    return 'Guest';
-  }
-
-  function looksISO(s){ return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(s); }
-  function looksEpoch(s){ return /^\d{10,13}$/.test(String(s||'')); }
-  function formatWithdrawCell(val){
-    if (val==null || val==='0' || val==='') return '0';
-    const s = String(val);
-    try{
-      if (looksISO(s)) return new Date(s).toLocaleString();
-      if (looksEpoch(s)) {
-        const ms = s.length===13 ? Number(s) : Number(s)*1000;
-        return new Date(ms).toLocaleString();
-      }
-    }catch(_){}
-    return s; // будь-який довільний текст показуємо «як є»
-  }
-
-  function firstFreeWithdrawIndex(){
-    for (let i = 0; i < WITHDRAW_COUNT; i++){
-      if (!serverWithdraws[i] || String(serverWithdraws[i]) === '0') return i;
-    }
-    return -1;
-  }
-
-  /* ===== Рендер списку (строго те, що в J..X) ===== */
-  function renderPayoutList(){
-    const ul = $("payoutList");
-    if (!ul) return;
-    ul.innerHTML = "";
-    const tag = makeTag();
-    const arr = Array.isArray(serverWithdraws) ? serverWithdraws.slice(0, WITHDRAW_COUNT) : [];
-    while (arr.length < WITHDRAW_COUNT) arr.push('0');
-
-    for (let i=0; i<WITHDRAW_COUNT; i++){
-      const timeText = formatWithdrawCell(arr[i]);
-      const li = document.createElement("li");
-      li.innerHTML = `№${i+1} — ${tag} — 🗓 ${timeText} — 💸 ${WITHDRAW_CHUNK}⭐`;
-      ul.appendChild(li);
-    }
-  }
-
-  /* ===== Читання потрібного рядка з таблиці (за user_id або tg_tag) ===== */
-  async function fetchCloudRow(){
-    if (!CLOUD.url || !CLOUD.api) return null;
-    const u = getTelegramUser();
-    const uid = String(u.id || '').trim();
-    const tg  = makeTag();
-
-    const nocache = "&_=" + Date.now();
-    const qUid = uid ? `&user_id=${encodeURIComponent(uid)}` : '';
-    const qTag = `&tg_tag=${encodeURIComponent(tg)}`;
-    const url = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get${qUid}${qTag}${nocache}`;
-    const r = await fetch(url, { method:'GET', headers:{ 'accept': 'application/json' } });
-    if (!r.ok) return null;
-    const j = await r.json().catch(()=>null);
-    return (j && j.ok) ? (j.data || null) : null;
-  }
-
-  async function loadWithdrawsAndRender(){
-    try{
-      const rem = await fetchCloudRow();
-      if (rem && Array.isArray(rem.withdraws)){
-        serverWithdraws = rem.withdraws.slice(0, WITHDRAW_COUNT);
-        while (serverWithdraws.length < WITHDRAW_COUNT) serverWithdraws.push('0');
-        renderPayoutList();
-      } else {
-        // якщо користувача ще нема в таблиці — показуємо нулі
-        serverWithdraws = new Array(WITHDRAW_COUNT).fill('0');
-        renderPayoutList();
-      }
-    }catch(e){
-      console.warn('[withdraws] fetch failed', e);
-    }
-  }
-
-  /* ===== Запис у перший вільний Windraw N (POST → GAS) ===== */
-  async function submitWithdrawalToCloud15({ user_id, tag, username, amount, ts }) {
-    if (!CLOUD.url || !CLOUD.api) return { ok:false, error:"CLOUD_URL / CLOUD_API_KEY not set" };
-    const payload = {
-      api: CLOUD.api,
-      action: "withdraw",
-      user_id,
-      tg_tag: tag || "",
-      username: username || "",
-      amount: Number(amount) || 0,
-      ts // мс епохи або ISO — сервер сам перетворить у ISO
-    };
-    try{
-      const r = await fetch(String(CLOUD.url), {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(payload)
-      });
-      let j=null; try { j = await r.json(); } catch {}
-      if (r.ok && j && j.ok) {
-        return { ok:true, slot:(j.slot ?? null), ts:(j.ts ?? ts ?? null) };
-      }
-      return { ok:false, error: (j?.error || `HTTP ${r.status}`) };
-    } catch(e){
-      return { ok:false, error: String(e?.message || e) };
-    }
-  }
-
-  /* ===== Клік «Вивести» (оптімістичний апдейт + підтвердження із таблиці) ===== */
-  async function onWithdrawClick(){
-    const btn = $("withdrawBtn");
-    const statusEl = $("withdrawStatus"); // опційно: <div id="withdrawStatus"></div>
-
-    const idx = firstFreeWithdrawIndex();
-    if (idx < 0){
-      statusEl && (statusEl.className="err", statusEl.textContent="Немає вільних слотів для виводу");
-      return;
-    }
-
-    // якщо маєш власну перевірку балансу — зроби її тут; списання теж на твоїй стороні:
-    if (typeof addBalance === 'function') {
-      // лише якщо тобі треба списати локально — інакше прибери цей рядок
-      addBalance(-WITHDRAW_CHUNK);
-    }
-
-    btn && (btn.disabled = true);
-
-    const u = getTelegramUser();
-    const tag = u.username ? ("@"+u.username) : makeTag();
-    const id  = u.id || "";
-    const uname = u.username || [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
-
-    // Оптимістично показуємо епоху
-    const nowValue = String(Date.now());
-    const prev = serverWithdraws[idx];
-    serverWithdraws[idx] = nowValue;
-    renderPayoutList();
-    statusEl && (statusEl.className="ok", statusEl.textContent="Поставлено на вивід…");
-
-    // Надсилаємо у GAS
-    const res = await submitWithdrawalToCloud15({
-      user_id: id, tag, username: uname, amount: WITHDRAW_CHUNK, ts: nowValue
+  try{
+    const r = await fetch(String(CLOUD.url), {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload)
     });
-
-    if (res.ok){
-      // Підміняємо на точний ISO, який реально записано в J..X
-      if (typeof res.ts !== 'undefined') {
-        serverWithdraws[idx] = res.ts;
-        renderPayoutList();
-      }
-      // Дочитуємо весь рядок ще раз (щоб 100% було як у таблиці)
-      await loadWithdrawsAndRender();
-      statusEl && (statusEl.className="ok", statusEl.textContent="Вивід поставлено у чергу");
-    } else {
-      // Відкот локального оптімістичного апдейта
-      serverWithdraws[idx] = (prev ?? '0');
-      renderPayoutList();
-
-      // Якщо списував баланс — поверни його (за потреби)
-      if (typeof addBalance === 'function') addBalance(+WITHDRAW_CHUNK);
-
-      statusEl && (statusEl.className="err", statusEl.textContent="Помилка: "+(res.error||"невідома"));
+    let j=null; try { j = await r.json(); } catch {}
+    if (r.ok && j && j.ok) {
+      return { ok:true, slot:(j.slot ?? null), ts:(j.ts ?? ts ?? null) };
     }
+    return { ok:false, error: (j?.error || `HTTP ${r.status}`) };
+  } catch(e){
+    return { ok:false, error: String(e?.message || e) };
+  }
+}
 
-    btn && (btn.disabled = false);
+async function withdraw50LocalFirst(){
+  const statusEl = $("withdrawStatus");
+  const btn = $("withdrawBtn");
+
+  // Перевірка мінімуму і що НЕ підемо в мінус
+  if (!(balance >= WITHDRAW_CHUNK)) {
+    if (statusEl){ statusEl.className="err"; statusEl.textContent=`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`; }
+    return;
   }
 
-  /* ===== Ініціалізація лише для блоку виводів ===== */
-  function initWithdrawsBinding(){
-    renderPayoutList();       // відмальовуємо нулі на старті
-    loadWithdrawsAndRender(); // тягнемо реальні J..X
-
-    const btn = $("withdrawBtn");
-    if (btn) btn.addEventListener("click", onWithdrawClick);
-
-    // (опційно) легкий полінґ, щоб бачити апдейти з таблиці
-    // setInterval(loadWithdrawsAndRender, 15000);
+  const freeIdx = firstFreeWithdrawIndex();
+  if (freeIdx < 0){
+    if (statusEl){ statusEl.className="err"; statusEl.textContent="Немає вільних слотів для виводу"; }
+    return;
   }
 
-  // автозапуск, якщо DOM готовий
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initWithdrawsBinding);
+  btn && (btn.disabled = true);
+
+  const u = getTelegramUser();
+  const tag = u.username ? ("@"+u.username) : getUserTag();
+  const id  = u.id || "";
+  const uname = u.username || [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
+
+  // Оптимістично ставимо епоху у слот і списуємо ⭐ без мінусів
+  const nowValue = String(Date.now());
+  const prevValue = serverWithdraws[freeIdx];
+  serverWithdraws[freeIdx] = nowValue;
+  renderPayoutList();
+  if (statusEl){ statusEl.className="ok"; statusEl.textContent="Поставлено на вивід…"; }
+
+  const oldBalance = balance;
+  const newBalance = parseFloat((balance - WITHDRAW_CHUNK).toFixed(2));
+  if (newBalance < 0) {
+    serverWithdraws[freeIdx] = prevValue ?? '0';
+    renderPayoutList();
+    if (statusEl){ statusEl.className="err"; statusEl.textContent="Недостатньо ⭐"; }
+    btn && (btn.disabled=false);
+    return;
+  }
+  balance = newBalance;
+  setBalanceUI();
+  saveData();
+  CloudStore.queuePush({ balance });
+
+  // POST у GAS (таблицю)
+  const res = await submitWithdrawalToCloud15({
+    user_id: id, tag, username: uname, amount: WITHDRAW_CHUNK, ts: nowValue
+  });
+
+  if (res.ok){
+    if (typeof res.ts !== 'undefined') {
+      serverWithdraws[freeIdx] = res.ts; // точний ISO, що записався в таблиці
+      renderPayoutList();
+    }
+    try{
+      const rem = await CloudStore.getRemote();
+      if (rem) CloudStore.applyRemoteToState(rem);
+    }catch(_){}
+    if (statusEl){ statusEl.className="ok"; statusEl.textContent="Вивід поставлено у чергу"; }
   } else {
-    initWithdrawsBinding();
+    // rollback
+    serverWithdraws[freeIdx] = prevValue ?? '0';
+    renderPayoutList();
+    balance = oldBalance; setBalanceUI(); saveData();
+    if (statusEl){ statusEl.className="err"; statusEl.textContent = "Помилка: " + (res.error || "невідома"); }
   }
-})();
 
+  btn && (btn.disabled = false);
+}
+
+/* для сумісності зі старим кодом: зараз не використовується, але викликається таймером */
+function syncPendingWithdrawals(){ /* no-op */ }
 
 /* ========= ІНІЦІАЛІЗАЦІЯ ========= */
 let dailyUiTicker = null;
@@ -1207,6 +1114,7 @@ function updateHighscore(currentScore){
   }
   CloudStore.queuePush({ highscore, last_score: currentScore });
 }
+
 
 
 
