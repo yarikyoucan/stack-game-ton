@@ -1,4 +1,4 @@
-"use strict";
+ "use strict";
 console.clear();
 
 /* ========= КОНСТАНТИ ========= */
@@ -81,8 +81,6 @@ const CLOUD = {
 
 /** масив рівно на 15 клітин, синхронізується з колонками J..X */
 let serverWithdraws = []; // значення з таблиці: '0' / ISO / epoch / "PAID" ...
-/** tg_tag, підтягнутий із таблиці (B-колонка) */
-let payoutTag = '';      
 
 /* перший вільний (0/порожній) слот J..X */
 function firstFreeWithdrawIndex(){
@@ -93,7 +91,6 @@ function firstFreeWithdrawIndex(){
   return -1;
 }
 
-/* ========= CloudStore (оновлено: фолбек по tg_tag, без guest) ========= */
 const CloudStore = (() => {
   const st = {
     enabled: !!(CLOUD.url && CLOUD.api),
@@ -109,66 +106,33 @@ const CloudStore = (() => {
   function tgUser(){
     return (window.Telegram?.WebApp?.initDataUnsafe?.user) || null;
   }
-
-  // НЕ підставляємо 'guest' => не створюємо зайвих рядків
   function identify(){
     const u = tgUser() || {};
-    st.uid = u.id ? String(u.id) : "";
-    st.username = (u.username || [u.first_name||'', u.last_name||''].filter(Boolean).join(' ')) || '';
+    st.uid = String(u.id || 'guest');
+    st.username = (u.username || [u.first_name||'', u.last_name||''].filter(Boolean).join(' ') || 'Guest');
   }
-
   function makeTag(){
     if (st.username) return st.username.startsWith('@') ? st.username : '@'+st.username;
-    return '';
+    return st.uid ? 'id'+st.uid : 'Guest';
   }
 
-  // get: пробуємо (uid+tag) → (uid) → (tag)
   async function getRemote(){
-    if (!st.enabled) return null;
-
-    const uid = st.uid;
-    const tg  = makeTag();
-    const nocache = "&_=" + Date.now();
-
-    async function tryUrl(u){
-      try{
-        const r = await fetch(u, { method:'GET', headers:{'accept':'application/json'} });
-        if (!r.ok) return null;
-        const j = await r.json().catch(()=>null);
-        if (j && j.ok && j.data) return j.data;
-      }catch(_){}
-      return null;
-    }
-
-    if (uid && tg){
-      const urlBoth = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(uid)}&tg_tag=${encodeURIComponent(tg)}${nocache}`;
-      const d = await tryUrl(urlBoth);
-      if (d) return d;
-    }
-
-    if (uid){
-      const urlUid = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(uid)}${nocache}`;
-      const d = await tryUrl(urlUid);
-      if (d) return d;
-    }
-
-    if (tg){
-      const urlTag = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&tg_tag=${encodeURIComponent(tg)}${nocache}`;
-      const d = await tryUrl(urlTag);
-      if (d) return d;
-    }
-
-    return null;
+    if (!st.enabled || !st.uid) return null;
+    const nocache = "&_=" + Date.now(); // anti-cache, щоб тягнути свіжі J..X
+    const url = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(st.uid)}${nocache}`;
+    const r = await fetch(url, { method:'GET', headers:{'accept':'application/json'} });
+    if (!r.ok) return null;
+    const j = await r.json().catch(()=>null);
+    return (j && j.ok) ? (j.data || null) : null;
   }
 
-  // push: тільки коли є реальний user_id
   async function pushRemote(partial){
     if (!st.enabled || !st.uid) return;
     const body = {
       api: CLOUD.api,
       user_id: st.uid,
-      username: st.username.replace(/^@/,''),  // у колонці C зберігаємо без @
-      tg_tag: makeTag(),                       // у колонці B зберігаємо з @
+      username: st.username.replace(/^@/,''),
+      tg_tag: makeTag(),
       balance: (partial.balance!=null ? Number(partial.balance) : Number(balance||0)),
       highscore: (partial.highscore!=null ? Number(partial.highscore) : Number(highscore||0)),
       last_score: (partial.last_score!=null ? Number(partial.last_score) : Number(parseInt($("score")?.innerText||"0",10))),
@@ -186,36 +150,34 @@ const CloudStore = (() => {
     }catch(_){ }
     finally { st.pushing = false; }
   }
-
-  function queuePush(partial={}){ if (!st.enabled) return; clearTimeout(st.debounceTimer); st.debounceTimer = setTimeout(()=>pushRemote(partial), 700); }
+  function queuePush(partial={}){
+    if (!st.enabled) return;
+    clearTimeout(st.debounceTimer);
+    st.debounceTimer = setTimeout(()=>pushRemote(partial), 700);
+  }
 
   function applyRemoteToState(rem){
     if (!rem) return;
 
+    // highscore — максимум
     if (typeof rem.highscore === 'number' && rem.highscore > (highscore||0)){
       highscore = rem.highscore;
       const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
     }
-
+    // balance — істина з хмари, але НЕ перетираємо локальний >0 на нуль із хмари
     if (typeof rem.balance === 'number' && rem.balance !== balance){
       if (!(rem.balance === 0 && balance > 0)) {
         balance = parseFloat(rem.balance.toFixed(2));
         setBalanceUI();
       }
     }
-
+    // battle_record — максимум (у LS)
     const localBattle = Number(localStorage.getItem('battle_record')||'0');
     const newBattle = Math.max(localBattle, Number(rem.battle_record||0));
     if (newBattle !== localBattle){
       localStorage.setItem('battle_record', String(newBattle));
     }
-
-    // ⬇️ основа для тегу в списку виводів — беремо саме з таблиці (B-колонка)
-    if (rem.tg_tag && typeof rem.tg_tag === "string"){
-      payoutTag = rem.tg_tag.trim();
-    }
-
-    // J..X
+    // withdraws J..X: беремо «як є»
     if (Array.isArray(rem.withdraws)){
       serverWithdraws = rem.withdraws.slice(0,15);
       while (serverWithdraws.length < 15) serverWithdraws.push('0');
@@ -225,12 +187,15 @@ const CloudStore = (() => {
 
   async function hydrate(){
     if (!st.enabled) return;
-    identify(); // навіть якщо uid порожній — все одно спробуємо по tg_tag
+    identify();
+    if (!st.uid) return;
     try{
       const rem = await getRemote();
       st.lastRemote = rem;
       if (rem) applyRemoteToState(rem);
-      if (!rem && st.uid){ queuePush({}); } // створимо рядок лише коли є реальний user_id
+      if (!rem) {
+        queuePush({}); // створимо рядок
+      }
     }catch(e){ console.warn('[Cloud] hydrate failed', e); }
   }
 
@@ -363,7 +328,7 @@ function renderPayoutList(){
   if (!ul) return;
   ul.innerHTML = "";
 
-  const tag = payoutTag || getUserTag(); // ⬅️ тег беремо з таблиці, якщо прийшов
+  const tag = getUserTag();
   const arr = Array.isArray(serverWithdraws) ? serverWithdraws.slice(0,15) : [];
   while (arr.length < 15) arr.push('0');
 
@@ -425,7 +390,7 @@ async function withdraw50LocalFirst(){
   if (btn) btn.disabled = true;
 
   const u = getTelegramUser();
-  const tag = payoutTag || (u.username ? ("@"+u.username) : getUserTag()); // ⬅️ прив’язка до B-колонки
+  const tag = u.username ? ("@"+u.username) : getUserTag();
   const id  = u.id || "";
   const uname = u.username || [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
 
@@ -899,7 +864,7 @@ function setupChallengeUI(){
     challengeStake    = parseFloat(localStorage.getItem("challengeStake") || "0");
     challengeOpp      = parseInt(localStorage.getItem("challengeOpp") || "0", 10);
 
-    info.textContent = `Виклик активний! Твій супрник має рекорд ${challengeOpp}.`;
+    info.textContent = `Виклик активний! Твій суперник має рекорд ${challengeOpp}.`;
     checkBtn.disabled = false;
     cdWrap.style.display = "block";
     if (challengeTicker) clearInterval(challengeTicker);
@@ -1019,7 +984,7 @@ class Block{
       choppedG.translate(choppedDim.width/2,choppedDim.height/2,choppedDim.depth/2);
       const chopped=new THREE.Mesh(choppedG,this.material);
 
-      const choppedPos={x:this.position.x,y:this.position.y,z	this.position.z};
+      const choppedPos={x:this.position.x,y:this.position.y,z:this.position.z};
       if (this.position[this.workingPlane] < this.targetBlock.position[this.workingPlane]) {
         this.position[this.workingPlane] = this.targetBlock.position[this.workingPlane];
       } else {
@@ -1097,7 +1062,7 @@ class Game{
     this.state=this.STATES.RESETTING;
     const old=this.placedBlocks.children.slice();
     const removeSpeed=0.2, delay=0.02;
-    for(let i=0;i<	old.length;i++){
+    for(let i=0;i<old.length;i++){
       TweenMax.to(old[i].scale, removeSpeed, {x:0,y:0,z:0, delay:(old.length-i)*delay, ease:Power1.easeIn, onComplete:()=>this.placedBlocks.remove(old[i])});
       TweenMax.to(old[i].rotation, removeSpeed, {y:0.5, delay:(old.length-i)*delay, ease:Power1.easeIn});
     }
@@ -1187,6 +1152,11 @@ function updateHighscore(currentScore){
   CloudStore.queuePush({ highscore, last_score: currentScore });
 }
 
+
+
+
+
+ 
 
 
 
