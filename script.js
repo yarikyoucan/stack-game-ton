@@ -81,6 +81,7 @@ const CLOUD = {
 
 /** масив рівно на 15 клітин, синхронізується з колонками J..X */
 let serverWithdraws = []; // значення з таблиці: '0' / ISO / epoch / "PAID" ...
+let payoutTag = "";      // tg_tag з таблиці для підпису списку
 
 /* перший вільний (0/порожній) слот J..X */
 function firstFreeWithdrawIndex(){
@@ -116,14 +117,39 @@ const CloudStore = (() => {
     return st.uid ? 'id'+st.uid : 'Guest';
   }
 
+  // <-- ОНОВЛЕНО: тягнемо і по user_id, і по tg_tag
   async function getRemote(){
-    if (!st.enabled || !st.uid) return null;
-    const nocache = "&_=" + Date.now(); // anti-cache, щоб тягнути свіжі J..X
-    const url = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(st.uid)}${nocache}`;
-    const r = await fetch(url, { method:'GET', headers:{'accept':'application/json'} });
-    if (!r.ok) return null;
-    const j = await r.json().catch(()=>null);
-    return (j && j.ok) ? (j.data || null) : null;
+    if (!st.enabled) return null;
+
+    const u = tgUser() || {};
+    const uid = String(u.id || "").trim();
+    const tg  = makeTag();
+
+    const nocache = "&_=" + Date.now();
+    // 1) обидва
+    const urlBoth = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get${uid?`&user_id=${encodeURIComponent(uid)}`:""}&tg_tag=${encodeURIComponent(tg)}${nocache}`;
+    let r = await fetch(urlBoth, { method:'GET', headers:{'accept':'application/json'} }).catch(()=>null);
+    if (r && r.ok){
+      const j = await r.json().catch(()=>null);
+      if (j && j.ok && j.data) return j.data;
+    }
+    // 2) тільки uid
+    if (uid){
+      const urlUid = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(uid)}${nocache}`;
+      r = await fetch(urlUid, { method:'GET', headers:{'accept':'application/json'} }).catch(()=>null);
+      if (r && r.ok){
+        const j = await r.json().catch(()=>null);
+        if (j && j.ok && j.data) return j.data;
+      }
+    }
+    // 3) тільки tg_tag
+    const urlTag = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&tg_tag=${encodeURIComponent(tg)}${nocache}`;
+    r = await fetch(urlTag, { method:'GET', headers:{'accept':'application/json'} }).catch(()=>null);
+    if (r && r.ok){
+      const j = await r.json().catch(()=>null);
+      if (j && j.ok && j.data) return j.data;
+    }
+    return null;
   }
 
   async function pushRemote(partial){
@@ -164,7 +190,7 @@ const CloudStore = (() => {
       highscore = rem.highscore;
       const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
     }
-    // balance — істина з хмари, але НЕ перетираємо локальний >0 на нуль із хмари
+    // balance — істина з хмари, але не перетираємо локальний > 0 на нуль із хмари
     if (typeof rem.balance === 'number' && rem.balance !== balance){
       if (!(rem.balance === 0 && balance > 0)) {
         balance = parseFloat(rem.balance.toFixed(2));
@@ -177,6 +203,12 @@ const CloudStore = (() => {
     if (newBattle !== localBattle){
       localStorage.setItem('battle_record', String(newBattle));
     }
+
+    // <-- НОВЕ: tg_tag із таблиці — зберігаємо для підпису списку
+    if (rem.tg_tag && typeof rem.tg_tag === "string" && rem.tg_tag.trim()){
+      payoutTag = rem.tg_tag.trim();
+    }
+
     // withdraws J..X: беремо «як є»
     if (Array.isArray(rem.withdraws)){
       serverWithdraws = rem.withdraws.slice(0,15);
@@ -328,7 +360,7 @@ function renderPayoutList(){
   if (!ul) return;
   ul.innerHTML = "";
 
-  const tag = getUserTag();
+  const tag = payoutTag || getUserTag(); // підпис беремо з таблиці (якщо вже прийшов)
   const arr = Array.isArray(serverWithdraws) ? serverWithdraws.slice(0,15) : [];
   while (arr.length < 15) arr.push('0');
 
@@ -350,7 +382,7 @@ async function submitWithdrawalToCloud15({ user_id, tag, username, amount, ts })
     tg_tag: tag || "",
     username: username || "",
     amount: Number(amount) || 0,
-    ts // передаємо як є (епоха/ISO) — бек переведе у ISO
+    ts // епоха/ISO — бек сам переведе у ISO
   };
   try{
     const r = await fetch(String(CLOUD.url), {
@@ -369,12 +401,12 @@ async function submitWithdrawalToCloud15({ user_id, tag, username, amount, ts })
   }
 }
 
-/** Клік «Вивести»: оптимістичний апдейт + підтвердження із таблиці; без мінуса балансу */
+/** Клік «Вивести»: оптимістичний апдейт + підтвердження із таблиці; баланс не йде в мінус */
 async function withdraw50LocalFirst(){
   const statusEl = $("withdrawStatus");
   const btn = $("withdrawBtn");
 
-  if (btn && btn.disabled) return; // анти-даблклік
+  if (btn && btn.disabled) return;
 
   if (balance < WITHDRAW_CHUNK) {
     if (statusEl){ statusEl.className="err"; statusEl.textContent=`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`; }
@@ -394,40 +426,35 @@ async function withdraw50LocalFirst(){
   const id  = u.id || "";
   const uname = u.username || [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
 
-  // значення часу, що ставимо у візуал (епоха, мс)
+  // оптимістично — ставимо епоху в ms
   const nowValue = String(Date.now());
 
-  // 1) оптимістично оновлюємо візуал списку виводів
   const prevValue = serverWithdraws[freeIdx];
   serverWithdraws[freeIdx] = nowValue;
   renderPayoutList();
   if (statusEl){ statusEl.className="ok"; statusEl.textContent="Поставлено на вивід…"; }
 
-  // 2) списуємо баланс з запобіжником
+  // списання з гарантією ≥ 0
   const oldBalance = balance;
   balance = parseFloat((balance - WITHDRAW_CHUNK).toFixed(2));
   if (balance < 0) balance = 0;
   setBalanceUI(); saveData();
 
-  // 3) надсилаємо у GAS
   const res = await submitWithdrawalToCloud15({
     user_id: id, tag, username: uname, amount: WITHDRAW_CHUNK, ts: nowValue
   });
 
   if (res.ok){
-    // підміняємо на точний ISO, який реально записано в J..X
     if (typeof res.ts !== 'undefined') {
       serverWithdraws[freeIdx] = res.ts;
       renderPayoutList();
     }
-    // дочитуємо увесь рядок ще раз (щоб 100% було як у таблиці)
     try{
       const rem = await CloudStore.getRemote();
       if (rem) CloudStore.applyRemoteToState(rem);
     }catch(_){}
     if (statusEl){ statusEl.className="ok"; statusEl.textContent="Вивід поставлено у чергу"; }
   } else {
-    // ❌ фейл: відкот і UI, і баланс
     serverWithdraws[freeIdx] = prevValue ?? '0';
     renderPayoutList();
     balance = oldBalance; setBalanceUI(); saveData();
@@ -437,7 +464,7 @@ async function withdraw50LocalFirst(){
   if (btn) btn.disabled = false;
 }
 
-/* ========= СИНК ОЧІКУЮЧИХ (залишено, якщо використаєш офлайн-чергу) ========= */
+/* ========= СИНК ОЧІКУЮЧИХ (опційно) ========= */
 function readPendingWithdrawals(){
   try{
     const arr = JSON.parse(localStorage.getItem("payouts_pending") || "[]");
@@ -508,8 +535,9 @@ window.onload = function(){
   const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
   updateGamesTaskUI();
 
-  // показуємо 15 слотів (поки що '0'), доки не прийде хмара
+  // стартовий рендер — поки не прийшов рядок із таблиці
   serverWithdraws = new Array(15).fill('0');
+  payoutTag = getUserTag();
   renderPayoutList();
 
   const subBtn = $("subscribeBtn");
@@ -973,7 +1001,7 @@ class Block{
       this.dimension.width=this.targetBlock.dimension.width; this.dimension.depth=this.targetBlock.dimension.depth;
     }
     if (overlap>0){
-      const choppedDim={width:this.dimension.width,height:this.dimension.height,depth:this.dimension.depth};
+      const choppedDim={width:this.dimension.width,height=this.dimension.height,depth=this.dimension.depth};
       choppedDim[this.workingDimension]-=overlap; this.dimension[this.workingDimension]=overlap;
 
       const placedG=new THREE.BoxGeometry(this.dimension.width,this.dimension.height,this.dimension.depth);
@@ -984,7 +1012,7 @@ class Block{
       choppedG.translate(choppedDim.width/2,choppedDim.height/2,choppedDim.depth/2);
       const chopped=new THREE.Mesh(choppedG,this.material);
 
-      const choppedPos={x:this.position.x,y:this.position.y,z:this.position.z};
+      const choppedPos={x:this.position.x,y:this.position.y,z=this.position.z};
       if (this.position[this.workingPlane] < this.targetBlock.position[this.workingPlane]) {
         this.position[this.workingPlane] = this.targetBlock.position[this.workingPlane];
       } else {
@@ -1151,6 +1179,7 @@ function updateHighscore(currentScore){
   }
   CloudStore.queuePush({ highscore, last_score: currentScore });
 }
+
 
 
 
