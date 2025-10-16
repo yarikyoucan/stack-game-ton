@@ -57,6 +57,22 @@ function isoToLocal(iso){
   try{ return new Date(iso).toLocaleString(); }catch{ return String(iso||""); }
 }
 
+/* === формат часу у списку виводів (прив’язка до таблиці) === */
+function looksISO(s){ return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(s); }
+function looksEpoch(s){ return /^\d{10,13}$/.test(String(s||'')); }
+function formatWithdrawCell(val){
+  if (val==null || val==='0' || val==='') return '0';
+  const s = String(val);
+  try{
+    if (looksISO(s)) return new Date(s).toLocaleString();
+    if (looksEpoch(s)) {
+      const ms = s.length===13 ? Number(s) : Number(s)*1000;
+      return new Date(ms).toLocaleString();
+    }
+  }catch(_){}
+  return s; // текст типу "PAID" показуємо як є
+}
+
 /* ========= ХМАРА ========= */
 const CLOUD = {
   url: (typeof window !== 'undefined' && window.CLOUD_URL) || '',
@@ -101,7 +117,8 @@ const CloudStore = (() => {
 
   async function getRemote(){
     if (!st.enabled || !st.uid) return null;
-    const url = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(st.uid)}`;
+    const nocache = "&_=" + Date.now(); // anti-cache, щоб тягнути свіжі J..X
+    const url = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(st.uid)}${nocache}`;
     const r = await fetch(url, { method:'GET', headers:{'accept':'application/json'} });
     if (!r.ok) return null;
     const j = await r.json().catch(()=>null);
@@ -348,7 +365,7 @@ async function submitWithdrawalToCloud15({ user_id, tag, username, amount, ts })
   }
 }
 
-/* Рендер 15 слотів (сирі значення з таблиці) */
+/* Рендер 15 слотів (значення — саме з таблиці) */
 function renderPayoutList(){
   const ul = $("payoutList");
   if (!ul) return;
@@ -360,7 +377,7 @@ function renderPayoutList(){
 
   for (let i=0; i<15; i++){
     const cell = arr[i];
-    const timeText = (cell==null || cell==='') ? '0' : String(cell); // показуємо як є
+    const timeText = formatWithdrawCell(cell);
     const li = document.createElement("li");
     li.innerHTML = `№${i+1} — ${tag} — 🗓 ${timeText} — 💸 ${WITHDRAW_CHUNK}⭐`;
     ul.appendChild(li);
@@ -390,16 +407,14 @@ async function withdraw50LocalFirst(){
   const id  = u.id || "";
   const uname = u.username || [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
 
-  // значення часу, що ставимо у візуал і в таблицю (тут — мс епохи)
+  // ставимо оптимістично локально час (епоха)
   const nowValue = String(Date.now());
-
-  // оптимістично оновлюємо візуал списку виводів
   const prevValue = serverWithdraws[freeIdx];
   serverWithdraws[freeIdx] = nowValue;
   renderPayoutList();
   if (statusEl){ statusEl.className="ok"; statusEl.textContent="Поставлено на вивід"; }
 
-  // списуємо баланс (на фейл — повернемо)
+  // списуємо баланс (на фейл — відкотимо)
   const oldBalance = balance;
   addBalance(-WITHDRAW_CHUNK);
 
@@ -409,6 +424,11 @@ async function withdraw50LocalFirst(){
   });
 
   if (res.ok){
+    // одразу підміняємо локально на ISO з сервера, щоб UI == таблиця
+    if (typeof res.ts !== 'undefined' && freeIdx >= 0){
+      serverWithdraws[freeIdx] = res.ts;
+      renderPayoutList();
+    }
     try{
       const rem = await CloudStore.getRemote();
       if (rem) CloudStore.applyRemoteToState(rem);
@@ -600,7 +620,7 @@ function startDailyPlusTicker(){
 function updateDailyUI(){
   ensureDailyReset();
   const lsGram = parseInt(localStorage.getItem('dailyGramCount') || '0', 10);
-  const lsEx   = parseInt(localStorage.getItem('dailyExCount')   || '0', 10);
+  const lsEx   = parseInt(localStorage.getItem('dailyExCount') || '0', 10);
   if (lsGram !== gramCount) gramCount = lsGram;
   if (lsEx   !== exCount)   exCount   = lsEx;
 
@@ -1125,7 +1145,6 @@ function updateHighscore(currentScore){
   }
   CloudStore.queuePush({ highscore, last_score: currentScore });
 }
-
 
 
 
