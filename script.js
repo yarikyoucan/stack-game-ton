@@ -81,7 +81,8 @@ const CLOUD = {
 
 /** масив рівно на 15 клітин, синхронізується з колонками J..X */
 let serverWithdraws = []; // значення з таблиці: '0' / ISO / epoch / "PAID" ...
-let payoutTag = "";      // tg_tag з таблиці для підпису списку
+/** tg_tag, підтягнутий із таблиці (B-колонка) */
+let payoutTag = '';      
 
 /* перший вільний (0/порожній) слот J..X */
 function firstFreeWithdrawIndex(){
@@ -92,6 +93,7 @@ function firstFreeWithdrawIndex(){
   return -1;
 }
 
+/* ========= CloudStore (оновлено: фолбек по tg_tag, без guest) ========= */
 const CloudStore = (() => {
   const st = {
     enabled: !!(CLOUD.url && CLOUD.api),
@@ -107,58 +109,66 @@ const CloudStore = (() => {
   function tgUser(){
     return (window.Telegram?.WebApp?.initDataUnsafe?.user) || null;
   }
+
+  // НЕ підставляємо 'guest' => не створюємо зайвих рядків
   function identify(){
     const u = tgUser() || {};
-    st.uid = String(u.id || 'guest');
-    st.username = (u.username || [u.first_name||'', u.last_name||''].filter(Boolean).join(' ') || 'Guest');
-  }
-  function makeTag(){
-    if (st.username) return st.username.startsWith('@') ? st.username : '@'+st.username;
-    return st.uid ? 'id'+st.uid : 'Guest';
+    st.uid = u.id ? String(u.id) : "";
+    st.username = (u.username || [u.first_name||'', u.last_name||''].filter(Boolean).join(' ')) || '';
   }
 
-  // <-- ОНОВЛЕНО: тягнемо і по user_id, і по tg_tag
+  function makeTag(){
+    if (st.username) return st.username.startsWith('@') ? st.username : '@'+st.username;
+    return '';
+  }
+
+  // get: пробуємо (uid+tag) → (uid) → (tag)
   async function getRemote(){
     if (!st.enabled) return null;
 
-    const u = tgUser() || {};
-    const uid = String(u.id || "").trim();
+    const uid = st.uid;
     const tg  = makeTag();
-
     const nocache = "&_=" + Date.now();
-    // 1) обидва
-    const urlBoth = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get${uid?`&user_id=${encodeURIComponent(uid)}`:""}&tg_tag=${encodeURIComponent(tg)}${nocache}`;
-    let r = await fetch(urlBoth, { method:'GET', headers:{'accept':'application/json'} }).catch(()=>null);
-    if (r && r.ok){
-      const j = await r.json().catch(()=>null);
-      if (j && j.ok && j.data) return j.data;
-    }
-    // 2) тільки uid
-    if (uid){
-      const urlUid = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(uid)}${nocache}`;
-      r = await fetch(urlUid, { method:'GET', headers:{'accept':'application/json'} }).catch(()=>null);
-      if (r && r.ok){
+
+    async function tryUrl(u){
+      try{
+        const r = await fetch(u, { method:'GET', headers:{'accept':'application/json'} });
+        if (!r.ok) return null;
         const j = await r.json().catch(()=>null);
         if (j && j.ok && j.data) return j.data;
-      }
+      }catch(_){}
+      return null;
     }
-    // 3) тільки tg_tag
-    const urlTag = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&tg_tag=${encodeURIComponent(tg)}${nocache}`;
-    r = await fetch(urlTag, { method:'GET', headers:{'accept':'application/json'} }).catch(()=>null);
-    if (r && r.ok){
-      const j = await r.json().catch(()=>null);
-      if (j && j.ok && j.data) return j.data;
+
+    if (uid && tg){
+      const urlBoth = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(uid)}&tg_tag=${encodeURIComponent(tg)}${nocache}`;
+      const d = await tryUrl(urlBoth);
+      if (d) return d;
     }
+
+    if (uid){
+      const urlUid = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(uid)}${nocache}`;
+      const d = await tryUrl(urlUid);
+      if (d) return d;
+    }
+
+    if (tg){
+      const urlTag = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&tg_tag=${encodeURIComponent(tg)}${nocache}`;
+      const d = await tryUrl(urlTag);
+      if (d) return d;
+    }
+
     return null;
   }
 
+  // push: тільки коли є реальний user_id
   async function pushRemote(partial){
     if (!st.enabled || !st.uid) return;
     const body = {
       api: CLOUD.api,
       user_id: st.uid,
-      username: st.username.replace(/^@/,''),
-      tg_tag: makeTag(),
+      username: st.username.replace(/^@/,''),  // у колонці C зберігаємо без @
+      tg_tag: makeTag(),                       // у колонці B зберігаємо з @
       balance: (partial.balance!=null ? Number(partial.balance) : Number(balance||0)),
       highscore: (partial.highscore!=null ? Number(partial.highscore) : Number(highscore||0)),
       last_score: (partial.last_score!=null ? Number(partial.last_score) : Number(parseInt($("score")?.innerText||"0",10))),
@@ -176,40 +186,36 @@ const CloudStore = (() => {
     }catch(_){ }
     finally { st.pushing = false; }
   }
-  function queuePush(partial={}){
-    if (!st.enabled) return;
-    clearTimeout(st.debounceTimer);
-    st.debounceTimer = setTimeout(()=>pushRemote(partial), 700);
-  }
+
+  function queuePush(partial={}){ if (!st.enabled) return; clearTimeout(st.debounceTimer); st.debounceTimer = setTimeout(()=>pushRemote(partial), 700); }
 
   function applyRemoteToState(rem){
     if (!rem) return;
 
-    // highscore — максимум
     if (typeof rem.highscore === 'number' && rem.highscore > (highscore||0)){
       highscore = rem.highscore;
       const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
     }
-    // balance — істина з хмари, але не перетираємо локальний > 0 на нуль із хмари
+
     if (typeof rem.balance === 'number' && rem.balance !== balance){
       if (!(rem.balance === 0 && balance > 0)) {
         balance = parseFloat(rem.balance.toFixed(2));
         setBalanceUI();
       }
     }
-    // battle_record — максимум (у LS)
+
     const localBattle = Number(localStorage.getItem('battle_record')||'0');
     const newBattle = Math.max(localBattle, Number(rem.battle_record||0));
     if (newBattle !== localBattle){
       localStorage.setItem('battle_record', String(newBattle));
     }
 
-    // <-- НОВЕ: tg_tag із таблиці — зберігаємо для підпису списку
-    if (rem.tg_tag && typeof rem.tg_tag === "string" && rem.tg_tag.trim()){
+    // ⬇️ основа для тегу в списку виводів — беремо саме з таблиці (B-колонка)
+    if (rem.tg_tag && typeof rem.tg_tag === "string"){
       payoutTag = rem.tg_tag.trim();
     }
 
-    // withdraws J..X: беремо «як є»
+    // J..X
     if (Array.isArray(rem.withdraws)){
       serverWithdraws = rem.withdraws.slice(0,15);
       while (serverWithdraws.length < 15) serverWithdraws.push('0');
@@ -219,15 +225,12 @@ const CloudStore = (() => {
 
   async function hydrate(){
     if (!st.enabled) return;
-    identify();
-    if (!st.uid) return;
+    identify(); // навіть якщо uid порожній — все одно спробуємо по tg_tag
     try{
       const rem = await getRemote();
       st.lastRemote = rem;
       if (rem) applyRemoteToState(rem);
-      if (!rem) {
-        queuePush({}); // створимо рядок
-      }
+      if (!rem && st.uid){ queuePush({}); } // створимо рядок лише коли є реальний user_id
     }catch(e){ console.warn('[Cloud] hydrate failed', e); }
   }
 
@@ -360,7 +363,7 @@ function renderPayoutList(){
   if (!ul) return;
   ul.innerHTML = "";
 
-  const tag = payoutTag || getUserTag(); // підпис беремо з таблиці (якщо вже прийшов)
+  const tag = payoutTag || getUserTag(); // ⬅️ тег беремо з таблиці, якщо прийшов
   const arr = Array.isArray(serverWithdraws) ? serverWithdraws.slice(0,15) : [];
   while (arr.length < 15) arr.push('0');
 
@@ -382,7 +385,7 @@ async function submitWithdrawalToCloud15({ user_id, tag, username, amount, ts })
     tg_tag: tag || "",
     username: username || "",
     amount: Number(amount) || 0,
-    ts // епоха/ISO — бек сам переведе у ISO
+    ts // передаємо як є (епоха/ISO) — бек переведе у ISO
   };
   try{
     const r = await fetch(String(CLOUD.url), {
@@ -401,12 +404,12 @@ async function submitWithdrawalToCloud15({ user_id, tag, username, amount, ts })
   }
 }
 
-/** Клік «Вивести»: оптимістичний апдейт + підтвердження із таблиці; баланс не йде в мінус */
+/** Клік «Вивести»: оптимістичний апдейт + підтвердження із таблиці; без мінуса балансу */
 async function withdraw50LocalFirst(){
   const statusEl = $("withdrawStatus");
   const btn = $("withdrawBtn");
 
-  if (btn && btn.disabled) return;
+  if (btn && btn.disabled) return; // анти-даблклік
 
   if (balance < WITHDRAW_CHUNK) {
     if (statusEl){ statusEl.className="err"; statusEl.textContent=`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`; }
@@ -422,39 +425,44 @@ async function withdraw50LocalFirst(){
   if (btn) btn.disabled = true;
 
   const u = getTelegramUser();
-  const tag = u.username ? ("@"+u.username) : getUserTag();
+  const tag = payoutTag || (u.username ? ("@"+u.username) : getUserTag()); // ⬅️ прив’язка до B-колонки
   const id  = u.id || "";
   const uname = u.username || [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
 
-  // оптимістично — ставимо епоху в ms
+  // значення часу, що ставимо у візуал (епоха, мс)
   const nowValue = String(Date.now());
 
+  // 1) оптимістично оновлюємо візуал списку виводів
   const prevValue = serverWithdraws[freeIdx];
   serverWithdraws[freeIdx] = nowValue;
   renderPayoutList();
   if (statusEl){ statusEl.className="ok"; statusEl.textContent="Поставлено на вивід…"; }
 
-  // списання з гарантією ≥ 0
+  // 2) списуємо баланс з запобіжником
   const oldBalance = balance;
   balance = parseFloat((balance - WITHDRAW_CHUNK).toFixed(2));
   if (balance < 0) balance = 0;
   setBalanceUI(); saveData();
 
+  // 3) надсилаємо у GAS
   const res = await submitWithdrawalToCloud15({
     user_id: id, tag, username: uname, amount: WITHDRAW_CHUNK, ts: nowValue
   });
 
   if (res.ok){
+    // підміняємо на точний ISO, який реально записано в J..X
     if (typeof res.ts !== 'undefined') {
       serverWithdraws[freeIdx] = res.ts;
       renderPayoutList();
     }
+    // дочитуємо увесь рядок ще раз (щоб 100% було як у таблиці)
     try{
       const rem = await CloudStore.getRemote();
       if (rem) CloudStore.applyRemoteToState(rem);
     }catch(_){}
     if (statusEl){ statusEl.className="ok"; statusEl.textContent="Вивід поставлено у чергу"; }
   } else {
+    // ❌ фейл: відкот і UI, і баланс
     serverWithdraws[freeIdx] = prevValue ?? '0';
     renderPayoutList();
     balance = oldBalance; setBalanceUI(); saveData();
@@ -464,7 +472,7 @@ async function withdraw50LocalFirst(){
   if (btn) btn.disabled = false;
 }
 
-/* ========= СИНК ОЧІКУЮЧИХ (опційно) ========= */
+/* ========= СИНК ОЧІКУЮЧИХ (залишено, якщо використаєш офлайн-чергу) ========= */
 function readPendingWithdrawals(){
   try{
     const arr = JSON.parse(localStorage.getItem("payouts_pending") || "[]");
@@ -535,9 +543,8 @@ window.onload = function(){
   const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
   updateGamesTaskUI();
 
-  // стартовий рендер — поки не прийшов рядок із таблиці
+  // показуємо 15 слотів (поки що '0'), доки не прийде хмара
   serverWithdraws = new Array(15).fill('0');
-  payoutTag = getUserTag();
   renderPayoutList();
 
   const subBtn = $("subscribeBtn");
@@ -892,7 +899,7 @@ function setupChallengeUI(){
     challengeStake    = parseFloat(localStorage.getItem("challengeStake") || "0");
     challengeOpp      = parseInt(localStorage.getItem("challengeOpp") || "0", 10);
 
-    info.textContent = `Виклик активний! Твій суперник має рекорд ${challengeOpp}.`;
+    info.textContent = `Виклик активний! Твій супрник має рекорд ${challengeOpp}.`;
     checkBtn.disabled = false;
     cdWrap.style.display = "block";
     if (challengeTicker) clearInterval(challengeTicker);
@@ -1001,7 +1008,7 @@ class Block{
       this.dimension.width=this.targetBlock.dimension.width; this.dimension.depth=this.targetBlock.dimension.depth;
     }
     if (overlap>0){
-      const choppedDim={width:this.dimension.width,height=this.dimension.height,depth=this.dimension.depth};
+      const choppedDim={width:this.dimension.width,height:this.dimension.height,depth:this.dimension.depth};
       choppedDim[this.workingDimension]-=overlap; this.dimension[this.workingDimension]=overlap;
 
       const placedG=new THREE.BoxGeometry(this.dimension.width,this.dimension.height,this.dimension.depth);
@@ -1012,7 +1019,7 @@ class Block{
       choppedG.translate(choppedDim.width/2,choppedDim.height/2,choppedDim.depth/2);
       const chopped=new THREE.Mesh(choppedG,this.material);
 
-      const choppedPos={x:this.position.x,y:this.position.y,z=this.position.z};
+      const choppedPos={x:this.position.x,y:this.position.y,z	this.position.z};
       if (this.position[this.workingPlane] < this.targetBlock.position[this.workingPlane]) {
         this.position[this.workingPlane] = this.targetBlock.position[this.workingPlane];
       } else {
@@ -1090,7 +1097,7 @@ class Game{
     this.state=this.STATES.RESETTING;
     const old=this.placedBlocks.children.slice();
     const removeSpeed=0.2, delay=0.02;
-    for(let i=0;i<old.length;i++){
+    for(let i=0;i<	old.length;i++){
       TweenMax.to(old[i].scale, removeSpeed, {x:0,y:0,z:0, delay:(old.length-i)*delay, ease:Power1.easeIn, onComplete:()=>this.placedBlocks.remove(old[i])});
       TweenMax.to(old[i].rotation, removeSpeed, {y:0.5, delay:(old.length-i)*delay, ease:Power1.easeIn});
     }
