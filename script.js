@@ -1,4 +1,4 @@
- "use strict";
+"use strict";
 console.clear();
 
 /* ========= КОНСТАНТИ ========= */
@@ -53,25 +53,6 @@ function formatHMS(ms){
   const ss = s%60;
   return (hh>0 ? String(hh).padStart(2,'0')+":" : "") + String(mm).padStart(2,'0')+":"+String(ss).padStart(2,'0');
 }
-function isoToLocal(iso){
-  try{ return new Date(iso).toLocaleString(); }catch{ return String(iso||""); }
-}
-
-/* === формат часу у списку виводів (прив’язка до таблиці) === */
-function looksISO(s){ return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(s); }
-function looksEpoch(s){ return /^\d{10,13}$/.test(String(s||'')); }
-function formatWithdrawCell(val){
-  if (val==null || val==='0' || val==='') return '0';
-  const s = String(val);
-  try{
-    if (looksISO(s)) return new Date(s).toLocaleString();
-    if (looksEpoch(s)) {
-      const ms = s.length===13 ? Number(s) : Number(s)*1000;
-      return new Date(ms).toLocaleString();
-    }
-  }catch(_){}
-  return s; // довільний текст типу "PAID" показуємо як є
-}
 
 /* ========= ХМАРА ========= */
 const CLOUD = {
@@ -79,8 +60,10 @@ const CLOUD = {
   api: (typeof window !== 'undefined' && window.CLOUD_API_KEY) || '',
 };
 
-/** масив рівно на 15 клітин, синхронізується з колонками J..X */
-let serverWithdraws = []; // значення з таблиці: '0' / ISO / epoch / "PAID" ...
+/** масив на 15 клітин (J..X): '0','50',... */
+let serverWithdraws = [];
+/** tg_tag, який показуємо поруч зі списком виводів */
+let payoutTag = '';
 
 /* перший вільний (0/порожній) слот J..X */
 function firstFreeWithdrawIndex(){
@@ -91,6 +74,7 @@ function firstFreeWithdrawIndex(){
   return -1;
 }
 
+/* ========= CloudStore ========= */
 const CloudStore = (() => {
   const st = {
     enabled: !!(CLOUD.url && CLOUD.api),
@@ -108,31 +92,54 @@ const CloudStore = (() => {
   }
   function identify(){
     const u = tgUser() || {};
-    st.uid = String(u.id || 'guest');
-    st.username = (u.username || [u.first_name||'', u.last_name||''].filter(Boolean).join(' ') || 'Guest');
+    st.uid = u?.id ? String(u.id) : ""; // працюємо з uid, якщо є
+    st.username = (u?.username || [u?.first_name||'', u?.last_name||''].filter(Boolean).join(' ')) || '';
   }
   function makeTag(){
     if (st.username) return st.username.startsWith('@') ? st.username : '@'+st.username;
-    return st.uid ? 'id'+st.uid : 'Guest';
+    return '';
   }
 
   async function getRemote(){
-    if (!st.enabled || !st.uid) return null;
-    const nocache = "&_=" + Date.now(); // anti-cache, щоб тягнути свіжі J..X
-    const url = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(st.uid)}${nocache}`;
-    const r = await fetch(url, { method:'GET', headers:{'accept':'application/json'} });
-    if (!r.ok) return null;
-    const j = await r.json().catch(()=>null);
-    return (j && j.ok) ? (j.data || null) : null;
+    if (!st.enabled) return null;
+
+    const uid = st.uid;
+    const tg  = makeTag();
+    const nocache = "&_=" + Date.now();
+
+    async function tryUrl(u){
+      try{
+        const r = await fetch(u, { method:'GET', headers:{'accept':'application/json'} });
+        if (!r.ok) return null;
+        const j = await r.json().catch(()=>null);
+        if (j && j.ok && j.data) return j.data;
+      }catch(_){}
+      return null;
+    }
+
+    // 1) спроба з uid+tg, 2) з uid, 3) з tg
+    if (uid && tg){
+      const urlBoth = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(uid)}&tg_tag=${encodeURIComponent(tg)}${nocache}`;
+      const d = await tryUrl(urlBoth); if (d) return d;
+    }
+    if (uid){
+      const urlUid = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(uid)}${nocache}`;
+      const d = await tryUrl(urlUid); if (d) return d;
+    }
+    if (tg){
+      const urlTag = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&tg_tag=${encodeURIComponent(tg)}${nocache}`;
+      const d = await tryUrl(urlTag); if (d) return d;
+    }
+    return null;
   }
 
   async function pushRemote(partial){
-    if (!st.enabled || !st.uid) return;
+    if (!st.enabled || (!st.uid && !makeTag())) return;
     const body = {
       api: CLOUD.api,
-      user_id: st.uid,
+      user_id: st.uid || undefined,
       username: st.username.replace(/^@/,''),
-      tg_tag: makeTag(),
+      tg_tag: makeTag() || undefined,
       balance: (partial.balance!=null ? Number(partial.balance) : Number(balance||0)),
       highscore: (partial.highscore!=null ? Number(partial.highscore) : Number(highscore||0)),
       last_score: (partial.last_score!=null ? Number(partial.last_score) : Number(parseInt($("score")?.innerText||"0",10))),
@@ -150,36 +157,29 @@ const CloudStore = (() => {
     }catch(_){ }
     finally { st.pushing = false; }
   }
-  function queuePush(partial={}){
-    if (!st.enabled) return;
-    clearTimeout(st.debounceTimer);
-    st.debounceTimer = setTimeout(()=>pushRemote(partial), 700);
-  }
+  function queuePush(partial={}){ if (!st.enabled) return; clearTimeout(st.debounceTimer); st.debounceTimer=setTimeout(()=>pushRemote(partial),700); }
 
   function applyRemoteToState(rem){
     if (!rem) return;
 
-    // highscore — максимум
     if (typeof rem.highscore === 'number' && rem.highscore > (highscore||0)){
       highscore = rem.highscore;
       const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
     }
-    // balance — істина з хмари, але НЕ перетираємо локальний >0 на нуль із хмари
     if (typeof rem.balance === 'number' && rem.balance !== balance){
       if (!(rem.balance === 0 && balance > 0)) {
         balance = parseFloat(rem.balance.toFixed(2));
         setBalanceUI();
       }
     }
-    // battle_record — максимум (у LS)
     const localBattle = Number(localStorage.getItem('battle_record')||'0');
     const newBattle = Math.max(localBattle, Number(rem.battle_record||0));
-    if (newBattle !== localBattle){
-      localStorage.setItem('battle_record', String(newBattle));
-    }
-    // withdraws J..X: беремо «як є»
+    if (newBattle !== localBattle){ localStorage.setItem('battle_record', String(newBattle)); }
+
+    if (rem.tg_tag && typeof rem.tg_tag === "string") payoutTag = rem.tg_tag.trim();
+
     if (Array.isArray(rem.withdraws)){
-      serverWithdraws = rem.withdraws.slice(0,15);
+      serverWithdraws = rem.withdraws.slice(0,15).map(x => (x==null||x==='')?'0':String(x));
       while (serverWithdraws.length < 15) serverWithdraws.push('0');
       renderPayoutList();
     }
@@ -188,36 +188,26 @@ const CloudStore = (() => {
   async function hydrate(){
     if (!st.enabled) return;
     identify();
-    if (!st.uid) return;
     try{
       const rem = await getRemote();
       st.lastRemote = rem;
       if (rem) applyRemoteToState(rem);
-      if (!rem) {
-        queuePush({}); // створимо рядок
-      }
+      // якщо реду ще нема — створимо рядок (якщо є uid або tg)
+      if (!rem && (st.uid || makeTag())) { queuePush({}); }
     }catch(e){ console.warn('[Cloud] hydrate failed', e); }
   }
-
   function startPolling(){
     if (!st.enabled) return;
     clearInterval(st.pollTimer);
-    st.pollTimer = setInterval(async()=>{
-      try{
-        const rem = await getRemote();
-        if (rem) applyRemoteToState(rem);
-      }catch(_){}
-    }, st.pollMs);
+    st.pollTimer = setInterval(async()=>{ try{
+      const rem = await getRemote(); if (rem) CloudStore.applyRemoteToState(rem);
+    }catch(_){ } }, st.pollMs);
   }
-
   function initAndHydrate(){
-    if (!st.enabled){
-      console.warn('[Cloud] disabled: CLOUD_URL / CLOUD_API_KEY не задані');
-      return;
-    }
+    if (!st.enabled){ console.warn('[Cloud] disabled: CLOUD_URL / CLOUD_API_KEY'); return; }
     identify();
     hydrate().then(startPolling);
-    window.addEventListener('beforeunload', ()=>{ try{ /*pushRemote({});*/ }catch(_){ } });
+    window.addEventListener('beforeunload', ()=>{ try{}catch(_){ } });
   }
 
   return { initAndHydrate, queuePush, tgUser, getRemote, applyRemoteToState };
@@ -231,13 +221,13 @@ function ensureDailyReset() {
     gramCount = 0; exCount = 0;
     lastGramAt = 0; lastExAt = 0;
     dailyStamp = today;
-    localStorage.setItem('dailyGramCount', '0');
-    localStorage.setItem('dailyExCount', '0');
-    localStorage.setItem('lastGramAt', '0');
-    localStorage.setItem('lastExAt', '0');
-    localStorage.setItem('dailyStamp', today);
+    localStorage.setItem('dailyGramCount','0');
+    localStorage.setItem('dailyExCount','0');
+    localStorage.setItem('lastGramAt','0');
+    localStorage.setItem('lastExAt','0');
+    localStorage.setItem('dailyStamp',today);
     saveData();
-    try { window.dispatchEvent(new CustomEvent('daily-reset', { detail: { day: today } })); } catch(e) {}
+    try{ window.dispatchEvent(new CustomEvent('daily-reset',{detail:{day:today}})); }catch(e){}
   }
 }
 
@@ -246,16 +236,13 @@ let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
 let gamesPlayedSinceClaim = 0;
 let isPaused = false;
 
-/* --- лічильники квестів 5/10 --- */
 let ad5Count = 0, ad10Count = 0;
 let lastTask5RewardAt = 0, lastTask10RewardAt = 0;
 
-/* --- щоденні лічильники +0.1⭐ --- */
 let gramCount = 0, exCount = 0;
 let lastGramAt = 0, lastExAt = 0;
 let dailyStamp = "";
 
-/* --- пострекламний таймер --- */
 let postAdTimerActive = false;
 let postAdInterval = null;
 
@@ -285,18 +272,15 @@ function saveData(){
   localStorage.setItem("task50Completed", task50Completed ? "true" : "false");
   localStorage.setItem("gamesPlayedSinceClaim", String(gamesPlayedSinceClaim));
   localStorage.setItem("lastAnyAdAt", String(lastAnyAdAt));
-  // 5/10
   localStorage.setItem("ad5Count", String(ad5Count));
   localStorage.setItem("ad10Count", String(ad10Count));
   localStorage.setItem("lastTask5RewardAt", String(lastTask5RewardAt));
   localStorage.setItem("lastTask10RewardAt", String(lastTask10RewardAt));
-  // daily +0.1
   localStorage.setItem("dailyGramCount", String(gramCount));
   localStorage.setItem("dailyExCount", String(exCount));
   localStorage.setItem("lastGramAt", String(lastGramAt));
   localStorage.setItem("lastExAt", String(lastExAt));
   localStorage.setItem("dailyStamp", dailyStamp);
-  // батл
   localStorage.setItem("oppScorePending", oppScorePending==null ? "" : String(oppScorePending));
   localStorage.setItem("challengeActive", challengeActive ? "true" : "false");
   localStorage.setItem("challengeStartAt", String(challengeStartAt));
@@ -320,28 +304,28 @@ function getUserTag(){
   return "Гравець";
 }
 
-/* ===================== ВИВОДИ (J..X) ===================== */
+/* ===================== ВИВОДИ (J..X) — ЧИСЛА ===================== */
 
-/** Рендер 15 слотів рівно з того, що у serverWithdraws (J..X) */
+/** Рендер 15 слотів (числа з J..X) */
 function renderPayoutList(){
   const ul = $("payoutList");
   if (!ul) return;
   ul.innerHTML = "";
 
-  const tag = getUserTag();
+  const tag = payoutTag || getUserTag();
   const arr = Array.isArray(serverWithdraws) ? serverWithdraws.slice(0,15) : [];
   while (arr.length < 15) arr.push('0');
 
   for (let i=0; i<15; i++){
-    const timeText = formatWithdrawCell(arr[i]);
+    const v = String(arr[i] ?? '0');
     const li = document.createElement("li");
-    li.innerHTML = `№${i+1} — ${tag} — 🗓 ${timeText} — 💸 ${WITHDRAW_CHUNK}⭐`;
+    li.innerHTML = `№${i+1} — ${tag} — ${v}⭐`;
     ul.appendChild(li);
   }
 }
 
-/** POST → GAS: запис у перший вільний Windraw N (J..X) */
-async function submitWithdrawalToCloud15({ user_id, tag, username, amount, ts }) {
+/** POST → GAS: запис amount у перший вільний J..X */
+async function submitWithdrawalToCloud15({ user_id, tag, username, amount }) {
   if (!CLOUD.url || !CLOUD.api) return { ok:false, error:"CLOUD_URL / CLOUD_API_KEY not set" };
   const payload = {
     api: CLOUD.api,
@@ -349,8 +333,7 @@ async function submitWithdrawalToCloud15({ user_id, tag, username, amount, ts })
     user_id,
     tg_tag: tag || "",
     username: username || "",
-    amount: Number(amount) || 0,
-    ts // передаємо як є (епоха/ISO) — бек переведе у ISO
+    amount: Number(amount) || 0
   };
   try{
     const r = await fetch(String(CLOUD.url), {
@@ -360,8 +343,8 @@ async function submitWithdrawalToCloud15({ user_id, tag, username, amount, ts })
     });
     let j=null; try { j = await r.json(); } catch {}
     if (r.ok && j && j.ok) {
-      const slot = j.slot ?? j.slotIndex ?? null;
-      return { ok:true, slot, ts: j.ts ?? ts ?? null };
+      const slot = j.slot ?? null;
+      return { ok:true, slot, amount: j.amount ?? Number(amount) };
     }
     return { ok:false, error: (j?.error || `HTTP ${r.status}`) };
   } catch(e){
@@ -369,13 +352,12 @@ async function submitWithdrawalToCloud15({ user_id, tag, username, amount, ts })
   }
 }
 
-/** Клік «Вивести»: оптимістичний апдейт + підтвердження із таблиці; без мінуса балансу */
+/** «Вивести»: ставимо 50 у перший вільний слот і синхронізуємо з таблицею */
 async function withdraw50LocalFirst(){
   const statusEl = $("withdrawStatus");
   const btn = $("withdrawBtn");
 
   if (btn && btn.disabled) return; // анти-даблклік
-
   if (balance < WITHDRAW_CHUNK) {
     if (statusEl){ statusEl.className="err"; statusEl.textContent=`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`; }
     return;
@@ -390,20 +372,17 @@ async function withdraw50LocalFirst(){
   if (btn) btn.disabled = true;
 
   const u = getTelegramUser();
-  const tag = u.username ? ("@"+u.username) : getUserTag();
+  const tag = payoutTag || (u.username ? ("@"+u.username) : getUserTag());
   const id  = u.id || "";
   const uname = u.username || [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
 
-  // значення часу, що ставимо у візуал (епоха, мс)
-  const nowValue = String(Date.now());
-
-  // 1) оптимістично оновлюємо візуал списку виводів
+  // 1) оптимістично: ставимо число 50
   const prevValue = serverWithdraws[freeIdx];
-  serverWithdraws[freeIdx] = nowValue;
+  serverWithdraws[freeIdx] = String(WITHDRAW_CHUNK);
   renderPayoutList();
   if (statusEl){ statusEl.className="ok"; statusEl.textContent="Поставлено на вивід…"; }
 
-  // 2) списуємо баланс з запобіжником
+  // 2) списуємо баланс
   const oldBalance = balance;
   balance = parseFloat((balance - WITHDRAW_CHUNK).toFixed(2));
   if (balance < 0) balance = 0;
@@ -411,23 +390,18 @@ async function withdraw50LocalFirst(){
 
   // 3) надсилаємо у GAS
   const res = await submitWithdrawalToCloud15({
-    user_id: id, tag, username: uname, amount: WITHDRAW_CHUNK, ts: nowValue
+    user_id: id, tag, username: uname, amount: WITHDRAW_CHUNK
   });
 
   if (res.ok){
-    // підміняємо на точний ISO, який реально записано в J..X
-    if (typeof res.ts !== 'undefined') {
-      serverWithdraws[freeIdx] = res.ts;
-      renderPayoutList();
-    }
-    // дочитуємо увесь рядок ще раз (щоб 100% було як у таблиці)
+    // підтвердження: дочитаємо рядок
     try{
       const rem = await CloudStore.getRemote();
       if (rem) CloudStore.applyRemoteToState(rem);
     }catch(_){}
-    if (statusEl){ statusEl.className="ok"; statusEl.textContent="Вивід поставлено у чергу"; }
+    if (statusEl){ statusEl.className="ok"; statusEl.textContent="Вивід зафіксовано"; }
   } else {
-    // ❌ фейл: відкот і UI, і баланс
+    // ❌ фейл: відкот
     serverWithdraws[freeIdx] = prevValue ?? '0';
     renderPayoutList();
     balance = oldBalance; setBalanceUI(); saveData();
@@ -437,45 +411,25 @@ async function withdraw50LocalFirst(){
   if (btn) btn.disabled = false;
 }
 
-/* ========= СИНК ОЧІКУЮЧИХ (залишено, якщо використаєш офлайн-чергу) ========= */
-function readPendingWithdrawals(){
-  try{
-    const arr = JSON.parse(localStorage.getItem("payouts_pending") || "[]");
-    return Array.isArray(arr) ? arr : [];
-  }catch{ return []; }
-}
-function writePendingWithdrawals(arr){
-  localStorage.setItem("payouts_pending", JSON.stringify(arr || []));
-}
-function getServerWithdrawCount(){
-  return (Array.isArray(serverWithdraws) ? serverWithdraws.filter(v=>v && String(v)!=='0').length : 0) | 0;
-}
+/* ========= СИНК ОЧІКУЮЧИХ (за бажанням) ========= */
+function readPendingWithdrawals(){ try{ const arr=JSON.parse(localStorage.getItem("payouts_pending")||"[]"); return Array.isArray(arr)?arr:[]; }catch{ return []; } }
+function writePendingWithdrawals(arr){ localStorage.setItem("payouts_pending", JSON.stringify(arr||[])); }
+function getServerWithdrawCount(){ return (Array.isArray(serverWithdraws) ? serverWithdraws.filter(v=>v && String(v)!=='0').length : 0) | 0; }
 async function syncPendingWithdrawals(){
-  const statusEl = $("withdrawStatus");
-  let pend = readPendingWithdrawals();
-  if (pend.length === 0) { renderPayoutList(); return; }
-
+  const statusEl=$("withdrawStatus");
+  let pend=readPendingWithdrawals();
+  if (pend.length===0){ renderPayoutList(); return; }
   for (let i=0;i<pend.length;i++){
-    const it = pend[i];
-    if (it.synced) continue;
-    const res = await submitWithdrawalToCloud15({
-      user_id: it.id, tag: it.tag, username: it.username, amount: it.amount, ts: String(Date.now())
-    });
+    const it=pend[i]; if (it.synced) continue;
+    const res = await submitWithdrawalToCloud15({ user_id: it.id, tag: it.tag, username: it.username, amount: WITHDRAW_CHUNK });
     if (res.ok){
-      it.synced = true;
-      it.slot = res.slot || null;
-      if (statusEl) { statusEl.className="ok"; statusEl.textContent="Поставлено на вивід"; }
-      const rem = await CloudStore.getRemote();
-      if (rem) CloudStore.applyRemoteToState(rem);
+      it.synced=true; it.slot=res.slot||null;
+      if (statusEl){ statusEl.className="ok"; statusEl.textContent="Поставлено на вивід"; }
+      const rem=await CloudStore.getRemote(); if (rem) CloudStore.applyRemoteToState(rem);
     } else {
-      if (statusEl && !statusEl.textContent) {
-        statusEl.className="muted";
-        statusEl.textContent = "Очікуємо мережу…";
-      }
+      if (statusEl && !statusEl.textContent){ statusEl.className="muted"; statusEl.textContent="Очікуємо мережу…"; }
     }
-    pend[i] = it;
-    writePendingWithdrawals(pend);
-    renderPayoutList();
+    pend[i]=it; writePendingWithdrawals(pend); renderPayoutList();
   }
 }
 
@@ -532,11 +486,8 @@ window.onload = function(){
     });
   }
 
-  const g100Btn = $("checkGames100Btn");
-  if (g100Btn) g100Btn.addEventListener("click", onCheckGames100);
-
-  const withdrawBtn = $("withdrawBtn");
-  if (withdrawBtn) withdrawBtn.addEventListener("click", withdraw50LocalFirst);
+  $("checkGames100Btn")?.addEventListener("click", onCheckGames100);
+  $("withdrawBtn")?.addEventListener("click", withdraw50LocalFirst);
 
   // таски 5/10
   $("watchAd5Btn")?.addEventListener("click", onWatchAd5);
