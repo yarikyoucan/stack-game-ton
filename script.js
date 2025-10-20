@@ -16,7 +16,7 @@ const GAMES_REWARD = 5;
 
 const WITHDRAW_CHUNK = 50;
 
-/* --- Adsgram блоки (залишено як у тебе) --- */
+/* --- Adsgram блоки --- */
 const ADSGRAM_BLOCK_ID_TASK_MINUTE = "int-13961";
 const ADSGRAM_BLOCK_ID_TASK_510    = "int-15276";
 const ADSGRAM_BLOCK_ID_GAMEOVER    = "int-15275";
@@ -54,15 +54,15 @@ function formatHMS(ms){
   return (hh>0 ? String(hh).padStart(2,'0')+":" : "") + String(mm).padStart(2,'0')+":"+String(ss).padStart(2,'0');
 }
 
-/* ========= ХМАРА (CLOUD URL/KEY задаються глобально в index.html) ========= */
+/* ========= ХМАРА ========= */
 const CLOUD = {
   url: (typeof window !== 'undefined' && window.CLOUD_URL) || '',
   api: (typeof window !== 'undefined' && window.CLOUD_API_KEY) || '',
 };
 
-/** масив на 15 клітин (J..X): '0','50', '11' ... */
+/** масив на 15 клітин (J..X): '0','50',... */
 let serverWithdraws = [];
-/** tg_tag що виводимо поруч у списку */
+/** tg_tag, який показуємо поруч зі списком виводів */
 let payoutTag = '';
 
 /* перший вільний (0/порожній) слот J..X */
@@ -74,7 +74,7 @@ function firstFreeWithdrawIndex(){
   return -1;
 }
 
-/* ========= CloudStore (GET/POST до GAS) ========= */
+/* ========= CloudStore ========= */
 const CloudStore = (() => {
   const st = {
     enabled: !!(CLOUD.url && CLOUD.api),
@@ -92,7 +92,7 @@ const CloudStore = (() => {
   }
   function identify(){
     const u = tgUser() || {};
-    st.uid = u?.id ? String(u.id) : "";
+    st.uid = u?.id ? String(u.id) : ""; // працюємо з uid, якщо є
     st.username = (u?.username || [u?.first_name||'', u?.last_name||''].filter(Boolean).join(' ')) || '';
   }
   function makeTag(){
@@ -117,7 +117,7 @@ const CloudStore = (() => {
       return null;
     }
 
-    // 1) спроба з uid+tg, 2) з uid, 3) з tg — щоб знайти рядок за будь-яким з них
+    // 1) спроба з uid+tg, 2) з uid, 3) з tg
     if (uid && tg){
       const urlBoth = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(uid)}&tg_tag=${encodeURIComponent(tg)}${nocache}`;
       const d = await tryUrl(urlBoth); if (d) return d;
@@ -130,7 +130,6 @@ const CloudStore = (() => {
       const urlTag = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&tg_tag=${encodeURIComponent(tg)}${nocache}`;
       const d = await tryUrl(urlTag); if (d) return d;
     }
-    // якщо нічого не знайшли — повернемо null (упсерт можна зробити пізніше)
     return null;
   }
 
@@ -160,11 +159,9 @@ const CloudStore = (() => {
   }
   function queuePush(partial={}){ if (!st.enabled) return; clearTimeout(st.debounceTimer); st.debounceTimer=setTimeout(()=>pushRemote(partial),700); }
 
-  /** НОВА ПОВЕРХНЯ: надійно застосовуємо withdraws (J..X) як числа/рядки */
   function applyRemoteToState(rem){
     if (!rem) return;
 
-    // balance / highscore / battle_record як раніше
     if (typeof rem.highscore === 'number' && rem.highscore > (highscore||0)){
       highscore = rem.highscore;
       const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
@@ -179,24 +176,13 @@ const CloudStore = (() => {
     const newBattle = Math.max(localBattle, Number(rem.battle_record||0));
     if (newBattle !== localBattle){ localStorage.setItem('battle_record', String(newBattle)); }
 
-    // тег для UI
     if (rem.tg_tag && typeof rem.tg_tag === "string") payoutTag = rem.tg_tag.trim();
 
-    // withdraws: привести до масиву 15 елементів і нормалізувати
     if (Array.isArray(rem.withdraws)){
-      serverWithdraws = rem.withdraws.slice(0,15).map(x => {
-        if (x == null || x === '') return '0';
-        // Якщо в таблиці був epoch/ISO — ми хочемо відобразити спочатку як число (як ти просив): якщо рядок містить цифри — залишимо як є.
-        // Тут зберігаємо точно те, що отримали (String)
-        return String(x);
-      });
+      serverWithdraws = rem.withdraws.slice(0,15).map(x => (x==null||x==='')?'0':String(x));
       while (serverWithdraws.length < 15) serverWithdraws.push('0');
-    } else {
-      // якщо withdraws немає в rem — не чіпаємо serverWithdraws (залишиться попередній або 0)
+      renderPayoutList();
     }
-
-    // оновлюємо UI списку виводів
-    renderPayoutList();
   }
 
   async function hydrate(){
@@ -206,7 +192,7 @@ const CloudStore = (() => {
       const rem = await getRemote();
       st.lastRemote = rem;
       if (rem) applyRemoteToState(rem);
-      // якщо рядка нема на бекенді — створимо (UPSERT) щоб з'явилася колонка J..X у таблиці
+      // якщо реду ще нема — створимо рядок (якщо є uid або tg)
       if (!rem && (st.uid || makeTag())) { queuePush({}); }
     }catch(e){ console.warn('[Cloud] hydrate failed', e); }
   }
@@ -224,8 +210,83 @@ const CloudStore = (() => {
     window.addEventListener('beforeunload', ()=>{ try{}catch(_){ } });
   }
 
-  return { initAndHydrate, queuePush, tgUser, getRemote, applyRemoteToState: applyRemoteToState };
+  return { initAndHydrate, queuePush, tgUser, getRemote, applyRemoteToState };
 })();
+
+/* ========== FORCED UPSERT / ENSURE ROW EXISTS ========== */
+/** Негайний POST -> UPSERT щоб створити рядок A..I + J..X(zeros) на бекенді.
+ * Повертає об'єкт від бекенду (як у doPost), або null при помилці.
+ */
+async function ensureRowExistsNow() {
+  if (!CLOUD.url || !CLOUD.api) {
+    console.warn('[ensureRowExistsNow] CLOUD not configured');
+    return null;
+  }
+  // визначаємо користувача / тег прямо зараз
+  const u = (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user) || null;
+  const user_id = u?.id ? String(u.id) : '';
+  const username = u?.username || (u ? ((u.first_name||'') + (u.last_name?(' '+u.last_name):'')) : '');
+  const tg_tag = username ? (username.startsWith('@') ? username : '@' + username) : '';
+
+  // minimal body для UPSERT (GAS _upsert створить zeros у J..X при INSERT)
+  const body = {
+    api: CLOUD.api,
+    user_id: user_id || '',
+    username: (username||'').replace(/^@/,''),
+    tg_tag: tg_tag || '',
+  };
+
+  try {
+    const r = await fetch(String(CLOUD.url), {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(body)
+    });
+    const j = await r.json().catch(()=>null);
+    if (r.ok && j && j.ok) {
+      console.log('[ensureRowExistsNow] upsert ok', j);
+      return j;
+    } else {
+      console.warn('[ensureRowExistsNow] upsert failed', j || ('HTTP ' + r.status));
+      return j || null;
+    }
+  } catch (e) {
+    console.error('[ensureRowExistsNow] error', e);
+    return null;
+  }
+}
+
+/** Примусове створення рядка + перечитування (GET) — викликати при старті */
+async function ensureAndRefreshWithdraws() {
+  try {
+    // 1) спробуємо отримати (GET) — якщо є, застосуємо
+    let rem = await CloudStore.getRemote();
+    if (rem) {
+      CloudStore.applyRemoteToState(rem);
+      console.log('[ensureAndRefreshWithdraws] remote exists, applied');
+      return rem;
+    }
+
+    // 2) якщо ні — робимо явний UPSERT (POST) щоб створити рядок з A..I та J..X (zeros)
+    console.log('[ensureAndRefreshWithdraws] remote missing, performing upsert...');
+    const up = await ensureRowExistsNow();
+    // почекаємо трохи, щоб GAS встиг створити рядок
+    await new Promise(r => setTimeout(r, 800));
+    // 3) перечитаємо й застосуємо
+    rem = await CloudStore.getRemote();
+    if (rem) {
+      CloudStore.applyRemoteToState(rem);
+      console.log('[ensureAndRefreshWithdraws] got remote after upsert', rem);
+      return rem;
+    } else {
+      console.warn('[ensureAndRefreshWithdraws] still no remote after upsert');
+      return null;
+    }
+  } catch (e) {
+    console.error('[ensureAndRefreshWithdraws] error', e);
+    return null;
+  }
+}
 
 /* ========= ЄДИНА ТОЧКА ДОБОВОГО РЕСЕТУ ========= */
 function ensureDailyReset() {
@@ -318,7 +379,7 @@ function getUserTag(){
   return "Гравець";
 }
 
-/* ===================== ВИВОДИ (J..X) — ЧИСЛА / відображення ========= */
+/* ===================== ВИВОДИ (J..X) — ЧИСЛА ===================== */
 
 /** Рендер 15 слотів (числа з J..X) */
 function renderPayoutList(){
@@ -453,7 +514,7 @@ let challengeTicker = null;
 let syncTimer = null;
 
 window.onload = function(){
-  // базові стейти з localStorage
+  // базові стейти
   subscribed = localStorage.getItem("subscribed") === "true";
   task50Completed = localStorage.getItem("task50Completed") === "true";
   lastAnyAdAt      = parseInt(localStorage.getItem("lastAnyAdAt")  || "0", 10);
@@ -489,7 +550,15 @@ window.onload = function(){
   const t50 = $("checkTask50");
   if (t50){
     if (task50Completed){ t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); t50.classList.add("done"); }
-    t50.addEventListener("click", ()=>{ if (highscore >= 75 && !task50Completed){ addBalance(5.15); t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); t50.classList.add("done"); task50Completed = true; saveData(); } else { alert(document.documentElement.lang==='en' ? "❌ Highscore is too low (need 75+)" : "❌ Твій рекорд замалий (потрібно 75+)"); } });
+    t50.addEventListener("click", ()=>{
+      if (highscore >= 75 && !task50Completed){
+        addBalance(5.15);
+        t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); t50.classList.add("done");
+        task50Completed = true; saveData();
+      } else {
+        alert(document.documentElement.lang==='en' ? "❌ Highscore is too low (need 75+)" : "❌ Твій рекорд замалий (потрібно 75+)");
+      }
+    });
   }
 
   $("checkGames100Btn")?.addEventListener("click", onCheckGames100);
@@ -516,8 +585,13 @@ window.onload = function(){
   updateAdTasksUI();
   updateDailyUI();
 
-  // Хмара: ініціалізація і первинне читання
+  // Хмара
   try { CloudStore.initAndHydrate(); } catch(e){ console.warn(e); }
+
+  // Після ініціалізації хмари — гарантовано створимо/отримаємо рядок і перечитаємо J..X
+  try {
+    ensureAndRefreshWithdraws().then(()=>{ renderPayoutList(); });
+  } catch(e){ console.warn(e); }
 
   // періодичний синк очікуючих виводів (за потреби)
   clearInterval(syncTimer);
@@ -574,7 +648,10 @@ async function showAdsgram(controller){
 /* ========= ЩОДЕННІ +0.1⭐ ========= */
 function startDailyPlusTicker(){
   if (dailyUiTicker) clearInterval(dailyUiTicker);
-  dailyUiTicker = setInterval(()=>{ updateDailyUI(); updateAdTasksUI(); }, 1000);
+  dailyUiTicker = setInterval(()=>{
+    updateDailyUI();
+    updateAdTasksUI();
+  }, 1000);
   updateDailyUI();
 }
 function updateDailyUI(){
@@ -734,14 +811,27 @@ function setupChallengeUI(){
   if (storedOpp && !isNaN(+storedOpp)) oppScorePending = +storedOpp;
   if (scoreBox) scoreBox.textContent = oppScorePending!=null ? String(oppScorePending) : "—";
 
-  genBtn.onclick = ()=>{ if (challengeActive) return; if (oppScorePending == null){ oppScorePending = weightedOppScore(); if (scoreBox) scoreBox.textContent = String(oppScorePending); saveData(); } };
-
-  startBtn.onclick = ()=>{ 
+  genBtn.onclick = ()=>{
     if (challengeActive) return;
-    if (oppScorePending == null){ alert("Спочатку згенеруй суперника."); return; }
+    if (oppScorePending == null){
+      oppScorePending = weightedOppScore();
+      if (scoreBox) scoreBox.textContent = String(oppScorePending);
+      saveData();
+    }
+  };
+
+  startBtn.onclick = ()=>{
+    if (challengeActive) return;
+    if (oppScorePending == null){
+      alert("Спочатку згенеруй суперника.");
+      return;
+    }
     const stake = parseFloat(stakeInput.value || "0");
     if (!(stake>0)) return;
-    if (balance < stake){ alert("Недостатньо ⭐ для ставки."); return; }
+    if (balance < stake){
+      alert("Недостатньо ⭐ для ставки.");
+      return;
+    }
     balance = parseFloat((balance - stake).toFixed(2));
     setBalanceUI();
     CloudStore.queuePush({ balance });
@@ -759,11 +849,20 @@ function setupChallengeUI(){
     saveData();
 
     if (challengeTicker) clearInterval(challengeTicker);
-    challengeTicker = setInterval(()=>{ const left = Math.max(0, challengeDeadline - Date.now()); leftEl.textContent = formatHMS(left); if (left<=0){ clearInterval(challengeTicker); } }, 1000);
+    challengeTicker = setInterval(()=>{
+      const left = Math.max(0, challengeDeadline - Date.now());
+      leftEl.textContent = formatHMS(left);
+      if (left<=0){
+        clearInterval(challengeTicker);
+      }
+    }, 1000);
   };
 
-  checkBtn.onclick = ()=>{ 
-    if (!challengeActive){ statusEl.textContent = "Немає активного виклику."; return; }
+  checkBtn.onclick = ()=>{
+    if (!challengeActive){
+      statusEl.textContent = "Немає активного виклику.";
+      return;
+    }
     const now = Date.now();
     const won = (highscore > challengeOpp) && (now <= challengeDeadline);
     const expired = now > challengeDeadline;
@@ -800,7 +899,13 @@ function setupChallengeUI(){
     checkBtn.disabled = false;
     cdWrap.style.display = "block";
     if (challengeTicker) clearInterval(challengeTicker);
-    challengeTicker = setInterval(()=>{ const left = Math.max(0, challengeDeadline - Date.now()); leftEl.textContent = formatHMS(left); if (left<=0){ clearInterval(challengeTicker); } }, 1000);
+    challengeTicker = setInterval(()=>{
+      const left = Math.max(0, challengeDeadline - Date.now());
+      leftEl.textContent = formatHMS(left);
+      if (left<=0){
+        clearInterval(challengeTicker);
+      }
+    }, 1000);
   }
 }
 function finishChallenge(){
@@ -817,13 +922,10 @@ function finishChallenge(){
   saveData();
 }
 
+/* ========= ADEXIUM (місце для інтеграції) ========= */
+// (залишено без змін)
+
 /* ========= 3D Stack (гра) ========= */
-/* === Твій код Stage/Block/Game без змін (залишаю як є) === */
-/* Через довжину не повторюю тут (збережи свої класи Stage, Block, Game як у попередньому файлі) */
-/* Якщо хочеш — я можу вставити їх сюди, але в твоєму останньому пості вони вже є і працюють. */
-
-/* Для коректності, якщо їх немає в коді — встав сюди класи Stage, Block, Game з твого оригіналу. */
-
 class Stage{
   constructor(){
     this.container = document.getElementById("container");
@@ -1081,36 +1183,7 @@ function updateHighscore(currentScore){
   CloudStore.queuePush({ highscore, last_score: currentScore });
 }
 
-/* ========= ДІАГНОСТИКА / FORCED REFRESH ========= */
-/**
- * Викликати в консолі: refreshWithdrawsNow()
- * — робить GET до GAS і застосовує результат (поки не працює автоматичний sync)
- */
-async function refreshWithdrawsNow(){
-  if (!CloudStore || !CloudStore.getRemote) {
-    console.warn("CloudStore.getRemote недоступний");
-    return;
-  }
-  try {
-    console.log("[debug] refreshWithdrawsNow(): починаю GET");
-    const rem = await CloudStore.getRemote();
-    console.log("[debug] GET response:", rem);
-    if (!rem) {
-      console.warn("[debug] Сервер повернув null (рядка можливо нема). Зроблю UPSERT (створю) та перечитаю...");
-      CloudStore.queuePush({});
-      await new Promise(r => setTimeout(r, 900));
-      const rem2 = await CloudStore.getRemote();
-      console.log("[debug] After upsert, GET response:", rem2);
-      if (rem2) CloudStore.applyRemoteToState(rem2);
-      return;
-    }
-    CloudStore.applyRemoteToState(rem);
-  } catch (err) {
-    console.error("[debug] refreshWithdrawsNow error:", err);
-  }
-}
 
-/* ========= КІНЕЦЬ СКРИПТА ========= */
 
 
 
