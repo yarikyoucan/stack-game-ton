@@ -16,7 +16,7 @@ const GAMES_REWARD = 5;
 
 const WITHDRAW_CHUNK = 50;
 
-/* --- Adsgram блоки --- */
+/* --- Adsgram блоки (залишені як є) --- */
 const ADSGRAM_BLOCK_ID_TASK_MINUTE = "int-13961";
 const ADSGRAM_BLOCK_ID_TASK_510    = "int-15276";
 const ADSGRAM_BLOCK_ID_GAMEOVER    = "int-15275";
@@ -54,15 +54,35 @@ function formatHMS(ms){
   return (hh>0 ? String(hh).padStart(2,'0')+":" : "") + String(mm).padStart(2,'0')+":"+String(ss).padStart(2,'0');
 }
 
+/* === формат часу / валідація === */
+function looksISO(s){ return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(s); }
+function looksEpoch(s){ return /^\d{10,13}$/.test(String(s||'')); }
+function formatWithdrawCellForDate(val){
+  if (val==null || val==='0' || val==='') return null;
+  const s = String(val);
+  try{
+    if (looksISO(s)) return new Date(s).toLocaleString();
+    if (looksEpoch(s)) {
+      const ms = s.length===13 ? Number(s) : Number(s)*1000;
+      return new Date(ms).toLocaleString();
+    }
+  }catch(_){}
+  return null;
+}
+
 /* ========= ХМАРА ========= */
+/* Встав / задай свої значення перед підключенням скрипта:
+   window.CLOUD_URL = "https://script.google.com/macros/s/....../exec";
+   window.CLOUD_API_KEY = "твій_ключ";
+*/
 const CLOUD = {
   url: (typeof window !== 'undefined' && window.CLOUD_URL) || '',
   api: (typeof window !== 'undefined' && window.CLOUD_API_KEY) || '',
 };
 
-/** масив на 15 клітин (J..X): '0','50',... */
+/** масив на 15 клітин (J..X): '0' / ISO / epoch / число-as-string */
 let serverWithdraws = [];
-/** tg_tag, який показуємо поруч зі списком виводів */
+/** tg_tag який показуємо поруч зі слотами (від сервера або локально) */
 let payoutTag = '';
 
 /* перший вільний (0/порожній) слот J..X */
@@ -112,7 +132,7 @@ const CloudStore = (() => {
         const r = await fetch(u, { method:'GET', headers:{'accept':'application/json'} });
         if (!r.ok) return null;
         const j = await r.json().catch(()=>null);
-        if (j && j.ok && j.data) return j.data;
+        if (j && j.ok) return j.data || null;
       }catch(_){}
       return null;
     }
@@ -138,7 +158,7 @@ const CloudStore = (() => {
     const body = {
       api: CLOUD.api,
       user_id: st.uid || undefined,
-      username: st.username.replace(/^@/,''),
+      username: st.username.replace(/^@/,''), // may be empty
       tg_tag: makeTag() || undefined,
       balance: (partial.balance!=null ? Number(partial.balance) : Number(balance||0)),
       highscore: (partial.highscore!=null ? Number(partial.highscore) : Number(highscore||0)),
@@ -162,22 +182,26 @@ const CloudStore = (() => {
   function applyRemoteToState(rem){
     if (!rem) return;
 
+    // highscore — максимум
     if (typeof rem.highscore === 'number' && rem.highscore > (highscore||0)){
       highscore = rem.highscore;
       const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
     }
+    // balance — істина з хмари, але НЕ перетираємо локальний >0 на нуль із хмари
     if (typeof rem.balance === 'number' && rem.balance !== balance){
       if (!(rem.balance === 0 && balance > 0)) {
         balance = parseFloat(rem.balance.toFixed(2));
         setBalanceUI();
       }
     }
+    // battle_record — максимум (у LS)
     const localBattle = Number(localStorage.getItem('battle_record')||'0');
     const newBattle = Math.max(localBattle, Number(rem.battle_record||0));
     if (newBattle !== localBattle){ localStorage.setItem('battle_record', String(newBattle)); }
 
     if (rem.tg_tag && typeof rem.tg_tag === "string") payoutTag = rem.tg_tag.trim();
 
+    // withdraws J..X: беремо «як є»
     if (Array.isArray(rem.withdraws)){
       serverWithdraws = rem.withdraws.slice(0,15).map(x => (x==null||x==='')?'0':String(x));
       while (serverWithdraws.length < 15) serverWithdraws.push('0');
@@ -191,23 +215,37 @@ const CloudStore = (() => {
     try{
       const rem = await getRemote();
       st.lastRemote = rem;
-      if (rem) applyRemoteToState(rem);
-      // якщо реду ще нема — створимо рядок (якщо є uid або tg)
-      if (!rem && (st.uid || makeTag())) { queuePush({}); }
+      if (rem) {
+        applyRemoteToState(rem);
+      } else {
+        // Якщо рядка ще нема — спробуємо створити (UPSERT) — щоб в таблиці з'явився рядок з J..X = '0'
+        if (st.uid || makeTag()){
+          await pushRemote({}); // UPSERT (створить рядок)
+          // потім дочитуємо його
+          const fresh = await getRemote();
+          if (fresh) applyRemoteToState(fresh);
+        }
+      }
     }catch(e){ console.warn('[Cloud] hydrate failed', e); }
   }
   function startPolling(){
     if (!st.enabled) return;
     clearInterval(st.pollTimer);
-    st.pollTimer = setInterval(async()=>{ try{
-      const rem = await getRemote(); if (rem) CloudStore.applyRemoteToState(rem);
-    }catch(_){ } }, st.pollMs);
+    st.pollTimer = setInterval(async()=>{
+      try{
+        const rem = await getRemote();
+        if (rem) applyRemoteToState(rem);
+      }catch(_){}
+    }, st.pollMs);
   }
   function initAndHydrate(){
-    if (!st.enabled){ console.warn('[Cloud] disabled: CLOUD_URL / CLOUD_API_KEY'); return; }
+    if (!st.enabled){
+      console.warn('[Cloud] disabled: CLOUD_URL / CLOUD_API_KEY not set');
+      return;
+    }
     identify();
     hydrate().then(startPolling);
-    window.addEventListener('beforeunload', ()=>{ try{}catch(_){ } });
+    window.addEventListener('beforeunload', ()=>{ try{ /*pushRemote({});*/ }catch(_){ } });
   }
 
   return { initAndHydrate, queuePush, tgUser, getRemote, applyRemoteToState };
@@ -304,9 +342,9 @@ function getUserTag(){
   return "Гравець";
 }
 
-/* ===================== ВИВОДИ (J..X) — ЧИСЛА ===================== */
+/* ===================== ВИВОДИ (J..X) — ЧИСЛА або час ===================== */
 
-/** Рендер 15 слотів (числа з J..X) */
+/** Рендер 15 слотів (числа або локальний час) */
 function renderPayoutList(){
   const ul = $("payoutList");
   if (!ul) return;
@@ -317,14 +355,20 @@ function renderPayoutList(){
   while (arr.length < 15) arr.push('0');
 
   for (let i=0; i<15; i++){
-    const v = String(arr[i] ?? '0');
+    const raw = String(arr[i] ?? '0');
+    const asDate = formatWithdrawCellForDate(raw);
     const li = document.createElement("li");
-    li.innerHTML = `№${i+1} — ${tag} — ${v}⭐`;
+    if (asDate) {
+      li.innerHTML = `№${i+1} — ${tag} — 🗓 ${asDate} — 💸 ${WITHDRAW_CHUNK}⭐`;
+    } else {
+      // якщо не дата — вважаємо це число/рядок (наприклад "52")
+      li.innerHTML = `№${i+1} — ${tag} — ${raw}⭐`;
+    }
     ul.appendChild(li);
   }
 }
 
-/** POST → GAS: запис amount у перший вільний J..X */
+/** POST → GAS: запис у перший вільний Windraw N (J..X) */
 async function submitWithdrawalToCloud15({ user_id, tag, username, amount }) {
   if (!CLOUD.url || !CLOUD.api) return { ok:false, error:"CLOUD_URL / CLOUD_API_KEY not set" };
   const payload = {
@@ -344,7 +388,7 @@ async function submitWithdrawalToCloud15({ user_id, tag, username, amount }) {
     let j=null; try { j = await r.json(); } catch {}
     if (r.ok && j && j.ok) {
       const slot = j.slot ?? null;
-      return { ok:true, slot, amount: j.amount ?? Number(amount) };
+      return { ok:true, slot, payloadReturn: j };
     }
     return { ok:false, error: (j?.error || `HTTP ${r.status}`) };
   } catch(e){
@@ -352,12 +396,13 @@ async function submitWithdrawalToCloud15({ user_id, tag, username, amount }) {
   }
 }
 
-/** «Вивести»: ставимо 50 у перший вільний слот і синхронізуємо з таблицею */
+/** Клік «Вивести»: оптимістичний апдейт + підтвердження із таблиці; без мінуса балансу (але ми списуємо) */
 async function withdraw50LocalFirst(){
   const statusEl = $("withdrawStatus");
   const btn = $("withdrawBtn");
 
   if (btn && btn.disabled) return; // анти-даблклік
+
   if (balance < WITHDRAW_CHUNK) {
     if (statusEl){ statusEl.className="err"; statusEl.textContent=`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`; }
     return;
@@ -376,7 +421,7 @@ async function withdraw50LocalFirst(){
   const id  = u.id || "";
   const uname = u.username || [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
 
-  // 1) оптимістично: ставимо число 50
+  // 1) оптимістично: ставимо число 50 у перший вільний слот
   const prevValue = serverWithdraws[freeIdx];
   serverWithdraws[freeIdx] = String(WITHDRAW_CHUNK);
   renderPayoutList();
@@ -394,14 +439,14 @@ async function withdraw50LocalFirst(){
   });
 
   if (res.ok){
-    // підтвердження: дочитаємо рядок
+    // дочитаємо увесь рядок ще раз (щоб 100% було як у таблиці)
     try{
       const rem = await CloudStore.getRemote();
       if (rem) CloudStore.applyRemoteToState(rem);
     }catch(_){}
-    if (statusEl){ statusEl.className="ok"; statusEl.textContent="Вивід зафіксовано"; }
+    if (statusEl){ statusEl.className="ok"; statusEl.textContent="Вивід поставлено у чергу"; }
   } else {
-    // ❌ фейл: відкот
+    // ❌ фейл: відкот і UI, і баланс
     serverWithdraws[freeIdx] = prevValue ?? '0';
     renderPayoutList();
     balance = oldBalance; setBalanceUI(); saveData();
@@ -411,7 +456,7 @@ async function withdraw50LocalFirst(){
   if (btn) btn.disabled = false;
 }
 
-/* ========= СИНК ОЧІКУЮЧИХ (за бажанням) ========= */
+/* ========= СИНК ОЧІКУЮЧИХ (залишено, якщо використаєш офлайн-чергу) ========= */
 function readPendingWithdrawals(){ try{ const arr=JSON.parse(localStorage.getItem("payouts_pending")||"[]"); return Array.isArray(arr)?arr:[]; }catch{ return []; } }
 function writePendingWithdrawals(arr){ localStorage.setItem("payouts_pending", JSON.stringify(arr||[])); }
 function getServerWithdrawCount(){ return (Array.isArray(serverWithdraws) ? serverWithdraws.filter(v=>v && String(v)!=='0').length : 0) | 0; }
@@ -709,6 +754,7 @@ function onCheckGames100(){
 }
 
 /* ========= БАТЛ ========= */
+/* (залишено як було) */
 function weightedOppScore(){
   const r = Math.random();
   if (r < 0.15){
@@ -842,10 +888,8 @@ function finishChallenge(){
   saveData();
 }
 
-/* ========= ADEXIUM (місце для інтеграції) ========= */
-// (залишено без змін)
-
 /* ========= 3D Stack (гра) ========= */
+/* (залишив гру без змін — код як у твоєму попередньому файлі) */
 class Stage{
   constructor(){
     this.container = document.getElementById("container");
