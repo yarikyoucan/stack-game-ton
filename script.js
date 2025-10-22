@@ -138,7 +138,7 @@ const CloudStore = (() => {
     const body = {
       api: CLOUD.api,
       user_id: st.uid || undefined,
-      username: st.username.replace(/^@/,''),
+      username: st.username.replace(/^@/,''), 
       tg_tag: makeTag() || undefined,
       balance: (partial.balance!=null ? Number(partial.balance) : Number(balance||0)),
       highscore: (partial.highscore!=null ? Number(partial.highscore) : Number(highscore||0)),
@@ -192,7 +192,6 @@ const CloudStore = (() => {
       const rem = await getRemote();
       st.lastRemote = rem;
       if (rem) applyRemoteToState(rem);
-      // якщо реду ще нема — створимо рядок (якщо є uid або tg)
       if (!rem && (st.uid || makeTag())) { queuePush({}); }
     }catch(e){ console.warn('[Cloud] hydrate failed', e); }
   }
@@ -324,16 +323,18 @@ function renderPayoutList(){
   }
 }
 
-/** POST → GAS: запис amount у перший вільний J..X */
-async function submitWithdrawalToCloud15({ user_id, tag, username, amount }) {
+/** POST → GAS: запис у 5-колонний аркуш (№, tg_tag, time, amount, status) через action=withdraw_row */
+/** ПОВЕРТАЄ { ok:true, row: <sheetRow>, number: <withdrawNumber> } або { ok:false, error:... } */
+async function submitWithdrawalToSheet({ user_id, tag, username, amount, timeISO }) {
   if (!CLOUD.url || !CLOUD.api) return { ok:false, error:"CLOUD_URL / CLOUD_API_KEY not set" };
   const payload = {
     api: CLOUD.api,
-    action: "withdraw",
-    user_id,
+    action: "withdraw_row",
+    user_id: user_id || "",
     tg_tag: tag || "",
     username: username || "",
-    amount: Number(amount) || 0
+    amount: Number(amount) || 0,
+    time: timeISO || (new Date()).toISOString()
   };
   try{
     const r = await fetch(String(CLOUD.url), {
@@ -343,13 +344,28 @@ async function submitWithdrawalToCloud15({ user_id, tag, username, amount }) {
     });
     let j=null; try { j = await r.json(); } catch {}
     if (r.ok && j && j.ok) {
-      const slot = j.slot ?? null;
-      return { ok:true, slot, amount: j.amount ?? Number(amount) };
+      return { ok:true, row: j.row || null, number: j.number || null, stored: j.stored || null };
     }
     return { ok:false, error: (j?.error || `HTTP ${r.status}`) };
   } catch(e){
     return { ok:false, error: String(e?.message || e) };
   }
+}
+
+/** GET → GAS: отримати рядки для користувача (cmd=get_withdraw_rows&tg_tag=... або &user_id=...) */
+async function fetchUserWithdrawRows({ user_id, tg_tag }) {
+  if (!CLOUD.url || !CLOUD.api) return [];
+  const nocache = "&_=" + Date.now();
+  const q = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get_withdraw_rows${nocache}`
+          + (user_id ? `&user_id=${encodeURIComponent(user_id)}` : "")
+          + (tg_tag  ? `&tg_tag=${encodeURIComponent(tg_tag)}` : "");
+  try{
+    const r = await fetch(q, { method:'GET', headers:{'accept':'application/json'} });
+    if (!r.ok) return [];
+    const j = await r.json().catch(()=>null);
+    if (j && j.ok && Array.isArray(j.rows)) return j.rows;
+  }catch(_){}
+  return [];
 }
 
 /** «Вивести»: ставимо 50 у перший вільний слот і синхронізуємо з таблицею */
@@ -376,60 +392,143 @@ async function withdraw50LocalFirst(){
   const id  = u.id || "";
   const uname = u.username || [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
 
-  // 1) оптимістично: ставимо число 50
+  // 1) оптимістично: ставимо число 50 (старе поле J..X)
   const prevValue = serverWithdraws[freeIdx];
   serverWithdraws[freeIdx] = String(WITHDRAW_CHUNK);
   renderPayoutList();
-  if (statusEl){ statusEl.className="ok"; statusEl.textContent="Поставлено на вивід…"; }
+  if (statusEl){ statusEl.className="ok"; statusEl.textContent="Обробляється виводу…"; }
 
-  // 2) списуємо баланс
+  // 2) списуємо баланс локально
   const oldBalance = balance;
   balance = parseFloat((balance - WITHDRAW_CHUNK).toFixed(2));
   if (balance < 0) balance = 0;
   setBalanceUI(); saveData();
 
-  // 3) надсилаємо у GAS
-  const res = await submitWithdrawalToCloud15({
-    user_id: id, tag, username: uname, amount: WITHDRAW_CHUNK
-  });
+  // 3) додаємо pending-рядок у localStorage (щоб показувати у персональному списку і повторити пост при проблемі)
+  const pend = readPendingWithdrawals();
+  const nowISO = (new Date()).toISOString();
+  const newPending = {
+    id: id || null,           // telegram id (може бути "")
+    tag: tag || "",
+    username: uname || "",
+    amount: WITHDRAW_CHUNK,
+    time: nowISO,
+    status: "processing",     // processing -> submitted / failed / done
+    synced: false,
+    sheet_row: null,
+    createdAt: Date.now()
+  };
+  pend.push(newPending);
+  writePendingWithdrawals(pend);
+  renderPendingList(); // оновлює UI персонального списку
 
-  if (res.ok){
-    // підтвердження: дочитаємо рядок
-    try{
-      const rem = await CloudStore.getRemote();
-      if (rem) CloudStore.applyRemoteToState(rem);
-    }catch(_){}
-    if (statusEl){ statusEl.className="ok"; statusEl.textContent="Вивід зафіксовано"; }
-  } else {
-    // ❌ фейл: відкот
-    serverWithdraws[freeIdx] = prevValue ?? '0';
-    renderPayoutList();
-    balance = oldBalance; setBalanceUI(); saveData();
-    if (statusEl){ statusEl.className="err"; statusEl.textContent = "Помилка: " + (res.error || "невідома"); }
+  // 4) пробуємо одразу відправити у новий лист (GAS)
+  try{
+    const sheetRes = await submitWithdrawalToSheet({ user_id: id, tag, username: uname, amount: WITHDRAW_CHUNK, timeISO: nowISO });
+    if (sheetRes.ok){
+      // оновлюємо pending запис як synced / submitted
+      const arr = readPendingWithdrawals();
+      for (let i=arr.length-1;i>=0;i--){
+        if (!arr[i].synced && arr[i].time === nowISO && arr[i].amount === WITHDRAW_CHUNK && arr[i].tag===tag){
+          arr[i].synced = true;
+          arr[i].sheet_row = sheetRes.row || sheetRes.number || null;
+          arr[i].status = 'submitted';
+          arr[i].submittedAt = Date.now();
+          break;
+        }
+      }
+      writePendingWithdrawals(arr);
+      renderPendingList();
+
+      // також дочитуємо стан з CloudStore (за потреби)
+      try{
+        const rem = await CloudStore.getRemote();
+        if (rem) CloudStore.applyRemoteToState(rem);
+      }catch(_){}
+      if (statusEl){ statusEl.className="ok"; statusEl.textContent="Вивід зафіксовано"; }
+    } else {
+      // фейл: залишаємо pending для повторної відправки; зберігаємо повідомлення про помилку
+      const arr = readPendingWithdrawals();
+      for (let i=arr.length-1;i>=0;i--){
+        if (!arr[i].synced && arr[i].time === nowISO && arr[i].amount === WITHDRAW_CHUNK && arr[i].tag===tag){
+          arr[i].status = "failed";
+          arr[i].error = sheetRes.error || "submit_failed";
+          break;
+        }
+      }
+      writePendingWithdrawals(arr);
+      renderPendingList();
+
+      if (statusEl){ statusEl.className="err"; statusEl.textContent = "Помилка запису в таблицю: " + (sheetRes.error || "невідома"); }
+    }
+  } catch(e){
+    // мережевий фейл: залишаємо pending для повторних спроб
+    if (statusEl){ statusEl.className="muted"; statusEl.textContent="Очікуємо мережу…"; }
   }
 
   if (btn) btn.disabled = false;
 }
 
-/* ========= СИНК ОЧІКУЮЧИХ (за бажанням) ========= */
+/* ========= СИНК ОЧІКУЮЧИХ (розширено) ========= */
 function readPendingWithdrawals(){ try{ const arr=JSON.parse(localStorage.getItem("payouts_pending")||"[]"); return Array.isArray(arr)?arr:[]; }catch{ return []; } }
 function writePendingWithdrawals(arr){ localStorage.setItem("payouts_pending", JSON.stringify(arr||[])); }
 function getServerWithdrawCount(){ return (Array.isArray(serverWithdraws) ? serverWithdraws.filter(v=>v && String(v)!=='0').length : 0) | 0; }
+
 async function syncPendingWithdrawals(){
   const statusEl=$("withdrawStatus");
   let pend=readPendingWithdrawals();
-  if (pend.length===0){ renderPayoutList(); return; }
+  if (pend.length===0){ renderPayoutList(); renderPendingList(); return; }
+  let changed = false;
   for (let i=0;i<pend.length;i++){
     const it=pend[i]; if (it.synced) continue;
-    const res = await submitWithdrawalToCloud15({ user_id: it.id, tag: it.tag, username: it.username, amount: WITHDRAW_CHUNK });
-    if (res.ok){
-      it.synced=true; it.slot=res.slot||null;
-      if (statusEl){ statusEl.className="ok"; statusEl.textContent="Поставлено на вивід"; }
-      const rem=await CloudStore.getRemote(); if (rem) CloudStore.applyRemoteToState(rem);
-    } else {
-      if (statusEl && !statusEl.textContent){ statusEl.className="muted"; statusEl.textContent="Очікуємо мережу…"; }
+    try{
+      const res = await submitWithdrawalToSheet({ user_id: it.id, tag: it.tag, username: it.username, amount: it.amount, timeISO: it.time });
+      if (res.ok){
+        it.synced=true; it.sheet_row = res.row || res.number || null; it.status = 'submitted'; it.submittedAt = Date.now();
+        if (statusEl){ statusEl.className="ok"; statusEl.textContent="Поставлено на вивід"; }
+        changed = true;
+      } else {
+        it.status = it.status || 'processing';
+        it.error = res.error || it.error || "submit_failed";
+        if (statusEl && !statusEl.textContent){ statusEl.className="muted"; statusEl.textContent="Очікуємо мережу…"; }
+      }
+    }catch(e){
+      it.error = String(e?.message||e);
     }
-    pend[i]=it; writePendingWithdrawals(pend); renderPayoutList();
+    pend[i]=it; writePendingWithdrawals(pend); renderPendingList();
+    await new Promise(r=>setTimeout(r, 250));
+  }
+
+  if (changed){
+    try{
+      const rem = await CloudStore.getRemote();
+      if (rem) CloudStore.applyRemoteToState(rem);
+    }catch(_){}
+  }
+}
+
+/* ========= UI: pending list (особисті виводи / очікуючі) ========= */
+function renderPendingList(){
+  const wrap = $("pendingWithdraws");
+  if (!wrap) return;
+  const pend = readPendingWithdrawals();
+  wrap.innerHTML = "";
+  if (!pend || pend.length===0){
+    wrap.innerHTML = "<div class='muted'>Немає очікуючих виводів</div>";
+    return;
+  }
+  const arr = pend.slice().reverse();
+  for (let it of arr){
+    const row = document.createElement("div");
+    row.className = "pending-row";
+    const time = new Date(it.time).toLocaleString();
+    const tag = it.tag || "";
+    const amt = it.amount || 0;
+    const num = it.sheet_row ? `#${it.sheet_row}` : "—";
+    const st = it.status || (it.synced ? "submitted" : "processing");
+    let errTxt = it.error ? ` <span class="err">(${it.error})</span>` : "";
+    row.innerHTML = `<strong>${time}</strong> — ${tag} — ${amt}⭐ — ${num} — <em>${st}</em>${errTxt}`;
+    wrap.appendChild(row);
   }
 }
 
@@ -475,15 +574,7 @@ window.onload = function(){
   const t50 = $("checkTask50");
   if (t50){
     if (task50Completed){ t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); t50.classList.add("done"); }
-    t50.addEventListener("click", ()=>{
-      if (highscore >= 75 && !task50Completed){
-        addBalance(5.15);
-        t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); t50.classList.add("done");
-        task50Completed = true; saveData();
-      } else {
-        alert(document.documentElement.lang==='en' ? "❌ Highscore is too low (need 75+)" : "❌ Твій рекорд замалий (потрібно 75+)");
-      }
-    });
+    t50.addEventListener("click", ()=>{ if (highscore >= 75 && !task50Completed){ addBalance(5.15); t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); t50.classList.add("done"); task50Completed = true; saveData(); } else { alert(document.documentElement.lang==='en' ? "❌ Highscore is too low (need 75+)" : "❌ Твій рекорд замалий (потрібно 75+)"); } });
   }
 
   $("checkGames100Btn")?.addEventListener("click", onCheckGames100);
@@ -513,9 +604,44 @@ window.onload = function(){
   // Хмара
   try { CloudStore.initAndHydrate(); } catch(e){ console.warn(e); }
 
-  // періодичний синк очікуючих виводів (за потреби)
+  // періодичний синк очікуючих виводів
   clearInterval(syncTimer);
   syncTimer = setInterval(()=>{ syncPendingWithdrawals(); }, 20_000);
+
+  // рендер pending з localStorage
+  renderPendingList();
+
+  // підтягуємо з сервера (GAS) персональні рядки і відображаємо їх поряд з pending (fetchUserWithdrawRows)
+  (async ()=>{
+    try{
+      const u = getTelegramUser();
+      const rows = await fetchUserWithdrawRows({ user_id: u.id, tg_tag: (u.username ? ("@"+u.username) : "") });
+      if (Array.isArray(rows) && rows.length>0){
+        // Ми можемо додати ці рядки до localStorage історії або показати поруч
+        // Для простоти, додаємо як додаткові pending-рядки з status із таблиці
+        const pend = readPendingWithdrawals();
+        for (let r of rows){
+          // у відповіді очікуємо { number, tg_tag, time, amount, status }
+          const exists = pend.some(p => p.sheet_row && String(p.sheet_row) === String(r.number) );
+          if (!exists){
+            pend.push({
+              id: u.id || null,
+              tag: r.tg_tag || (u.username?("@"+u.username):""),
+              username: r.username || "",
+              amount: r.amount || 0,
+              time: r.time || (new Date()).toISOString(),
+              status: r.status || "submitted",
+              synced: true,
+              sheet_row: r.number || r._sheetRow || null,
+              createdAt: Date.now()
+            });
+          }
+        }
+        writePendingWithdrawals(pend);
+        renderPendingList();
+      }
+    }catch(e){ /* silent */ }
+  })();
 };
 
 /* ========= Баланс / Підписка ========= */
@@ -636,7 +762,7 @@ function updateAdTasksUI(){
   const tenWrap = $("taskWatch10");
   const tenCD   = $("taskWatch10Cooldown");
   const tenCnt  = $("ad10Counter");
-  const tenCDt  = $("ad10CooldownText");
+  const tenCDt  = $("taskWatch10CooldownText") || $("ad10CooldownText");
 
   const left10 = TASK_DAILY_COOLDOWN_MS - (now - lastTask10RewardAt);
   if (tenCnt) tenCnt.textContent = `${Math.min(ad10Count, TASK10_TARGET)}/${TASK10_TARGET}`;
@@ -1102,6 +1228,7 @@ function updateHighscore(currentScore){
   }
   CloudStore.queuePush({ highscore, last_score: currentScore });
 }
+
 
 
 
