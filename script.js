@@ -1,393 +1,272 @@
 "use strict";
 console.clear();
 
-/* ========================= CONFIG =========================
-   - стара Cloud (рекорди/баланс) — в HTML/тегу: window.CLOUD_URL / window.CLOUD_API_KEY
-   - нова Withdraw Cloud (тільки для виводів) — вказана нижче (тільки для записів A..E)
-   ЗАМІНИть WITHDRAW_CLOUD_URL / WITHDRAW_API_KEY, якщо треба.
-===========================================================*/
-
-/* Withdraw GAS (твій URL, що ти дав) */
-const WITHDRAW_CLOUD_URL = "https://script.google.com/macros/s/AKfycbzD5GxjFHSD7KFosC33qNqGVqT4zcbxhGJ_QgR5pa8mVaIv-hc-ZoTK11nAksvtegZ9/exec";
-const WITHDRAW_API_KEY   = "vgkgfghfgdxkyovbyuofyuf767f67ed54j"; // SECRET_API для withdraw-GAS
-
-/* Стара Cloud (може бути задана в HTML, залишаємо як є) */
-const LEGACY_CLOUD_URL = window.CLOUD_URL || "";
-const LEGACY_CLOUD_API = window.CLOUD_API_KEY || "";
-
-/* ========= CONSTANTS ========= */
-const WITHDRAW_CHUNK = 50;
+/* ========= КОНСТАНТИ ========= */
 const DAILY_CAP = 25;
+const DAILY_COOLDOWN_MS = 0;
+
+const GAME_AD_COOLDOWN_MS = 15_000;
+const ANY_AD_COOLDOWN_MS  = 60_000;
+const MIN_BETWEEN_SAME_CTX_MS = 10_000;
+
+const POST_AD_TIMER_MS = 15_000;
+
+const GAMES_TARGET = 100;
+const GAMES_REWARD = 5;
+
+const WITHDRAW_CHUNK = 50;
+
+/* --- Adsgram блоки --- */
+const ADSGRAM_BLOCK_ID_TASK_MINUTE = "int-13961";
+const ADSGRAM_BLOCK_ID_TASK_510    = "int-15276";
+const ADSGRAM_BLOCK_ID_GAMEOVER    = "int-15275";
+
+/* --- Квести на рекламу 5 і 10 --- */
 const TASK5_TARGET = 5;
 const TASK10_TARGET = 10;
 const TASK_DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
-const POST_AD_TIMER_MS = 15_000;
-const GAME_AD_COOLDOWN_MS = 15_000;
-const ANY_AD_COOLDOWN_MS  = 60_000;
-const MIN_BETWEEN_SAME_CTX_MS = 10_000;
-const GAMES_TARGET = 100;
-const GAMES_REWARD = 5;
-
-/* ========= HELPERS ========= */
+/* ========= ХЕЛПЕРИ ========= */
 const $ = id => document.getElementById(id);
 const formatStars = v => Number.isInteger(Number(v)) ? String(Number(v)) : Number(v).toFixed(2);
 
-function nowISO(){ return (new Date()).toISOString(); }
-function prettyTime(iso){ try { return new Date(iso).toLocaleString(); } catch(e) { return iso; } }
-
-/* ========= LOCAL STORAGE KEYS ========= */
-const KEY_PENDING = "payouts_pending";
-const KEY_HISTORY = "payouts_history";
-
-/* ========= PERSISTENCE (local) ========= */
-function readPendingWithdrawals(){ try{ const arr=JSON.parse(localStorage.getItem(KEY_PENDING)||"[]"); return Array.isArray(arr)?arr:[]; }catch{ return []; } }
-function writePendingWithdrawals(arr){ localStorage.setItem(KEY_PENDING, JSON.stringify(arr||[])); }
-function readHistory(){ try{ const arr=JSON.parse(localStorage.getItem(KEY_HISTORY)||"[]"); return Array.isArray(arr)?arr:[]; }catch{ return []; } }
-function writeHistory(arr){ localStorage.setItem(KEY_HISTORY, JSON.stringify(arr||[])); }
-
-/* ========= STATE ========= */
-let balance = 0;
-let highscore = 0;
-let subscribed = false;
-let task50Completed = false;
-let gamesPlayedSinceClaim = 0;
-let lastAnyAdAt = 0;
-let ad5Count = 0, ad10Count = 0;
-let lastTask5RewardAt = 0, lastTask10RewardAt = 0;
-let gramCount = 0, exCount = 0, dailyStamp = "";
-
-/* ========= UI helpers ========= */
-function setBalanceUI(){ const el = $("balance"); if (el) el.innerText = formatStars(balance); }
-
-/* ========= HTTP helpers ========= */
-async function postJSONto(url, body){
-  try{
-    const r = await fetch(url, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
-    const j = await r.json().catch(()=>null);
-    return { ok: r.ok, status: r.status, json: j };
-  }catch(e){ return { ok:false, error: String(e) }; }
+function setBalanceUI(){
+  const el = $("balance");
+  if (el) el.innerText = formatStars(balance);
+}
+function _todayStamp(){
+  const d = new Date();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+function msUntilMidnightLocal(){
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1, 0, 0, 0, 0);
+  return next - now;
+}
+function formatHMS(ms){
+  ms = Math.max(0, ms|0);
+  const s = Math.ceil(ms/1000);
+  const hh = Math.floor(s/3600);
+  const mm = Math.floor((s%3600)/60);
+  const ss = s%60;
+  return (hh>0 ? String(hh).padStart(2,'0')+":" : "") + String(mm).padStart(2,'0')+":"+String(ss).padStart(2,'0');
 }
 
-/* ========= Withdraw-specific functions (separate from legacy Cloud) ========= */
-
-/** Відправка виводу на Withdraw-GAS */
-async function submitWithdrawalToWithdrawGAS({ user_id, tag, username, amount, timeISO }){
-  if (!WITHDRAW_CLOUD_URL || !WITHDRAW_API_KEY) return { ok:false, error:"WITHDRAW_CLOUD not configured" };
-  const payload = {
-    api: WITHDRAW_API_KEY,
-    action: "withdraw_row",
-    user_id: user_id || "",
-    tg_tag: tag || "",
-    username: username || "",
-    amount: Number(amount) || 0,
-    time: timeISO || nowISO()
-  };
-  const res = await postJSONto(WITHDRAW_CLOUD_URL, payload);
-  if (!res.ok) return { ok:false, error: res.json?.error || res.error || `HTTP ${res.status}` };
-  if (res.json && res.json.ok) return { ok:true, row: res.json.row || null, number: res.json.number || null, stored: res.json.stored || null, json: res.json };
-  return { ok:false, error: res.json?.error || "no_json_ok" };
-}
-
-/** Отримати рядки виводів з Withdraw-GAS (фільтр за user_id або tg_tag) */
-async function fetchWithdrawRowsFromWithdrawGAS({ user_id, tg_tag }){
-  if (!WITHDRAW_CLOUD_URL || !WITHDRAW_API_KEY) return [];
-  const q = `${WITHDRAW_CLOUD_URL}?api=${encodeURIComponent(WITHDRAW_API_KEY)}&cmd=get_withdraw_rows${user_id?`&user_id=${encodeURIComponent(user_id)}`:''}${tg_tag?`&tg_tag=${encodeURIComponent(tg_tag)}`:''}&_=${Date.now()}`;
-  try{
-    const r = await fetch(q, { method:'GET', headers:{ 'accept':'application/json' }});
-    if (!r.ok) return [];
-    const j = await r.json().catch(()=>null);
-    if (j && j.ok && Array.isArray(j.rows)) return j.rows;
-  }catch(e){ console.warn('fetchWithdrawRows error', e); }
-  return [];
-}
-
-/* ========= Render payouts UI ========= */
-function renderPayoutList(){
-  const wrap = $("payoutList");
-  if (!wrap) return;
-  wrap.innerHTML = "";
-
-  const pending = readPendingWithdrawals() || [];
-  const history = readHistory() || [];
-
-  const combined = [];
-
-  // show pending newest first
-  for (let i = pending.length -1; i >=0; i--){
-    const p = pending[i];
-    combined.push({
-      number: p.number || '—',
-      tag: p.tag || getUserTag(),
-      time: p.time || p.createdAtISO || nowISO(),
-      amount: p.amount || 0,
-      status: p.status || (p.synced ? 'submitted' : 'processing'),
-      source: 'pending',
-      error: p.error || null
-    });
-  }
-  // then history
-  for (let h of history) {
-    combined.push({
-      number: h.number || h._sheetRow || '—',
-      tag: h.tag || h.tg_tag || '—',
-      time: h.time || h.createdAt || nowISO(),
-      amount: h.amount || 0,
-      status: h.status || 'submitted',
-      source: 'history'
-    });
-  }
-
-  if (combined.length === 0){
-    wrap.innerHTML = '<div class="muted">Немає записів виводів</div>';
-    return;
-  }
-
-  const tbl = document.createElement('table');
-  tbl.className = 'withdraw-table';
-  const thead = document.createElement('thead');
-  thead.innerHTML = '<tr><th>№</th><th>@</th><th>Час</th><th>Сума</th><th>Статус</th></tr>';
-  tbl.appendChild(thead);
-  const tb = document.createElement('tbody');
-  for (let r of combined){
-    const tr = document.createElement('tr');
-    const num = r.number ? r.number : '—';
-    const tag = r.tag || '—';
-    const time = prettyTime(r.time);
-    const amount = (r.amount!=null) ? String(r.amount) : '—';
-    const status = r.status || '—';
-    tr.innerHTML = `<td>${num}</td><td>${tag}</td><td>${time}</td><td>${amount}⭐</td><td>${status}${r.error?(' <span class="err">'+r.error+'</span>'):''}</td>`;
-    tb.appendChild(tr);
-  }
-  tbl.appendChild(tb);
-  wrap.appendChild(tbl);
-}
-
-/* ========= Withdraw action (button) ========= */
-async function withdraw50LocalFirst(){
-  const statusEl = $("withdrawStatus");
-  const btn = $("withdrawBtn");
-  if (btn && btn.disabled) return;
-  if (balance < WITHDRAW_CHUNK) {
-    if (statusEl){ statusEl.className="err"; statusEl.textContent=`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`; }
-    return;
-  }
-
-  if (btn) btn.disabled = true;
-
-  const u = getTelegramUser();
-  const id = u.id || "";
-  const tag = getUserTag();
-  const uname = u.username || [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
-  const now = nowISO();
-
-  // optimistic: add local pending and reduce local balance
-  const pending = readPendingWithdrawals();
-  const item = {
-    id: id || null,
-    tag: tag,
-    username: uname,
-    amount: WITHDRAW_CHUNK,
-    time: now,
-    createdAtISO: now,
-    status: 'processing',
-    synced: false,
-    number: null,
-    error: null
-  };
-  pending.push(item);
-  writePendingWithdrawals(pending);
-
-  const oldBalance = balance;
-  balance = parseFloat((balance - WITHDRAW_CHUNK).toFixed(2));
-  if (balance < 0) balance = 0;
-  setBalanceUI();
-  saveData();
-
-  if (statusEl){ statusEl.className="ok"; statusEl.textContent="Поставлено на вивід…"; }
-  renderPayoutList();
-
-  // send to Withdraw-GAS
-  try{
-    const res = await submitWithdrawalToWithdrawGAS({ user_id: id, tag: tag, username: uname, amount: WITHDRAW_CHUNK, timeISO: now });
-    if (res.ok){
-      // mark pending as synced
-      const pend2 = readPendingWithdrawals();
-      for (let i = pend2.length -1; i >=0; i--){
-        const p = pend2[i];
-        if (!p.synced && p.time === now && p.amount === WITHDRAW_CHUNK && p.tag === tag){
-          p.synced = true;
-          p.number = res.number || res.row || p.number;
-          p.status = 'submitted';
-          p.sheet_row = res.row || null;
-          p.submittedAt = nowISO();
-          break;
-        }
-      }
-      writePendingWithdrawals(pend2);
-
-      // append to history
-      const hist = readHistory();
-      hist.push({
-        number: res.number || res.row || null,
-        tag: tag,
-        time: now,
-        amount: WITHDRAW_CHUNK,
-        status: 'submitted',
-        _sheetRow: res.row || null
-      });
-      writeHistory(hist);
-
-      if (statusEl){ statusEl.className="ok"; statusEl.textContent="Вивід зафіксовано"; }
-    } else {
-      // server error — mark pending failed and rollback balance
-      const pend2 = readPendingWithdrawals();
-      for (let i = pend2.length -1; i >=0; i--){
-        const p = pend2[i];
-        if (!p.synced && p.time === now && p.amount === WITHDRAW_CHUNK && p.tag === tag){
-          p.status = 'failed';
-          p.error = res.error || 'submit_failed';
-          break;
-        }
-      }
-      writePendingWithdrawals(pend2);
-      balance = oldBalance; setBalanceUI(); saveData();
-      if (statusEl){ statusEl.className="err"; statusEl.textContent = "Помилка запису: " + (res.error || "невідома"); }
-    }
-  } catch(e){
-    // network error — leave pending as processing/error, keep balance reduced (you may choose to rollback)
-    const pend2 = readPendingWithdrawals();
-    for (let i = pend2.length -1; i >=0; i--){
-      const p = pend2[i];
-      if (!p.synced && p.time === now && p.amount === WITHDRAW_CHUNK && p.tag === tag){
-        p.status = 'processing';
-        p.error = 'network';
-        break;
-      }
-    }
-    writePendingWithdrawals(pend2);
-    if (statusEl){ statusEl.className="muted"; statusEl.textContent="Мережа недоступна — запис залишено локально"; }
-  } finally {
-    if (btn) btn.disabled = false;
-    renderPayoutList();
-  }
-}
-
-/* ========= Periodic retry for pending items ========= */
-async function syncPendingWithdrawals(){
-  const pending = readPendingWithdrawals();
-  if (!pending || pending.length === 0) return;
-  for (let i=0;i<pending.length;i++){
-    const it = pending[i];
-    if (it.synced) continue;
-    const res = await submitWithdrawalToWithdrawGAS({ user_id: it.id, tag: it.tag, username: it.username, amount: it.amount, timeISO: it.time });
-    if (res.ok){
-      it.synced = true; it.number = res.number || res.row || it.number; it.status = 'submitted'; it.sheet_row = res.row || null;
-      // move to history
-      const hist = readHistory();
-      hist.push({ number: it.number, tag: it.tag, time: it.time, amount: it.amount, status: 'submitted', _sheetRow: it.sheet_row });
-      writeHistory(hist);
-    } else {
-      it.error = res.error || it.error || 'submit_failed';
-    }
-    pending[i] = it;
-    writePendingWithdrawals(pending);
-    renderPayoutList();
-    await new Promise(r => setTimeout(r, 200));
-  }
-}
-
-/* ========= Initialize withdraw history from remote (merge without duplicates) ========= */
-async function initWithdrawHistorySync(){
-  try{
-    const u = getTelegramUser();
-    const user_id = u.id || '';
-    const tg_tag = u.username ? ("@"+u.username) : '';
-    const rows = await fetchWithdrawRowsFromWithdrawGAS({ user_id, tg_tag });
-    if (!Array.isArray(rows) || rows.length === 0) return;
-    const hist = readHistory() || [];
-    for (let r of rows){
-      const keyRemote = String(r.number || r._sheetRow || '') + '|' + String(r.time || '') + '|' + String(r.amount || '');
-      const exists = hist.some(h => (String(h.number||'') + '|' + String(h.time||'') + '|' + String(h.amount||'')) === keyRemote);
-      if (!exists){
-        hist.push({
-          number: r.number || r._sheetRow || null,
-          tag: r.tag || r.tg_tag || '',
-          time: r.time || nowISO(),
-          amount: r.amount || 0,
-          status: r.status || 'submitted',
-          _sheetRow: r._sheetRow || null
-        });
-      }
-    }
-    writeHistory(hist);
-    renderPayoutList();
-  }catch(e){ console.warn('initWithdrawHistorySync error', e); }
-}
-
-/* ========= Debug helpers (call from console) ========= */
-window.clearLocalPending = function(){ localStorage.removeItem(KEY_PENDING); renderPayoutList(); console.log('Local pending cleared'); };
-window.fetchWithdrawRowsNow = async function(){ const u = getTelegramUser(); const rows = await fetchWithdrawRowsFromWithdrawGAS({ user_id: u.id || '', tg_tag: u.username ? '@'+u.username : '' }); console.log(rows); return rows; };
-
-/* ========= TELEGRAM / USER helpers (same as before) ========= */
-function getTelegramUser(){
-  const u = (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user) || null;
-  if (!u) return { id:"", username:"", first_name:"", last_name:"" };
-  return { id:u.id||"", username:u.username||"", first_name:u.first_name||"", last_name:u.last_name||"" };
-}
-function getUserTag(){
-  const u = getTelegramUser();
-  if (u.username) return "@"+u.username;
-  const name = [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
-  if (name) return name;
-  if (u.id) return "id"+u.id;
-  return "Гравець";
-}
-
-/* ========= Legacy CloudStore logic (не чіпати) ========= */
-/* Тут повинна бути твоя стара реалізація CloudStore (як у початковому коді) --
-   я не копіюю її сюди повністю, бо в твоєму проєкті вона вже була.
-   Переконайся, що в script.js все ще є CloudStore.initAndHydrate(),
-   яке пише/читає рекорд/баланс з LEGACY_CLOUD_URL / LEGACY_CLOUD_API.
-   Якщо немає — додай оригінальну функцію CloudStore з попереднього коду.
-*/
-
-/* ========= INIT / window.onload ========= */
-let syncTimer = null;
-window.onload = async function(){
-  // load balance from localStorage (do not reset to 0 on load)
-  const storedBalance = localStorage.getItem("balance");
-  if (storedBalance != null && storedBalance !== "undefined"){
-    const b = parseFloat(storedBalance);
-    if (!isNaN(b)) balance = b;
-  }
-
-  // load other saved states (simplified)
-  subscribed = localStorage.getItem("subscribed") === "true";
-  task50Completed = localStorage.getItem("task50Completed") === "true";
-  lastAnyAdAt = parseInt(localStorage.getItem("lastAnyAdAt") || "0",10);
-  gamesPlayedSinceClaim = parseInt(localStorage.getItem("gamesPlayedSinceClaim") || "0",10);
-  ad5Count = parseInt(localStorage.getItem("ad5Count") || "0",10);
-  ad10Count = parseInt(localStorage.getItem("ad10Count") || "0",10);
-
-  setBalanceUI();
-  // render payouts (local)
-  renderPayoutList();
-
-  // try to sync withdraw history from remote Withdraw-GAS
-  try { await initWithdrawHistorySync(); } catch(e){ console.warn(e); }
-
-  // periodic retry for pending
-  clearInterval(syncTimer);
-  syncTimer = setInterval(()=>{ syncPendingWithdrawals(); }, 20_000);
-
-  // rest of your original onload logic: init ads, game, UI binds, CloudStore.initAndHydrate() etc.
-  // make sure CloudStore.initAndHydrate() (if present) runs so legacy balance/highscore get synced.
+/* ========= ХМАРА ========= */
+const CLOUD = {
+  url: (typeof window !== 'undefined' && window.CLOUD_URL) || '',
+  api: (typeof window !== 'undefined' && window.CLOUD_API_KEY) || '',
 };
 
-/* ========= SAVE data (balance etc.) ========= */
+/** масив на 15 клітин (J..X): '0','50',... */
+let serverWithdraws = [];
+/** tg_tag, який показуємо поруч зі списком виводів */
+let payoutTag = '';
+
+/* перший вільний (0/порожній) слот J..X */
+function firstFreeWithdrawIndex(){
+  const arr = Array.isArray(serverWithdraws) ? serverWithdraws : [];
+  for (let i = 0; i < 15; i++){
+    if (!arr[i] || String(arr[i]) === '0') return i;
+  }
+  return -1;
+}
+
+/* ========= CloudStore ========= */
+const CloudStore = (() => {
+  const st = {
+    enabled: !!(CLOUD.url && CLOUD.api),
+    uid: '',
+    username: '',
+    lastRemote: null,
+    pollTimer: null,
+    pollMs: 15_000,
+    debounceTimer: null,
+    pushing: false,
+  };
+
+  function tgUser(){
+    return (window.Telegram?.WebApp?.initDataUnsafe?.user) || null;
+  }
+  function identify(){
+    const u = tgUser() || {};
+    st.uid = u?.id ? String(u.id) : ""; // працюємо з uid, якщо є
+    st.username = (u?.username || [u?.first_name||'', u?.last_name||''].filter(Boolean).join(' ')) || '';
+  }
+  function makeTag(){
+    if (st.username) return st.username.startsWith('@') ? st.username : '@'+st.username;
+    return '';
+  }
+
+  async function getRemote(){
+    if (!st.enabled) return null;
+
+    const uid = st.uid;
+    const tg  = makeTag();
+    const nocache = "&_=" + Date.now();
+
+    async function tryUrl(u){
+      try{
+        const r = await fetch(u, { method:'GET', headers:{'accept':'application/json'} });
+        if (!r.ok) return null;
+        const j = await r.json().catch(()=>null);
+        if (j && j.ok && j.data) return j.data;
+      }catch(_){}
+      return null;
+    }
+
+    // 1) спроба з uid+tg, 2) з uid, 3) з tg
+    if (uid && tg){
+      const urlBoth = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(uid)}&tg_tag=${encodeURIComponent(tg)}${nocache}`;
+      const d = await tryUrl(urlBoth); if (d) return d;
+    }
+    if (uid){
+      const urlUid = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(uid)}${nocache}`;
+      const d = await tryUrl(urlUid); if (d) return d;
+    }
+    if (tg){
+      const urlTag = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&tg_tag=${encodeURIComponent(tg)}${nocache}`;
+      const d = await tryUrl(urlTag); if (d) return d;
+    }
+    return null;
+  }
+
+  async function pushRemote(partial){
+    if (!st.enabled || (!st.uid && !makeTag())) return;
+    const body = {
+      api: CLOUD.api,
+      user_id: st.uid || undefined,
+      username: st.username.replace(/^@/,''), 
+      tg_tag: makeTag() || undefined,
+      balance: (partial.balance!=null ? Number(partial.balance) : Number(balance||0)),
+      highscore: (partial.highscore!=null ? Number(partial.highscore) : Number(highscore||0)),
+      last_score: (partial.last_score!=null ? Number(partial.last_score) : Number(parseInt($("score")?.innerText||"0",10))),
+      battle_record: (partial.battle_record!=null ? Number(partial.battle_record) : Number(localStorage.getItem('battle_record')||'0')),
+    };
+    st.pushing = true;
+    try{
+      const r = await fetch(CLOUD.url, {
+        method:'POST',
+        headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json().catch(()=>null);
+      if (j && j.ok) st.lastRemote = j.data || null;
+    }catch(_){ }
+    finally { st.pushing = false; }
+  }
+  function queuePush(partial={}){ if (!st.enabled) return; clearTimeout(st.debounceTimer); st.debounceTimer=setTimeout(()=>pushRemote(partial),700); }
+
+  function applyRemoteToState(rem){
+    if (!rem) return;
+
+    if (typeof rem.highscore === 'number' && rem.highscore > (highscore||0)){
+      highscore = rem.highscore;
+      const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
+    }
+    if (typeof rem.balance === 'number' && rem.balance !== balance){
+      if (!(rem.balance === 0 && balance > 0)) {
+        balance = parseFloat(rem.balance.toFixed(2));
+        setBalanceUI();
+      }
+    }
+    const localBattle = Number(localStorage.getItem('battle_record')||'0');
+    const newBattle = Math.max(localBattle, Number(rem.battle_record||0));
+    if (newBattle !== localBattle){ localStorage.setItem('battle_record', String(newBattle)); }
+
+    if (rem.tg_tag && typeof rem.tg_tag === "string") payoutTag = rem.tg_tag.trim();
+
+    if (Array.isArray(rem.withdraws)){
+      serverWithdraws = rem.withdraws.slice(0,15).map(x => (x==null||x==='')?'0':String(x));
+      while (serverWithdraws.length < 15) serverWithdraws.push('0');
+      renderPayoutList();
+    }
+  }
+
+  async function hydrate(){
+    if (!st.enabled) return;
+    identify();
+    try{
+      const rem = await getRemote();
+      st.lastRemote = rem;
+      if (rem) applyRemoteToState(rem);
+      if (!rem && (st.uid || makeTag())) { queuePush({}); }
+    }catch(e){ console.warn('[Cloud] hydrate failed', e); }
+  }
+  function startPolling(){
+    if (!st.enabled) return;
+    clearInterval(st.pollTimer);
+    st.pollTimer = setInterval(async()=>{ try{
+      const rem = await getRemote(); if (rem) CloudStore.applyRemoteToState(rem);
+    }catch(_){ } }, st.pollMs);
+  }
+  function initAndHydrate(){
+    if (!st.enabled){ console.warn('[Cloud] disabled: CLOUD_URL / CLOUD_API_KEY'); return; }
+    identify();
+    hydrate().then(startPolling);
+    window.addEventListener('beforeunload', ()=>{ try{}catch(_){ } });
+  }
+
+  return { initAndHydrate, queuePush, tgUser, getRemote, applyRemoteToState };
+})();
+
+/* ========= ЄДИНА ТОЧКА ДОБОВОГО РЕСЕТУ ========= */
+function ensureDailyReset() {
+  const today = _todayStamp();
+  const stored = localStorage.getItem('dailyStamp') || today;
+  if (stored !== today) {
+    gramCount = 0; exCount = 0;
+    lastGramAt = 0; lastExAt = 0;
+    dailyStamp = today;
+    localStorage.setItem('dailyGramCount','0');
+    localStorage.setItem('dailyExCount','0');
+    localStorage.setItem('lastGramAt','0');
+    localStorage.setItem('lastExAt','0');
+    localStorage.setItem('dailyStamp',today);
+    saveData();
+    try{ window.dispatchEvent(new CustomEvent('daily-reset',{detail:{day:today}})); }catch(e){}
+  }
+}
+
+/* ========= СТАН ========= */
+let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
+let gamesPlayedSinceClaim = 0;
+let isPaused = false;
+
+let ad5Count = 0, ad10Count = 0;
+let lastTask5RewardAt = 0, lastTask10RewardAt = 0;
+
+let gramCount = 0, exCount = 0;
+let lastGramAt = 0, lastExAt = 0;
+let dailyStamp = "";
+
+let postAdTimerActive = false;
+let postAdInterval = null;
+
+/* ========= РЕКЛАМА ========= */
+let AdTaskMinute = null;
+let AdTask510    = null;
+let AdGameover   = null;
+
+let lastGameoverAdAt = 0;
+let lastAnyAdAt = 0;
+
+let adInFlightGameover = false;
+let adInFlightTask5 = false;
+let adInFlightTask10 = false;
+
+/* ========= БАТЛ ========= */
+let oppScorePending = null;
+let challengeActive = false;
+let challengeStartAt = 0;
+let challengeDeadline = 0;
+let challengeStake = 0;
+let challengeOpp = 0;
+
+/* ========= ЗБЕРЕЖЕННЯ ========= */
 function saveData(){
-  localStorage.setItem("balance", String(balance));
   localStorage.setItem("subscribed", subscribed ? "true" : "false");
   localStorage.setItem("task50Completed", task50Completed ? "true" : "false");
   localStorage.setItem("gamesPlayedSinceClaim", String(gamesPlayedSinceClaim));
@@ -401,32 +280,13 @@ function saveData(){
   localStorage.setItem("lastGramAt", String(lastGramAt));
   localStorage.setItem("lastExAt", String(lastExAt));
   localStorage.setItem("dailyStamp", dailyStamp);
+  localStorage.setItem("oppScorePending", oppScorePending==null ? "" : String(oppScorePending));
+  localStorage.setItem("challengeActive", challengeActive ? "true" : "false");
+  localStorage.setItem("challengeStartAt", String(challengeStartAt));
+  localStorage.setItem("challengeDeadline", String(challengeDeadline));
+  localStorage.setItem("challengeStake", String(challengeStake));
+  localStorage.setItem("challengeOpp", String(challengeOpp));
 }
-
-/* ========= END OF FILE — виклики для ручного тестування ========= */
-
-/*
-  Debug / manual tests:
-
-  1) Fetch all withdraw rows for current user (in console):
-     fetchWithdrawRowsNow().then(r=>console.log(r));
-
-  2) Clear local pending:
-     clearLocalPending();
-
-  3) Test direct POST (curl example shown below)
-
-  Curl GET to list withdraw rows for tg_tag:
-    curl -s "https://script.google.com/macros/s/AKfycbzD5GxjFHSD7KFosC33qNqGVqT4zcbxhGJ_QgR5pa8mVaIv-hc-ZoTK11nAksvtegZ9/exec?api=vgkgfghfgdxkyovbyuofyuf767f67ed54j&cmd=get_withdraw_rows&tg_tag=%40yourtag"
-
-  Curl POST (test write):
-    curl -s -X POST -H "Content-Type: text/plain;charset=utf-8" \
-      -d '{"api":"vgkgfghfgdxkyovbyuofyuf767f67ed54j","action":"withdraw_row","user_id":"99999","tg_tag":"@curl_test","username":"CurlTester","amount":50,"time":"'"$(date -Iseconds)"'"}' \
-      "https://script.google.com/macros/s/AKfycbzD5GxjFHSD7KFosC33qNqGVqT4zcbxhGJ_QgR5pa8mVaIv-hc-ZoTK11nAksvtegZ9/exec"
-
-  Якщо потрібен — я дам готовий curl з твоїм tg_tag.
-*/
-
 
 /* ========= ІД ТЕЛЕГРАМ ========= */
 function getTelegramUser(){
@@ -443,17 +303,29 @@ function getUserTag(){
   return "Гравець";
 }
 
-/* ========= HTTP helpers ========= */
-async function postJSON(url, body){
-  try{
-    const r = await fetch(url, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
-    const j = await r.json().catch(()=>null);
-    return { ok: r.ok, status: r.status, json: j };
-  }catch(e){ return { ok:false, error: String(e) }; }
+/* ===================== ВИВОДИ (J..X) — ЧИСЛА ===================== */
+
+/** Рендер 15 слотів (числа з J..X) */
+function renderPayoutList(){
+  const ul = $("payoutList");
+  if (!ul) return;
+  ul.innerHTML = "";
+
+  const tag = payoutTag || getUserTag();
+  const arr = Array.isArray(serverWithdraws) ? serverWithdraws.slice(0,15) : [];
+  while (arr.length < 15) arr.push('0');
+
+  for (let i=0; i<15; i++){
+    const v = String(arr[i] ?? '0');
+    const li = document.createElement("li");
+    li.innerHTML = `№${i+1} — ${tag} — ${v}⭐`;
+    ul.appendChild(li);
+  }
 }
 
-/* ========= ВІДПРАВКА ВИВОДУ В TАБЛИЦЮ (GAS) ========= */
-async function submitWithdrawalToSheet({ user_id, tag, username, amount, timeISO }){
+/** POST → GAS: запис у 5-колонний аркуш (№, tg_tag, time, amount, status) через action=withdraw_row */
+/** ПОВЕРТАЄ { ok:true, row: <sheetRow>, number: <withdrawNumber> } або { ok:false, error:... } */
+async function submitWithdrawalToSheet({ user_id, tag, username, amount, timeISO }) {
   if (!CLOUD.url || !CLOUD.api) return { ok:false, error:"CLOUD_URL / CLOUD_API_KEY not set" };
   const payload = {
     api: CLOUD.api,
@@ -464,87 +336,39 @@ async function submitWithdrawalToSheet({ user_id, tag, username, amount, timeISO
     amount: Number(amount) || 0,
     time: timeISO || (new Date()).toISOString()
   };
-  const r = await postJSON(CLOUD.url, payload);
-  if (!r.ok) return { ok:false, error: (r.json?.error || r.error || `HTTP ${r.status}`) };
-  if (r.json && r.json.ok) return { ok:true, row: r.json.row || null, number: r.json.number || null, stored: r.json.stored || null, json: r.json };
-  return { ok:false, error: r.json?.error || "no_json_ok" };
+  try{
+    const r = await fetch(String(CLOUD.url), {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload)
+    });
+    let j=null; try { j = await r.json(); } catch {}
+    if (r.ok && j && j.ok) {
+      return { ok:true, row: j.row || null, number: j.number || null, stored: j.stored || null };
+    }
+    return { ok:false, error: (j?.error || `HTTP ${r.status}`) };
+  } catch(e){
+    return { ok:false, error: String(e?.message || e) };
+  }
 }
 
-/* ========= Отримати рядки для користувача (GET) ========= */
-async function fetchUserWithdrawRows({ user_id, tg_tag }){
+/** GET → GAS: отримати рядки для користувача (cmd=get_withdraw_rows&tg_tag=... або &user_id=...) */
+async function fetchUserWithdrawRows({ user_id, tg_tag }) {
   if (!CLOUD.url || !CLOUD.api) return [];
-  const q = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get_withdraw_rows${user_id?`&user_id=${encodeURIComponent(user_id)}`:''}${tg_tag?`&tg_tag=${encodeURIComponent(tg_tag)}`:''}&_=${Date.now()}`;
+  const nocache = "&_=" + Date.now();
+  const q = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get_withdraw_rows${nocache}`
+          + (user_id ? `&user_id=${encodeURIComponent(user_id)}` : "")
+          + (tg_tag  ? `&tg_tag=${encodeURIComponent(tg_tag)}` : "");
   try{
-    const r = await fetch(q, { method:'GET', headers:{ 'accept':'application/json' }});
+    const r = await fetch(q, { method:'GET', headers:{'accept':'application/json'} });
     if (!r.ok) return [];
     const j = await r.json().catch(()=>null);
     if (j && j.ok && Array.isArray(j.rows)) return j.rows;
-  }catch(e){}
+  }catch(_){}
   return [];
 }
 
-/* ========= UI: рендер списку (виводів) ========= */
-function renderPayoutList(){
-  // використовуємо id payoutList (як ти мав раніше)
-  const wrap = $("payoutList");
-  if (!wrap) return;
-  wrap.innerHTML = "";
-
-  // отримуємо pending та history
-  const pending = readPendingWithdrawals() || [];
-  const history = readHistory() || [];
-
-  // комбінуємо: pend (новіші зверху), потім history
-  const combined = [];
-  for (let i = pending.length - 1; i >= 0; i--){
-    const p = pending[i];
-    combined.push({
-      number: p.number || '—',
-      tag: p.tag || getUserTag(),
-      time: p.time || p.createdAtISO || (new Date()).toISOString(),
-      amount: p.amount || 0,
-      status: p.status || (p.synced ? 'submitted' : 'processing'),
-      source: 'pending',
-      error: p.error || null
-    });
-  }
-  for (let h of history){
-    combined.push({
-      number: h.number || h._sheetRow || '—',
-      tag: h.tag || h.tg_tag || '—',
-      time: h.time || h.createdAt || (new Date()).toISOString(),
-      amount: h.amount || 0,
-      status: h.status || 'submitted',
-      source: 'history'
-    });
-  }
-
-  if (combined.length === 0){
-    wrap.innerHTML = '<div class="muted">Немає записів виводів</div>';
-    return;
-  }
-
-  const tbl = document.createElement('table');
-  tbl.className = 'withdraw-table';
-  const thead = document.createElement('thead');
-  thead.innerHTML = '<tr><th>№</th><th>@</th><th>Час</th><th>Сума</th><th>Статус</th></tr>';
-  tbl.appendChild(thead);
-  const tb = document.createElement('tbody');
-  for (let r of combined){
-    const tr = document.createElement('tr');
-    const num = r.number ? r.number : '—';
-    const tag = r.tag || '—';
-    const time = (new Date(r.time)).toLocaleString();
-    const amount = (r.amount!=null) ? String(r.amount) : '—';
-    const status = r.status || '—';
-    tr.innerHTML = `<td>${num}</td><td>${tag}</td><td>${time}</td><td>${amount}⭐</td><td>${status}${r.error?(' <span class="err">'+r.error+'</span>'):''}</td>`;
-    tb.appendChild(tr);
-  }
-  tbl.appendChild(tb);
-  wrap.appendChild(tbl);
-}
-
-/* ========= Головна функція: натискання на існуючу кнопку withdrawBtn ========= */
+/** «Вивести»: ставимо 50 у перший вільний слот і синхронізуємо з таблицею */
 async function withdraw50LocalFirst(){
   const statusEl = $("withdrawStatus");
   const btn = $("withdrawBtn");
@@ -555,134 +379,157 @@ async function withdraw50LocalFirst(){
     return;
   }
 
+  const freeIdx = firstFreeWithdrawIndex();
+  if (freeIdx < 0){
+    if (statusEl){ statusEl.className="err"; statusEl.textContent="Немає вільних слотів для виводу"; }
+    return;
+  }
+
   if (btn) btn.disabled = true;
 
-  // підготовка даних
   const u = getTelegramUser();
-  const id = u.id || "";
-  const tag = getUserTag();
+  const tag = payoutTag || (u.username ? ("@"+u.username) : getUserTag());
+  const id  = u.id || "";
   const uname = u.username || [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
-  const now = (new Date()).toISOString();
 
-  // 1) оптимістично: додати pending у localStorage і UI (status=processing)
-  const pend = readPendingWithdrawals();
-  const newPending = {
-    id: id || null,
-    tag: tag,
-    username: uname,
-    amount: WITHDRAW_CHUNK,
-    time: now,
-    createdAtISO: now,
-    status: 'processing',
-    synced: false,
-    number: null,
-    error: null
-  };
-  pend.push(newPending);
-  writePendingWithdrawals(pend);
-  // 2) списати баланс локально (оптимістично)
+  // 1) оптимістично: ставимо число 50 (старе поле J..X)
+  const prevValue = serverWithdraws[freeIdx];
+  serverWithdraws[freeIdx] = String(WITHDRAW_CHUNK);
+  renderPayoutList();
+  if (statusEl){ statusEl.className="ok"; statusEl.textContent="Обробляється виводу…"; }
+
+  // 2) списуємо баланс локально
   const oldBalance = balance;
   balance = parseFloat((balance - WITHDRAW_CHUNK).toFixed(2));
   if (balance < 0) balance = 0;
   setBalanceUI(); saveData();
-  if (statusEl){ statusEl.className="ok"; statusEl.textContent="Поставлено на вивід…"; }
 
-  renderPayoutList();
+  // 3) додаємо pending-рядок у localStorage (щоб показувати у персональному списку і повторити пост при проблемі)
+  const pend = readPendingWithdrawals();
+  const nowISO = (new Date()).toISOString();
+  const newPending = {
+    id: id || null,           // telegram id (може бути "")
+    tag: tag || "",
+    username: uname || "",
+    amount: WITHDRAW_CHUNK,
+    time: nowISO,
+    status: "processing",     // processing -> submitted / failed / done
+    synced: false,
+    sheet_row: null,
+    createdAt: Date.now()
+  };
+  pend.push(newPending);
+  writePendingWithdrawals(pend);
+  renderPendingList(); // оновлює UI персонального списку
 
-  // 3) надсилаємо у GAS
+  // 4) пробуємо одразу відправити у новий лист (GAS)
   try{
-    const res = await submitWithdrawalToSheet({
-      user_id: id, tag, username: uname, amount: WITHDRAW_CHUNK, timeISO: now
-    });
-
-    if (res.ok){
-      // позначити pending як synced + проставити number
-      const pend2 = readPendingWithdrawals();
-      for (let i = pend2.length - 1; i >= 0; i--){
-        const p = pend2[i];
-        if (!p.synced && p.time === now && p.amount === WITHDRAW_CHUNK && p.tag === tag){
-          p.synced = true;
-          p.number = res.number || res.row || p.number;
-          p.status = 'submitted';
-          p.sheet_row = res.row || null;
-          p.submittedAt = (new Date()).toISOString();
+    const sheetRes = await submitWithdrawalToSheet({ user_id: id, tag, username: uname, amount: WITHDRAW_CHUNK, timeISO: nowISO });
+    if (sheetRes.ok){
+      // оновлюємо pending запис як synced / submitted
+      const arr = readPendingWithdrawals();
+      for (let i=arr.length-1;i>=0;i--){
+        if (!arr[i].synced && arr[i].time === nowISO && arr[i].amount === WITHDRAW_CHUNK && arr[i].tag===tag){
+          arr[i].synced = true;
+          arr[i].sheet_row = sheetRes.row || sheetRes.number || null;
+          arr[i].status = 'submitted';
+          arr[i].submittedAt = Date.now();
           break;
         }
       }
-      writePendingWithdrawals(pend2);
+      writePendingWithdrawals(arr);
+      renderPendingList();
 
-      // додати до локальної історії
-      const hist = readHistory();
-      hist.push({
-        number: res.number || res.row || null,
-        tag: tag,
-        time: now,
-        amount: WITHDRAW_CHUNK,
-        status: 'submitted',
-        _sheetRow: res.row || null
-      });
-      writeHistory(hist);
-
+      // також дочитуємо стан з CloudStore (за потреби)
+      try{
+        const rem = await CloudStore.getRemote();
+        if (rem) CloudStore.applyRemoteToState(rem);
+      }catch(_){}
       if (statusEl){ statusEl.className="ok"; statusEl.textContent="Вивід зафіксовано"; }
     } else {
-      // помилка від сервера — позначити pending як failed та відкотити баланс
-      const pend2 = readPendingWithdrawals();
-      for (let i = pend2.length - 1; i >= 0; i--){
-        const p = pend2[i];
-        if (!p.synced && p.time === now && p.amount === WITHDRAW_CHUNK && p.tag === tag){
-          p.status = 'failed';
-          p.error = res.error || 'submit_failed';
+      // фейл: залишаємо pending для повторної відправки; зберігаємо повідомлення про помилку
+      const arr = readPendingWithdrawals();
+      for (let i=arr.length-1;i>=0;i--){
+        if (!arr[i].synced && arr[i].time === nowISO && arr[i].amount === WITHDRAW_CHUNK && arr[i].tag===tag){
+          arr[i].status = "failed";
+          arr[i].error = sheetRes.error || "submit_failed";
           break;
         }
       }
-      writePendingWithdrawals(pend2);
-      balance = oldBalance; setBalanceUI(); saveData();
-      if (statusEl){ statusEl.className="err"; statusEl.textContent = "Помилка запису в таблицю: " + (res.error || "невідома"); }
+      writePendingWithdrawals(arr);
+      renderPendingList();
+
+      if (statusEl){ statusEl.className="err"; statusEl.textContent = "Помилка запису в таблицю: " + (sheetRes.error || "невідома"); }
     }
   } catch(e){
-    // мережевий фейл: залишаємо pending як processing + повідомляємо
-    const pend2 = readPendingWithdrawals();
-    for (let i = pend2.length - 1; i >= 0; i--){
-      const p = pend2[i];
-      if (!p.synced && p.time === now && p.amount === WITHDRAW_CHUNK && p.tag === tag){
-        p.status = 'processing';
-        p.error = 'network';
-        break;
-      }
-    }
-    writePendingWithdrawals(pend2);
+    // мережевий фейл: залишаємо pending для повторних спроб
     if (statusEl){ statusEl.className="muted"; statusEl.textContent="Очікуємо мережу…"; }
-  } finally {
-    if (btn) btn.disabled = false;
-    renderPayoutList();
+  }
+
+  if (btn) btn.disabled = false;
+}
+
+/* ========= СИНК ОЧІКУЮЧИХ (розширено) ========= */
+function readPendingWithdrawals(){ try{ const arr=JSON.parse(localStorage.getItem("payouts_pending")||"[]"); return Array.isArray(arr)?arr:[]; }catch{ return []; } }
+function writePendingWithdrawals(arr){ localStorage.setItem("payouts_pending", JSON.stringify(arr||[])); }
+function getServerWithdrawCount(){ return (Array.isArray(serverWithdraws) ? serverWithdraws.filter(v=>v && String(v)!=='0').length : 0) | 0; }
+
+async function syncPendingWithdrawals(){
+  const statusEl=$("withdrawStatus");
+  let pend=readPendingWithdrawals();
+  if (pend.length===0){ renderPayoutList(); renderPendingList(); return; }
+  let changed = false;
+  for (let i=0;i<pend.length;i++){
+    const it=pend[i]; if (it.synced) continue;
+    try{
+      const res = await submitWithdrawalToSheet({ user_id: it.id, tag: it.tag, username: it.username, amount: it.amount, timeISO: it.time });
+      if (res.ok){
+        it.synced=true; it.sheet_row = res.row || res.number || null; it.status = 'submitted'; it.submittedAt = Date.now();
+        if (statusEl){ statusEl.className="ok"; statusEl.textContent="Поставлено на вивід"; }
+        changed = true;
+      } else {
+        it.status = it.status || 'processing';
+        it.error = res.error || it.error || "submit_failed";
+        if (statusEl && !statusEl.textContent){ statusEl.className="muted"; statusEl.textContent="Очікуємо мережу…"; }
+      }
+    }catch(e){
+      it.error = String(e?.message||e);
+    }
+    pend[i]=it; writePendingWithdrawals(pend); renderPendingList();
+    await new Promise(r=>setTimeout(r, 250));
+  }
+
+  if (changed){
+    try{
+      const rem = await CloudStore.getRemote();
+      if (rem) CloudStore.applyRemoteToState(rem);
+    }catch(_){}
   }
 }
 
-/* ========= Повторна синхронізація pending (щоб намагатись ще раз) ========= */
-async function syncPendingWithdrawals(){
-  const pending = readPendingWithdrawals();
-  if (!pending || pending.length === 0) return;
-  let changed = false;
-  for (let i = 0; i < pending.length; i++){
-    const it = pending[i];
-    if (it.synced) continue;
-    const res = await submitWithdrawalToSheet({ user_id: it.id, tag: it.tag, username: it.username, amount: it.amount, timeISO: it.time });
-    if (res.ok){
-      it.synced = true; it.number = res.number || res.row || it.number; it.status = 'submitted'; it.sheet_row = res.row || null;
-      // додати до історії
-      const hist = readHistory();
-      hist.push({ number: it.number, tag: it.tag, time: it.time, amount: it.amount, status: 'submitted', _sheetRow: it.sheet_row });
-      writeHistory(hist);
-      changed = true;
-    } else {
-      it.error = res.error || it.error || 'submit_failed';
-    }
-    pending[i] = it;
-    writePendingWithdrawals(pending);
-    renderPayoutList();
-    await new Promise(r => setTimeout(r, 200)); // невелика затримка між запитами
+/* ========= UI: pending list (особисті виводи / очікуючі) ========= */
+function renderPendingList(){
+  const wrap = $("pendingWithdraws");
+  if (!wrap) return;
+  const pend = readPendingWithdrawals();
+  wrap.innerHTML = "";
+  if (!pend || pend.length===0){
+    wrap.innerHTML = "<div class='muted'>Немає очікуючих виводів</div>";
+    return;
   }
-  return changed;
+  const arr = pend.slice().reverse();
+  for (let it of arr){
+    const row = document.createElement("div");
+    row.className = "pending-row";
+    const time = new Date(it.time).toLocaleString();
+    const tag = it.tag || "";
+    const amt = it.amount || 0;
+    const num = it.sheet_row ? `#${it.sheet_row}` : "—";
+    const st = it.status || (it.synced ? "submitted" : "processing");
+    let errTxt = it.error ? ` <span class="err">(${it.error})</span>` : "";
+    row.innerHTML = `<strong>${time}</strong> — ${tag} — ${amt}⭐ — ${num} — <em>${st}</em>${errTxt}`;
+    wrap.appendChild(row);
+  }
 }
 
 /* ========= ІНІЦІАЛІЗАЦІЯ ========= */
@@ -690,15 +537,8 @@ let dailyUiTicker = null;
 let challengeTicker = null;
 let syncTimer = null;
 
-window.onload = async function(){
-  // прочитати баланс з localStorage, якщо є — щоб не обнулявся при заході
-  const storedBalance = localStorage.getItem("balance");
-  if (storedBalance != null && storedBalance !== "undefined"){
-    const b = parseFloat(storedBalance);
-    if (!isNaN(b)) balance = b;
-  }
-
-  // інші стейти
+window.onload = function(){
+  // базові стейти
   subscribed = localStorage.getItem("subscribed") === "true";
   task50Completed = localStorage.getItem("task50Completed") === "true";
   lastAnyAdAt      = parseInt(localStorage.getItem("lastAnyAdAt")  || "0", 10);
@@ -721,7 +561,8 @@ window.onload = async function(){
   const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
   updateGamesTaskUI();
 
-  // render payout list from pending/history
+  // показуємо 15 слотів (поки що '0'), доки не прийде хмара
+  serverWithdraws = new Array(15).fill('0');
   renderPayoutList();
 
   const subBtn = $("subscribeBtn");
@@ -760,47 +601,56 @@ window.onload = async function(){
   updateAdTasksUI();
   updateDailyUI();
 
-  // синхронізація з GAS: отримати server rows для користувача та додати до history
-  try{
-    const u = getTelegramUser();
-    const user_id = u.id || '';
-    const tg_tag = u.username ? ("@"+u.username) : '';
-    if (CLOUD.url && CLOUD.api){
-      const rows = await fetchUserWithdrawRows({ user_id, tg_tag });
+  // Хмара
+  try { CloudStore.initAndHydrate(); } catch(e){ console.warn(e); }
+
+  // періодичний синк очікуючих виводів
+  clearInterval(syncTimer);
+  syncTimer = setInterval(()=>{ syncPendingWithdrawals(); }, 20_000);
+
+  // рендер pending з localStorage
+  renderPendingList();
+
+  // підтягуємо з сервера (GAS) персональні рядки і відображаємо їх поряд з pending (fetchUserWithdrawRows)
+  (async ()=>{
+    try{
+      const u = getTelegramUser();
+      const rows = await fetchUserWithdrawRows({ user_id: u.id, tg_tag: (u.username ? ("@"+u.username) : "") });
       if (Array.isArray(rows) && rows.length>0){
-        // додаємо ті, які ще не в локальній історії
-        const hist = readHistory();
+        // Ми можемо додати ці рядки до localStorage історії або показати поруч
+        // Для простоти, додаємо як додаткові pending-рядки з status із таблиці
+        const pend = readPendingWithdrawals();
         for (let r of rows){
-          const exists = hist.some(h => String(h.number || h._sheetRow) === String(r.number || r._sheetRow));
+          // у відповіді очікуємо { number, tg_tag, time, amount, status }
+          const exists = pend.some(p => p.sheet_row && String(p.sheet_row) === String(r.number) );
           if (!exists){
-            hist.push({
-              number: r.number || r._sheetRow || null,
-              tag: r.tag || r.tg_tag || r['@'] || '',
-              time: r.time || (new Date()).toISOString(),
+            pend.push({
+              id: u.id || null,
+              tag: r.tg_tag || (u.username?("@"+u.username):""),
+              username: r.username || "",
               amount: r.amount || 0,
-              status: r.status || 'submitted',
-              _sheetRow: r._sheetRow || null
+              time: r.time || (new Date()).toISOString(),
+              status: r.status || "submitted",
+              synced: true,
+              sheet_row: r.number || r._sheetRow || null,
+              createdAt: Date.now()
             });
           }
         }
-        writeHistory(hist);
-        renderPayoutList();
+        writePendingWithdrawals(pend);
+        renderPendingList();
       }
-    }
-  }catch(e){ console.warn(e); }
-
-  // періодичний синк pending
-  clearInterval(syncTimer);
-  syncTimer = setInterval(()=>{ syncPendingWithdrawals(); }, 20_000);
+    }catch(e){ /* silent */ }
+  })();
 };
 
 /* ========= Баланс / Підписка ========= */
 function addBalance(n){
   balance = parseFloat((balance + n).toFixed(2));
-  if (balance < 0) balance = 0;
+  if (balance < 0) balance = 0; // гарантія
   setBalanceUI();
   saveData();
-  // якщо CloudStore існував — можна повідомити, але у нас синхронізація з GAS відбувається інакше
+  CloudStore.queuePush({ balance });
 }
 function subscribe(){
   if (subscribed) return;
@@ -811,6 +661,9 @@ function subscribe(){
   const btn = $("subscribeBtn"); if (btn){ btn.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); btn.classList.add("done"); }
   saveData();
 }
+
+/* ========= Лідерборд-заглушка ========= */
+function initLeaderboard(){ /* no-op */ }
 
 /* ========= Реклама (Adsgram) ========= */
 function initAds(){
@@ -841,7 +694,10 @@ async function showAdsgram(controller){
 /* ========= ЩОДЕННІ +0.1⭐ ========= */
 function startDailyPlusTicker(){
   if (dailyUiTicker) clearInterval(dailyUiTicker);
-  dailyUiTicker = setInterval(()=>{ updateDailyUI(); updateAdTasksUI(); }, 1000);
+  dailyUiTicker = setInterval(()=>{
+    updateDailyUI();
+    updateAdTasksUI();
+  }, 1000);
   updateDailyUI();
 }
 function updateDailyUI(){
@@ -906,7 +762,7 @@ function updateAdTasksUI(){
   const tenWrap = $("taskWatch10");
   const tenCD   = $("taskWatch10Cooldown");
   const tenCnt  = $("ad10Counter");
-  const tenCDt  = $("ad10CooldownText");
+  const tenCDt  = $("taskWatch10CooldownText") || $("ad10CooldownText");
 
   const left10 = TASK_DAILY_COOLDOWN_MS - (now - lastTask10RewardAt);
   if (tenCnt) tenCnt.textContent = `${Math.min(ad10Count, TASK10_TARGET)}/${TASK10_TARGET}`;
@@ -1001,11 +857,81 @@ function setupChallengeUI(){
   if (storedOpp && !isNaN(+storedOpp)) oppScorePending = +storedOpp;
   if (scoreBox) scoreBox.textContent = oppScorePending!=null ? String(oppScorePending) : "—";
 
-  genBtn.onclick = ()=>{ if (challengeActive) return; if (oppScorePending == null){ oppScorePending = weightedOppScore(); if (scoreBox) scoreBox.textContent = String(oppScorePending); saveData(); } };
+  genBtn.onclick = ()=>{
+    if (challengeActive) return;
+    if (oppScorePending == null){
+      oppScorePending = weightedOppScore();
+      if (scoreBox) scoreBox.textContent = String(oppScorePending);
+      saveData();
+    }
+  };
 
-  startBtn.onclick = ()=>{ if (challengeActive) return; if (oppScorePending == null){ alert("Спочатку згенеруй суперника."); return; } const stake = parseFloat(stakeInput.value || "0"); if (!(stake>0)) return; if (balance < stake){ alert("Недостатньо ⭐ для ставки."); return; } balance = parseFloat((balance - stake).toFixed(2)); setBalanceUI(); saveData(); challengeActive = true; challengeStartAt = Date.now(); challengeDeadline = challengeStartAt + 3*60*60*1000; challengeStake = stake; challengeOpp = oppScorePending; info.textContent = `Виклик активний! Твій суперник має рекорд ${challengeOpp}. Побий його до завершення таймера.`; checkBtn.disabled = false; cdWrap.style.display = "block"; statusEl.textContent = ""; saveData(); if (challengeTicker) clearInterval(challengeTicker); challengeTicker = setInterval(()=>{ const left = Math.max(0, challengeDeadline - Date.now()); leftEl.textContent = formatHMS(left); if (left<=0){ clearInterval(challengeTicker); } }, 1000); };
+  startBtn.onclick = ()=>{
+    if (challengeActive) return;
+    if (oppScorePending == null){
+      alert("Спочатку згенеруй суперника.");
+      return;
+    }
+    const stake = parseFloat(stakeInput.value || "0");
+    if (!(stake>0)) return;
+    if (balance < stake){
+      alert("Недостатньо ⭐ для ставки.");
+      return;
+    }
+    balance = parseFloat((balance - stake).toFixed(2));
+    setBalanceUI();
+    CloudStore.queuePush({ balance });
 
-  checkBtn.onclick = ()=>{ if (!challengeActive){ statusEl.textContent = "Немає активного виклику."; return; } const now = Date.now(); const won = (highscore > challengeOpp) && (now <= challengeDeadline); const expired = now > challengeDeadline; if (won){ addBalance(challengeStake * 1.5); statusEl.textContent = "✅ Виконано! Нараховано " + (challengeStake*1.5).toFixed(2) + "⭐"; checkBtn.disabled = true; const prevBattle = Number(localStorage.getItem('battle_record')||'0'); const newBattle = Math.max(prevBattle, challengeOpp); localStorage.setItem('battle_record', String(newBattle)); saveData(); finishChallenge(); } else if (expired){ statusEl.textContent = "❌ Час вичерпано. Ставка втрачена."; checkBtn.disabled = true; finishChallenge(); } else { statusEl.textContent = "Ще не побито рекорд суперника. Спробуй підвищити свій рекорд!"; } };
+    challengeActive = true;
+    challengeStartAt = Date.now();
+    challengeDeadline = challengeStartAt + 3*60*60*1000;
+    challengeStake = stake;
+    challengeOpp = oppScorePending;
+
+    info.textContent = `Виклик активний! Твій суперник має рекорд ${challengeOpp}. Побий його до завершення таймера.`;
+    checkBtn.disabled = false;
+    cdWrap.style.display = "block";
+    statusEl.textContent = "";
+    saveData();
+
+    if (challengeTicker) clearInterval(challengeTicker);
+    challengeTicker = setInterval(()=>{
+      const left = Math.max(0, challengeDeadline - Date.now());
+      leftEl.textContent = formatHMS(left);
+      if (left<=0){
+        clearInterval(challengeTicker);
+      }
+    }, 1000);
+  };
+
+  checkBtn.onclick = ()=>{
+    if (!challengeActive){
+      statusEl.textContent = "Немає активного виклику.";
+      return;
+    }
+    const now = Date.now();
+    const won = (highscore > challengeOpp) && (now <= challengeDeadline);
+    const expired = now > challengeDeadline;
+
+    if (won){
+      addBalance(challengeStake * 1.5);
+      statusEl.textContent = "✅ Виконано! Нараховано " + (challengeStake*1.5).toFixed(2) + "⭐";
+      checkBtn.disabled = true;
+
+      const prevBattle = Number(localStorage.getItem('battle_record')||'0');
+      const newBattle = Math.max(prevBattle, challengeOpp);
+      localStorage.setItem('battle_record', String(newBattle));
+      CloudStore.queuePush({ battle_record: newBattle });
+
+      finishChallenge();
+    } else if (expired){
+      statusEl.textContent = "❌ Час вичерпано. Ставка втрачена.";
+      checkBtn.disabled = true;
+      finishChallenge();
+    } else {
+      statusEl.textContent = "Ще не побито рекорд суперника. Спробуй підвищити свій рекорд!";
+    }
+  };
 
   const storedActive = localStorage.getItem("challengeActive")==="true";
   if (storedActive){
@@ -1014,11 +940,18 @@ function setupChallengeUI(){
     challengeDeadline = parseInt(localStorage.getItem("challengeDeadline") || "0", 10);
     challengeStake    = parseFloat(localStorage.getItem("challengeStake") || "0");
     challengeOpp      = parseInt(localStorage.getItem("challengeOpp") || "0", 10);
+
     info.textContent = `Виклик активний! Твій суперник має рекорд ${challengeOpp}.`;
     checkBtn.disabled = false;
     cdWrap.style.display = "block";
     if (challengeTicker) clearInterval(challengeTicker);
-    challengeTicker = setInterval(()=>{ const left = Math.max(0, challengeDeadline - Date.now()); leftEl.textContent = formatHMS(left); if (left<=0){ clearInterval(challengeTicker); } }, 1000);
+    challengeTicker = setInterval(()=>{
+      const left = Math.max(0, challengeDeadline - Date.now());
+      leftEl.textContent = formatHMS(left);
+      if (left<=0){
+        clearInterval(challengeTicker);
+      }
+    }, 1000);
   }
 }
 function finishChallenge(){
@@ -1035,8 +968,10 @@ function finishChallenge(){
   saveData();
 }
 
+/* ========= ADEXIUM (місце для інтеграції) ========= */
+// (залишено без змін)
+
 /* ========= 3D Stack (гра) ========= */
-/* (Оригінальний код гри залишився без змін — скопійований з твого початкового script.js) */
 class Stage{
   constructor(){
     this.container = document.getElementById("container");
@@ -1169,7 +1104,9 @@ class Game{
   }
 
   hardResetAfterEnd(){
-    [this.newBlocks, this.placedBlocks, this.choppedBlocks].forEach(g=>{ for(let i=g.children.length-1;i>=0;i--) g.remove(g.children[i]); });
+    [this.newBlocks, this.placedBlocks, this.choppedBlocks].forEach(g=>{
+      for(let i=g.children.length-1;i>=0;i--) g.remove(g.children[i]);
+    });
     this.blocks = [];
     this.stage.setCamera(2, 0);
     this.scoreEl.innerHTML = "0";
@@ -1289,32 +1226,33 @@ function updateHighscore(currentScore){
     highscore=currentScore;
     const hs=$("highscore"); if (hs) hs.innerText="🏆 "+highscore;
   }
-  // queuePush in original CloudStore not used here; we keep local storage of highscore if needed
-  saveData();
+  CloudStore.queuePush({ highscore, last_score: currentScore });
 }
 
-/* =================== КІНЕЦЬ КОДУ ГРИ =================== */
 
-/* =================== ДОДАТКОВІ УТИЛІТИ / DEBUG =================== */
-function ensureDailyReset() {
-  const today = _todayStamp();
-  const stored = localStorage.getItem('dailyStamp') || today;
-  if (stored !== today) {
-    gramCount = 0; exCount = 0;
-    lastGramAt = 0; lastExAt = 0;
-    dailyStamp = today;
-    localStorage.setItem('dailyGramCount','0');
-    localStorage.setItem('dailyExCount','0');
-    localStorage.setItem('lastGramAt','0');
-    localStorage.setItem('lastExAt','0');
-    localStorage.setItem('dailyStamp',today);
-    saveData();
-    try{ window.dispatchEvent(new CustomEvent('daily-reset',{detail:{day:today}})); }catch(e){}
-  }
-}
 
-/* =================== Виклики для debug/ручного тесту =================== */
-/* Можеш викликати з консолі: renderPayoutList(), syncPendingWithdrawals(), fetchUserWithdrawRows({user_id:'...', tg_tag:'@nick'}) */
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
 
 
 
