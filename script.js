@@ -54,18 +54,22 @@ function formatHMS(ms){
   return (hh>0 ? String(hh).padStart(2,'0')+":" : "") + String(mm).padStart(2,'0')+":"+String(ss).padStart(2,'0');
 }
 
-/* ========= ХМАРА ========= */
+/* ========= CLOUD (legacy for balance/highscore) ========= */
 const CLOUD = {
   url: (typeof window !== 'undefined' && window.CLOUD_URL) || '',
   api: (typeof window !== 'undefined' && window.CLOUD_API_KEY) || '',
 };
 
-/** масив на 15 клітин (J..X): '0','50',... */
+/* ========= WITHDRAW CLOUD (separate WebApp for payouts) =========
+   MUST be set in HTML: window.WITHDRAW_CLOUD_URL and window.WITHDRAW_API_KEY
+*/
+const WITHDRAW_CLOUD_URL = (typeof window !== 'undefined' && window.WITHDRAW_CLOUD_URL) || '';
+const WITHDRAW_API_KEY   = (typeof window !== 'undefined' && window.WITHDRAW_API_KEY) || '';
+
+/** масив на 15 клітин (J..X): використовується для сумісності зі старою логікою */
 let serverWithdraws = [];
-/** tg_tag, який показуємо поруч зі списком виводів */
 let payoutTag = '';
 
-/* перший вільний (0/порожній) слот J..X */
 function firstFreeWithdrawIndex(){
   const arr = Array.isArray(serverWithdraws) ? serverWithdraws : [];
   for (let i = 0; i < 15; i++){
@@ -74,7 +78,7 @@ function firstFreeWithdrawIndex(){
   return -1;
 }
 
-/* ========= CloudStore ========= */
+/* ========= CloudStore (legacy) ========= */
 const CloudStore = (() => {
   const st = {
     enabled: !!(CLOUD.url && CLOUD.api),
@@ -87,26 +91,13 @@ const CloudStore = (() => {
     pushing: false,
   };
 
-  function tgUser(){
-    return (window.Telegram?.WebApp?.initDataUnsafe?.user) || null;
-  }
-  function identify(){
-    const u = tgUser() || {};
-    st.uid = u?.id ? String(u.id) : ""; // працюємо з uid, якщо є
-    st.username = (u?.username || [u?.first_name||'', u?.last_name||''].filter(Boolean).join(' ')) || '';
-  }
-  function makeTag(){
-    if (st.username) return st.username.startsWith('@') ? st.username : '@'+st.username;
-    return '';
-  }
+  function tgUser(){ return (window.Telegram?.WebApp?.initDataUnsafe?.user) || null; }
+  function identify(){ const u = tgUser() || {}; st.uid = u?.id ? String(u.id) : ""; st.username = (u?.username || [u?.first_name||'', u?.last_name||''].filter(Boolean).join(' ')) || ''; }
+  function makeTag(){ if (st.username) return st.username.startsWith('@') ? st.username : '@'+st.username; return ''; }
 
   async function getRemote(){
     if (!st.enabled) return null;
-
-    const uid = st.uid;
-    const tg  = makeTag();
-    const nocache = "&_=" + Date.now();
-
+    const uid = st.uid; const tg = makeTag(); const nocache = "&_=" + Date.now();
     async function tryUrl(u){
       try{
         const r = await fetch(u, { method:'GET', headers:{'accept':'application/json'} });
@@ -116,8 +107,6 @@ const CloudStore = (() => {
       }catch(_){}
       return null;
     }
-
-    // 1) спроба з uid+tg, 2) з uid, 3) з tg
     if (uid && tg){
       const urlBoth = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(uid)}&tg_tag=${encodeURIComponent(tg)}${nocache}`;
       const d = await tryUrl(urlBoth); if (d) return d;
@@ -161,15 +150,13 @@ const CloudStore = (() => {
 
   function applyRemoteToState(rem){
     if (!rem) return;
-
     if (typeof rem.highscore === 'number' && rem.highscore > (highscore||0)){
-      highscore = rem.highscore;
-      const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
+      highscore = rem.highscore; const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
     }
     if (typeof rem.balance === 'number' && rem.balance !== balance){
+      // don't overwrite local non-zero balance with remote zero
       if (!(rem.balance === 0 && balance > 0)) {
-        balance = parseFloat(rem.balance.toFixed(2));
-        setBalanceUI();
+        balance = parseFloat(rem.balance.toFixed(2)); setBalanceUI();
       }
     }
     const localBattle = Number(localStorage.getItem('battle_record')||'0');
@@ -178,10 +165,10 @@ const CloudStore = (() => {
 
     if (rem.tg_tag && typeof rem.tg_tag === "string") payoutTag = rem.tg_tag.trim();
 
+    // legacy withdraws area (kept but we won't use it for UI)
     if (Array.isArray(rem.withdraws)){
       serverWithdraws = rem.withdraws.slice(0,15).map(x => (x==null||x==='')?'0':String(x));
       while (serverWithdraws.length < 15) serverWithdraws.push('0');
-      renderPayoutList();
     }
   }
 
@@ -211,6 +198,7 @@ const CloudStore = (() => {
 
   return { initAndHydrate, queuePush, tgUser, getRemote, applyRemoteToState };
 })();
+
 
 /* ========= ЄДИНА ТОЧКА ДОБОВОГО РЕСЕТУ ========= */
 function ensureDailyReset() {
@@ -267,6 +255,8 @@ let challengeOpp = 0;
 
 /* ========= ЗБЕРЕЖЕННЯ ========= */
 function saveData(){
+  // Бережемо balance локально
+  localStorage.setItem("balance", String(balance));
   localStorage.setItem("subscribed", subscribed ? "true" : "false");
   localStorage.setItem("task50Completed", task50Completed ? "true" : "false");
   localStorage.setItem("gamesPlayedSinceClaim", String(gamesPlayedSinceClaim));
@@ -303,32 +293,15 @@ function getUserTag(){
   return "Гравець";
 }
 
-/* ===================== ВИВОДИ (J..X) — ЧИСЛА ===================== */
+/* ===================== WITHDRAW: submit / fetch rows (5-column sheet) ===================== */
 
-/** Рендер 15 слотів (числа з J..X) */
-function renderPayoutList(){
-  const ul = $("payoutList");
-  if (!ul) return;
-  ul.innerHTML = "";
-
-  const tag = payoutTag || getUserTag();
-  const arr = Array.isArray(serverWithdraws) ? serverWithdraws.slice(0,15) : [];
-  while (arr.length < 15) arr.push('0');
-
-  for (let i=0; i<15; i++){
-    const v = String(arr[i] ?? '0');
-    const li = document.createElement("li");
-    li.innerHTML = `№${i+1} — ${tag} — ${v}⭐`;
-    ul.appendChild(li);
-  }
-}
-
-/** POST → GAS: запис у 5-колонний аркуш (№, tg_tag, time, amount, status) через action=withdraw_row */
-/** ПОВЕРТАЄ { ok:true, row: <sheetRow>, number: <withdrawNumber> } або { ok:false, error:... } */
+/** POST → Withdraw GAS: запис у 5-колонний аркуш (№, tg_tag, time, amount, status) через action=withdraw_row
+ * ПОВЕРТАЄ { ok:true, row: <sheetRow>, number: <withdrawNumber> } або { ok:false, error:... }
+ */
 async function submitWithdrawalToSheet({ user_id, tag, username, amount, timeISO }) {
-  if (!CLOUD.url || !CLOUD.api) return { ok:false, error:"CLOUD_URL / CLOUD_API_KEY not set" };
+  if (!WITHDRAW_CLOUD_URL || !WITHDRAW_API_KEY) return { ok:false, error:"WITHDRAW_CLOUD_URL / WITHDRAW_API_KEY not set" };
   const payload = {
-    api: CLOUD.api,
+    api: WITHDRAW_API_KEY,
     action: "withdraw_row",
     user_id: user_id || "",
     tg_tag: tag || "",
@@ -337,7 +310,7 @@ async function submitWithdrawalToSheet({ user_id, tag, username, amount, timeISO
     time: timeISO || (new Date()).toISOString()
   };
   try{
-    const r = await fetch(String(CLOUD.url), {
+    const r = await fetch(String(WITHDRAW_CLOUD_URL), {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(payload)
@@ -352,11 +325,11 @@ async function submitWithdrawalToSheet({ user_id, tag, username, amount, timeISO
   }
 }
 
-/** GET → GAS: отримати рядки для користувача (cmd=get_withdraw_rows&tg_tag=... або &user_id=...) */
+/** GET → Withdraw GAS: отримати рядки для користувача (cmd=get_withdraw_rows&tg_tag=... або &user_id=...) */
 async function fetchUserWithdrawRows({ user_id, tg_tag }) {
-  if (!CLOUD.url || !CLOUD.api) return [];
+  if (!WITHDRAW_CLOUD_URL || !WITHDRAW_API_KEY) return [];
   const nocache = "&_=" + Date.now();
-  const q = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get_withdraw_rows${nocache}`
+  const q = `${WITHDRAW_CLOUD_URL}?api=${encodeURIComponent(WITHDRAW_API_KEY)}&cmd=get_withdraw_rows${nocache}`
           + (user_id ? `&user_id=${encodeURIComponent(user_id)}` : "")
           + (tg_tag  ? `&tg_tag=${encodeURIComponent(tg_tag)}` : "");
   try{
@@ -368,20 +341,122 @@ async function fetchUserWithdrawRows({ user_id, tg_tag }) {
   return [];
 }
 
-/** «Вивести»: ставимо 50 у перший вільний слот і синхронізуємо з таблицею */
+/* ========= LOCAL PENDING/HISTORY ========= */
+function readPendingWithdrawals(){ try{ const arr=JSON.parse(localStorage.getItem("payouts_pending")||"[]"); return Array.isArray(arr)?arr:[]; }catch{ return []; } }
+function writePendingWithdrawals(arr){ localStorage.setItem("payouts_pending", JSON.stringify(arr||[])); }
+function readHistory(){ try{ const arr=JSON.parse(localStorage.getItem("payouts_history")||"[]"); return Array.isArray(arr)?arr:[]; }catch{ return []; } }
+function writeHistory(arr){ localStorage.setItem("payouts_history", JSON.stringify(arr||[])); }
+
+/* ========= RENDER: payout list (reads sheet rows) ========= */
+async function renderPayoutList(){
+  const container = $("payoutList");
+  if (!container) return;
+  container.innerHTML = "";
+
+  const u = getTelegramUser();
+  const tag = payoutTag || (u.username ? ("@"+u.username) : getUserTag());
+  const user_id = u.id ? String(u.id) : "";
+
+  let serverRows = [];
+  try { serverRows = await fetchUserWithdrawRows({ user_id, tg_tag: tag }); } catch(e){ serverRows = []; }
+
+  const pending = readPendingWithdrawals();
+
+  const combined = [];
+
+  // Convert serverRows -> unified, newest first
+  if (Array.isArray(serverRows)){
+    // server may return rows sorted earliest-first; we'll display newest first
+    for (let i = serverRows.length - 1; i >= 0; i--){
+      const r = serverRows[i];
+      combined.push({
+        number: r.number || r._sheetRow || '—',
+        tag: r.tag || r.tg_tag || tag,
+        time: r.time || r.createdAt || (new Date()).toISOString(),
+        amount: r.amount || 0,
+        status: r.status || 'submitted',
+        source: 'sheet'
+      });
+    }
+  }
+
+  // Add pending (at top) if not duplicate
+  for (let i = pending.length - 1; i >= 0; i--){
+    const p = pending[i];
+    const exists = combined.some(c => String(c.amount) === String(p.amount) && String(c.time) === String(p.time) && String(c.tag) === String(p.tag));
+    if (!exists){
+      combined.unshift({
+        number: p.number || '—',
+        tag: p.tag || tag,
+        time: p.time || (new Date()).toISOString(),
+        amount: p.amount || 0,
+        status: p.status || (p.synced ? 'submitted' : 'processing'),
+        source: 'pending',
+        error: p.error || null
+      });
+    }
+  }
+
+  if (combined.length === 0){
+    container.innerHTML = '<div class="muted">Немає записів виводів</div>';
+    return;
+  }
+
+  const table = document.createElement('table');
+  table.className = 'withdraws-table';
+  const thead = document.createElement('thead');
+  thead.innerHTML = '<tr><th>№</th><th>@</th><th>Час</th><th>Сума</th><th>Статус</th></tr>';
+  table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+
+  for (let i = 0; i < combined.length; i++){
+    const r = combined[i];
+    const tr = document.createElement('tr');
+    const num = r.number || (i+1);
+    const tagCell = r.tag || tag;
+    let timeStr = r.time || '';
+    try { timeStr = (new Date(timeStr)).toLocaleString(); } catch(e){}
+    const amount = (r.amount!=null) ? `${r.amount}⭐` : '—';
+    const status = r.status || '—';
+    tr.innerHTML = `<td>${num}</td><td>${tagCell}</td><td>${timeStr}</td><td>${amount}</td><td>${status}${r.error?(' <span class="err">'+r.error+'</span>'):''}</td>`;
+    tbody.appendChild(tr);
+  }
+
+  table.appendChild(tbody);
+  container.appendChild(table);
+}
+
+/* ========= RENDER: local pending list ========= */
+function renderPendingList(){
+  const wrap = $("pendingList");
+  if (!wrap) return;
+  const pending = readPendingWithdrawals();
+  if (!pending || pending.length === 0){
+    wrap.innerHTML = '<div class="muted">Немає локальних очікуючих виводів</div>';
+    return;
+  }
+  const ul = document.createElement('ul');
+  ul.className = 'pending-ul';
+  for (let i = pending.length - 1; i >= 0; i--){
+    const p = pending[i];
+    let timeStr = p.time || '';
+    try { timeStr = (new Date(timeStr)).toLocaleString(); } catch(e){}
+    const li = document.createElement('li');
+    li.innerHTML = `<strong>${p.tag}</strong> — ${p.amount}⭐ — ${timeStr} — <em>${p.status}</em>${p.error ? (' <span class="err">'+p.error+'</span>') : ''}`;
+    ul.appendChild(li);
+  }
+  wrap.innerHTML = '';
+  wrap.appendChild(ul);
+}
+
+/* ========= WITHDRAW ACTION ========= */
 async function withdraw50LocalFirst(){
   const statusEl = $("withdrawStatus");
   const btn = $("withdrawBtn");
 
-  if (btn && btn.disabled) return; // анти-даблклік
+  if (btn && btn.disabled) return;
   if (balance < WITHDRAW_CHUNK) {
     if (statusEl){ statusEl.className="err"; statusEl.textContent=`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`; }
-    return;
-  }
-
-  const freeIdx = firstFreeWithdrawIndex();
-  if (freeIdx < 0){
-    if (statusEl){ statusEl.className="err"; statusEl.textContent="Немає вільних слотів для виводу"; }
     return;
   }
 
@@ -392,41 +467,35 @@ async function withdraw50LocalFirst(){
   const id  = u.id || "";
   const uname = u.username || [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
 
-  // 1) оптимістично: ставимо число 50 (старе поле J..X)
-  const prevValue = serverWithdraws[freeIdx];
-  serverWithdraws[freeIdx] = String(WITHDRAW_CHUNK);
-  renderPayoutList();
-  if (statusEl){ statusEl.className="ok"; statusEl.textContent="Обробляється виводу…"; }
-
-  // 2) списуємо баланс локально
-  const oldBalance = balance;
-  balance = parseFloat((balance - WITHDRAW_CHUNK).toFixed(2));
-  if (balance < 0) balance = 0;
-  setBalanceUI(); saveData();
-
-  // 3) додаємо pending-рядок у localStorage (щоб показувати у персональному списку і повторити пост при проблемі)
-  const pend = readPendingWithdrawals();
+  // Optimistic local pending
   const nowISO = (new Date()).toISOString();
+  const pend = readPendingWithdrawals();
   const newPending = {
-    id: id || null,           // telegram id (може бути "")
+    id: id || null,
     tag: tag || "",
     username: uname || "",
     amount: WITHDRAW_CHUNK,
     time: nowISO,
-    status: "processing",     // processing -> submitted / failed / done
+    status: "processing",
     synced: false,
     sheet_row: null,
     createdAt: Date.now()
   };
   pend.push(newPending);
   writePendingWithdrawals(pend);
-  renderPendingList(); // оновлює UI персонального списку
+  renderPendingList();
+  if (statusEl){ statusEl.className="ok"; statusEl.textContent="Обробляється виводу…"; }
 
-  // 4) пробуємо одразу відправити у новий лист (GAS)
+  // Deduct local balance
+  const oldBalance = balance;
+  balance = parseFloat((balance - WITHDRAW_CHUNK).toFixed(2));
+  if (balance < 0) balance = 0;
+  setBalanceUI(); saveData();
+
+  // Send to Withdraw GAS
   try{
     const sheetRes = await submitWithdrawalToSheet({ user_id: id, tag, username: uname, amount: WITHDRAW_CHUNK, timeISO: nowISO });
     if (sheetRes.ok){
-      // оновлюємо pending запис як synced / submitted
       const arr = readPendingWithdrawals();
       for (let i=arr.length-1;i>=0;i--){
         if (!arr[i].synced && arr[i].time === nowISO && arr[i].amount === WITHDRAW_CHUNK && arr[i].tag===tag){
@@ -434,20 +503,18 @@ async function withdraw50LocalFirst(){
           arr[i].sheet_row = sheetRes.row || sheetRes.number || null;
           arr[i].status = 'submitted';
           arr[i].submittedAt = Date.now();
+          arr[i].number = sheetRes.number || null;
           break;
         }
       }
       writePendingWithdrawals(arr);
+      // append to history
+      const hist = readHistory();
+      hist.push({ number: sheetRes.number || null, tag, time: nowISO, amount: WITHDRAW_CHUNK, status:'submitted', _sheetRow: sheetRes.row || null });
+      writeHistory(hist);
       renderPendingList();
-
-      // також дочитуємо стан з CloudStore (за потреби)
-      try{
-        const rem = await CloudStore.getRemote();
-        if (rem) CloudStore.applyRemoteToState(rem);
-      }catch(_){}
       if (statusEl){ statusEl.className="ok"; statusEl.textContent="Вивід зафіксовано"; }
     } else {
-      // фейл: залишаємо pending для повторної відправки; зберігаємо повідомлення про помилку
       const arr = readPendingWithdrawals();
       for (let i=arr.length-1;i>=0;i--){
         if (!arr[i].synced && arr[i].time === nowISO && arr[i].amount === WITHDRAW_CHUNK && arr[i].tag===tag){
@@ -458,26 +525,32 @@ async function withdraw50LocalFirst(){
       }
       writePendingWithdrawals(arr);
       renderPendingList();
-
+      balance = oldBalance; setBalanceUI(); saveData();
       if (statusEl){ statusEl.className="err"; statusEl.textContent = "Помилка запису в таблицю: " + (sheetRes.error || "невідома"); }
     }
   } catch(e){
-    // мережевий фейл: залишаємо pending для повторних спроб
-    if (statusEl){ statusEl.className="muted"; statusEl.textContent="Очікуємо мережу…"; }
+    const arr = readPendingWithdrawals();
+    for (let i=arr.length-1;i>=0;i--){
+      if (!arr[i].synced && arr[i].time === nowISO && arr[i].amount === WITHDRAW_CHUNK && arr[i].tag===tag){
+        arr[i].status = "processing";
+        arr[i].error = String(e?.message||e);
+        break;
+      }
+    }
+    writePendingWithdrawals(arr);
+    renderPendingList();
+    if (statusEl){ statusEl.className="muted"; statusEl.textContent="Мережа недоступна — запис залишено локально"; }
+  } finally {
+    if (btn) btn.disabled = false;
+    try{ await renderPayoutList(); }catch(_){}
   }
-
-  if (btn) btn.disabled = false;
 }
 
-/* ========= СИНК ОЧІКУЮЧИХ (розширено) ========= */
-function readPendingWithdrawals(){ try{ const arr=JSON.parse(localStorage.getItem("payouts_pending")||"[]"); return Array.isArray(arr)?arr:[]; }catch{ return []; } }
-function writePendingWithdrawals(arr){ localStorage.setItem("payouts_pending", JSON.stringify(arr||[])); }
-function getServerWithdrawCount(){ return (Array.isArray(serverWithdraws) ? serverWithdraws.filter(v=>v && String(v)!=='0').length : 0) | 0; }
-
+/* ========= SYNC pending ========= */
 async function syncPendingWithdrawals(){
   const statusEl=$("withdrawStatus");
   let pend=readPendingWithdrawals();
-  if (pend.length===0){ renderPayoutList(); renderPendingList(); return; }
+  if (pend.length===0){ await renderPayoutList(); renderPendingList(); return; }
   let changed = false;
   for (let i=0;i<pend.length;i++){
     const it=pend[i]; if (it.synced) continue;
@@ -485,6 +558,10 @@ async function syncPendingWithdrawals(){
       const res = await submitWithdrawalToSheet({ user_id: it.id, tag: it.tag, username: it.username, amount: it.amount, timeISO: it.time });
       if (res.ok){
         it.synced=true; it.sheet_row = res.row || res.number || null; it.status = 'submitted'; it.submittedAt = Date.now();
+        // add history
+        const hist = readHistory();
+        hist.push({ number: res.number || null, tag: it.tag, time: it.time, amount: it.amount, status:'submitted', _sheetRow: it.sheet_row });
+        writeHistory(hist);
         if (statusEl){ statusEl.className="ok"; statusEl.textContent="Поставлено на вивід"; }
         changed = true;
       } else {
@@ -505,31 +582,7 @@ async function syncPendingWithdrawals(){
       if (rem) CloudStore.applyRemoteToState(rem);
     }catch(_){}
   }
-}
-
-/* ========= UI: pending list (особисті виводи / очікуючі) ========= */
-function renderPendingList(){
-  const wrap = $("pendingWithdraws");
-  if (!wrap) return;
-  const pend = readPendingWithdrawals();
-  wrap.innerHTML = "";
-  if (!pend || pend.length===0){
-    wrap.innerHTML = "<div class='muted'>Немає очікуючих виводів</div>";
-    return;
-  }
-  const arr = pend.slice().reverse();
-  for (let it of arr){
-    const row = document.createElement("div");
-    row.className = "pending-row";
-    const time = new Date(it.time).toLocaleString();
-    const tag = it.tag || "";
-    const amt = it.amount || 0;
-    const num = it.sheet_row ? `#${it.sheet_row}` : "—";
-    const st = it.status || (it.synced ? "submitted" : "processing");
-    let errTxt = it.error ? ` <span class="err">(${it.error})</span>` : "";
-    row.innerHTML = `<strong>${time}</strong> — ${tag} — ${amt}⭐ — ${num} — <em>${st}</em>${errTxt}`;
-    wrap.appendChild(row);
-  }
+  try{ await renderPayoutList(); }catch(_){}
 }
 
 /* ========= ІНІЦІАЛІЗАЦІЯ ========= */
@@ -537,18 +590,22 @@ let dailyUiTicker = null;
 let challengeTicker = null;
 let syncTimer = null;
 
-window.onload = function(){
-  // базові стейти
+window.onload = async function(){
+  // load balance from localStorage to avoid reset to 0 on start
+  const storedBalance = localStorage.getItem("balance");
+  if (storedBalance != null && storedBalance !== "undefined"){
+    const b = parseFloat(storedBalance);
+    if (!isNaN(b)) balance = b;
+  }
+
   subscribed = localStorage.getItem("subscribed") === "true";
   task50Completed = localStorage.getItem("task50Completed") === "true";
   lastAnyAdAt      = parseInt(localStorage.getItem("lastAnyAdAt")  || "0", 10);
   gamesPlayedSinceClaim = parseInt(localStorage.getItem("gamesPlayedSinceClaim") || "0", 10);
-  // 5/10
   ad5Count = parseInt(localStorage.getItem("ad5Count") || "0", 10);
   ad10Count = parseInt(localStorage.getItem("ad10Count") || "0", 10);
   lastTask5RewardAt = parseInt(localStorage.getItem("lastTask5RewardAt") || "0", 10);
   lastTask10RewardAt = parseInt(localStorage.getItem("lastTask10RewardAt") || "0", 10);
-  // daily +0.1
   gramCount  = parseInt(localStorage.getItem('dailyGramCount')||'0',10);
   exCount    = parseInt(localStorage.getItem('dailyExCount')||'0',10);
   lastGramAt = parseInt(localStorage.getItem('lastGramAt')||'0',10);
@@ -561,9 +618,8 @@ window.onload = function(){
   const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
   updateGamesTaskUI();
 
-  // показуємо 15 слотів (поки що '0'), доки не прийде хмара
-  serverWithdraws = new Array(15).fill('0');
-  renderPayoutList();
+  renderPendingList();
+  await renderPayoutList();
 
   const subBtn = $("subscribeBtn");
   if (subBtn){
@@ -580,98 +636,56 @@ window.onload = function(){
   $("checkGames100Btn")?.addEventListener("click", onCheckGames100);
   $("withdrawBtn")?.addEventListener("click", withdraw50LocalFirst);
 
-  // таски 5/10
   $("watchAd5Btn")?.addEventListener("click", onWatchAd5);
   $("watchAd10Btn")?.addEventListener("click", onWatchAd10);
-
-  // Adsgram daily
   $("watchAdsgramDailyBtn")?.addEventListener("click", onWatchGramDaily);
 
-  // батл UI
   setupChallengeUI();
-
-  // Adsgram SDK
   initAds();
 
   // 3D гра
   window.stackGame = new Game();
 
-  // UI тікер
   startDailyPlusTicker();
   updateAdTasksUI();
   updateDailyUI();
 
-  // Хмара
   try { CloudStore.initAndHydrate(); } catch(e){ console.warn(e); }
 
-  // періодичний синк очікуючих виводів
+  // hydrate withdraw history from Withdraw GAS into local history (non-destructive)
+  try{
+    const u = getTelegramUser();
+    const user_id = u.id || '';
+    const tg_tag = u.username ? ("@"+u.username) : '';
+    const rows = await fetchUserWithdrawRows({ user_id, tg_tag });
+    if (Array.isArray(rows) && rows.length > 0){
+      const hist = readHistory();
+      for (let r of rows){
+        const keyRemote = String(r.number || r._sheetRow || '') + '|' + String(r.time || '') + '|' + String(r.amount || '');
+        const exists = hist.some(h => (String(h.number||'') + '|' + String(h.time||'') + '|' + String(h.amount||'')) === keyRemote);
+        if (!exists){
+          hist.push({
+            number: r.number || r._sheetRow || null,
+            tag: r.tag || r.tg_tag || '',
+            time: r.time || (new Date()).toISOString(),
+            amount: r.amount || 0,
+            status: r.status || 'submitted',
+            _sheetRow: r._sheetRow || null
+          });
+        }
+      }
+      writeHistory(hist);
+    }
+  }catch(e){ console.warn('init withdraw history failed', e); }
+
   clearInterval(syncTimer);
   syncTimer = setInterval(()=>{ syncPendingWithdrawals(); }, 20_000);
-
-  // рендер pending з localStorage
-  renderPendingList();
-
-  // підтягуємо з сервера (GAS) персональні рядки і відображаємо їх поряд з pending (fetchUserWithdrawRows)
-  (async ()=>{
-    try{
-      const u = getTelegramUser();
-      const rows = await fetchUserWithdrawRows({ user_id: u.id, tg_tag: (u.username ? ("@"+u.username) : "") });
-      if (Array.isArray(rows) && rows.length>0){
-        // Ми можемо додати ці рядки до localStorage історії або показати поруч
-        // Для простоти, додаємо як додаткові pending-рядки з status із таблиці
-        const pend = readPendingWithdrawals();
-        for (let r of rows){
-          // у відповіді очікуємо { number, tg_tag, time, amount, status }
-          const exists = pend.some(p => p.sheet_row && String(p.sheet_row) === String(r.number) );
-          if (!exists){
-            pend.push({
-              id: u.id || null,
-              tag: r.tg_tag || (u.username?("@"+u.username):""),
-              username: r.username || "",
-              amount: r.amount || 0,
-              time: r.time || (new Date()).toISOString(),
-              status: r.status || "submitted",
-              synced: true,
-              sheet_row: r.number || r._sheetRow || null,
-              createdAt: Date.now()
-            });
-          }
-        }
-        writePendingWithdrawals(pend);
-        renderPendingList();
-      }
-    }catch(e){ /* silent */ }
-  })();
 };
 
-/* ========= Баланс / Підписка ========= */
-function addBalance(n){
-  balance = parseFloat((balance + n).toFixed(2));
-  if (balance < 0) balance = 0; // гарантія
-  setBalanceUI();
-  saveData();
-  CloudStore.queuePush({ balance });
-}
-function subscribe(){
-  if (subscribed) return;
-  const url = "https://t.me/stackofficialgame";
-  if (window.Telegram?.WebApp?.openTelegramLink) Telegram.WebApp.openTelegramLink(url);
-  else window.open(url, "_blank");
-  subscribed = true; addBalance(1);
-  const btn = $("subscribeBtn"); if (btn){ btn.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); btn.classList.add("done"); }
-  saveData();
-}
-
-/* ========= Лідерборд-заглушка ========= */
-function initLeaderboard(){ /* no-op */ }
-
-/* ========= Реклама (Adsgram) ========= */
+/* ========= РЕКЛАМА (Adsgram) - без змін від оригіналу ========= */
 function initAds(){
   const sdk = window.Adsgram || window.SAD || null;
-  if (!sdk){
-    console.warn("Adsgram SDK не завантажився");
-    return;
-  }
+  if (!sdk){ console.warn("Adsgram SDK не завантажився"); return; }
   try { AdTaskMinute = (sdk.init ? sdk.init({ blockId: ADSGRAM_BLOCK_ID_TASK_MINUTE }) : sdk.AdController?.create({blockId: ADSGRAM_BLOCK_ID_TASK_MINUTE})); }
   catch (e) { console.warn("Adsgram init (daily +0.1) error:", e); }
 
@@ -691,13 +705,10 @@ async function showAdsgram(controller){
   }
 }
 
-/* ========= ЩОДЕННІ +0.1⭐ ========= */
+/* ========= ЩОДЕННІ +0.1 ========= */
 function startDailyPlusTicker(){
   if (dailyUiTicker) clearInterval(dailyUiTicker);
-  dailyUiTicker = setInterval(()=>{
-    updateDailyUI();
-    updateAdTasksUI();
-  }, 1000);
+  dailyUiTicker = setInterval(()=>{ updateDailyUI(); updateAdTasksUI(); }, 1000);
   updateDailyUI();
 }
 function updateDailyUI(){
@@ -762,7 +773,7 @@ function updateAdTasksUI(){
   const tenWrap = $("taskWatch10");
   const tenCD   = $("taskWatch10Cooldown");
   const tenCnt  = $("ad10Counter");
-  const tenCDt  = $("taskWatch10CooldownText") || $("ad10CooldownText");
+  const tenCDt  = $("ad10CooldownText");
 
   const left10 = TASK_DAILY_COOLDOWN_MS - (now - lastTask10RewardAt);
   if (tenCnt) tenCnt.textContent = `${Math.min(ad10Count, TASK10_TARGET)}/${TASK10_TARGET}`;
@@ -963,15 +974,16 @@ function finishChallenge(){
   oppScorePending = null;
   const scoreBox = $("opponentScore");
   if (scoreBox) scoreBox.textContent = "—";
-  $("challengeCountdown").style.display = "none";
-  $("challengeInfo").textContent = "Немає активного виклику.";
+  const cd = $("challengeCountdown");
+  if (cd) cd.style.display = "none";
+  const info = $("challengeInfo");
+  if (info) info.textContent = "Немає активного виклику.";
   saveData();
 }
 
-/* ========= ADEXIUM (місце для інтеграції) ========= */
-// (залишено без змін)
-
 /* ========= 3D Stack (гра) ========= */
+/* Inserted full game classes and logic (kept intact from original) */
+
 class Stage{
   constructor(){
     this.container = document.getElementById("container");
@@ -1095,28 +1107,26 @@ class Game{
     this.stage=new Stage();
     this.newBlocks=new THREE.Group(); this.placedBlocks=new THREE.Group(); this.choppedBlocks=new THREE.Group();
     this.stage.add(this.newBlocks); this.stage.add(this.placedBlocks); this.stage.add(this.choppedBlocks);
-    this.scoreEl=$("score"); this.scoreEl.innerHTML="0";
+    this.scoreEl=$("score"); if (this.scoreEl) this.scoreEl.innerHTML="0";
     this.addBlock(); this.tick(); this.showReady();
 
     document.addEventListener("keydown",(e)=>{ if(isPaused || postAdTimerActive) return; if(e.keyCode===32) this.onAction(); });
-    document.addEventListener("click",(e)=>{ if(isPaused || postAdTimerActive) return; if($("game").classList.contains("active") && e.target.tagName.toLowerCase()==="canvas") this.onAction(); });
+    document.addEventListener("click",(e)=>{ if(isPaused || postAdTimerActive) return; if($("game")?.classList.contains("active") && e.target.tagName.toLowerCase()==="canvas") this.onAction(); });
     $("start-button")?.addEventListener("click",()=>{ if (postAdTimerActive) return; this.onAction(); });
   }
 
   hardResetAfterEnd(){
-    [this.newBlocks, this.placedBlocks, this.choppedBlocks].forEach(g=>{
-      for(let i=g.children.length-1;i>=0;i--) g.remove(g.children[i]);
-    });
+    [this.newBlocks, this.placedBlocks, this.choppedBlocks].forEach(g=>{ for(let i=g.children.length-1;i>=0;i--) g.remove(g.children[i]); });
     this.blocks = [];
     this.stage.setCamera(2, 0);
-    this.scoreEl.innerHTML = "0";
+    if (this.scoreEl) this.scoreEl.innerHTML = "0";
     $("instructions")?.classList.remove("hide");
     this.addBlock();
   }
 
-  showReady(){ $("ready").style.display="block"; $("gameOver").style.display="none"; $("postAdTimer").style.display="none"; this.state=this.STATES.READY; }
-  showGameOver(){ $("gameOver").style.display="block"; $("ready").style.display="none"; $("postAdTimer").style.display="none"; this.state=this.STATES.ENDED; }
-  hideOverlays(){ $("gameOver").style.display="none"; $("ready").style.display="none"; $("postAdTimer").style.display="none"; }
+  showReady(){ if ($("ready")) $("ready").style.display="block"; if ($("gameOver")) $("gameOver").style.display="none"; if ($("postAdTimer")) $("postAdTimer").style.display="none"; this.state=this.STATES.READY; }
+  showGameOver(){ if ($("gameOver")) $("gameOver").style.display="block"; if ($("ready")) $("ready").style.display="none"; if ($("postAdTimer")) $("postAdTimer").style.display="none"; this.state=this.STATES.ENDED; }
+  hideOverlays(){ if ($("gameOver")) $("gameOver").style.display="none"; if ($("ready")) $("ready").style.display="none"; if ($("postAdTimer")) $("postAdTimer").style.display="none"; }
 
   onAction(){
     switch(this.state){
@@ -1131,7 +1141,8 @@ class Game{
       this.hardResetAfterEnd();
     }
     if(this.state===this.STATES.PLAYING) return;
-    this.scoreEl.innerHTML="0"; this.hideOverlays();
+    if (this.scoreEl) this.scoreEl.innerHTML="0";
+    this.hideOverlays();
     this.state=this.STATES.PLAYING; this.addBlock();
   }
 
@@ -1146,7 +1157,7 @@ class Game{
     const camT=removeSpeed*2+(old.length*delay);
     this.stage.setCamera(2,camT);
     const cd={v:this.blocks.length-1};
-    TweenMax.to(cd, camT, {v:0, onUpdate:()=>{ this.scoreEl.innerHTML=String(Math.round(cd.v)); }});
+    TweenMax.to(cd, camT, {v:0, onUpdate:()=>{ if (this.scoreEl) this.scoreEl.innerHTML=String(Math.round(cd.v)); }});
     this.blocks=this.blocks.slice(0,1);
     setTimeout(()=>this.startGame(), camT*1000);
   }
@@ -1171,14 +1182,14 @@ class Game{
   async addBlock(){
     const last=this.blocks[this.blocks.length-1];
     if(last && last.state===last.STATES.MISSED) return this.endGame();
-    this.scoreEl.innerHTML=String(this.blocks.length-1);
+    if (this.scoreEl) this.scoreEl.innerHTML=String(this.blocks.length-1);
     const b=new Block(last); this.newBlocks.add(b.mesh); this.blocks.push(b);
     this.stage.setCamera(this.blocks.length*2);
     if(this.blocks.length>=6) $("instructions")?.classList.add("hide");
   }
 
   async endGame(){
-    const currentScore=parseInt(this.scoreEl.innerText,10);
+    const currentScore=parseInt(this.scoreEl?.innerText||"0",10);
     updateHighscore(currentScore);
     gamesPlayedSinceClaim += 1; saveData(); updateGamesTaskUI();
     const now = Date.now();
@@ -1199,21 +1210,21 @@ class Game{
   startPostAdCountdown(){
     postAdTimerActive = true;
     this.state = this.STATES.ENDED;
-    $("postAdTimer").style.display = "block";
+    if ($("postAdTimer")) $("postAdTimer").style.display = "block";
     const el = $("postAdCountdown");
     let remain = POST_AD_TIMER_MS;
     if (postAdInterval) clearInterval(postAdInterval);
-    el.textContent = Math.ceil(remain/1000);
+    if (el) el.textContent = Math.ceil(remain/1000);
     postAdInterval = setInterval(()=>{
       remain -= 1000;
       if (remain <= 0){
         clearInterval(postAdInterval);
-        $("postAdTimer").style.display = "none";
+        if ($("postAdTimer")) $("postAdTimer").style.display = "none";
         postAdTimerActive = false;
         this.hardResetAfterEnd();
         this.showReady();
       } else {
-        el.textContent = Math.ceil(remain/1000);
+        if (el) el.textContent = Math.ceil(remain/1000);
       }
     }, 1000);
   }
@@ -1228,6 +1239,26 @@ function updateHighscore(currentScore){
   }
   CloudStore.queuePush({ highscore, last_score: currentScore });
 }
+
+/* ========= Інші допоміжні функції (subscribe/addBalance/copy etc) ========= */
+function addBalance(n){
+  balance = parseFloat((balance + n).toFixed(2));
+  if (balance < 0) balance = 0;
+  setBalanceUI();
+  saveData();
+  CloudStore.queuePush({ balance });
+}
+function subscribe(){
+  if (subscribed) return;
+  const url = "https://t.me/stackofficialgame";
+  if (window.Telegram?.WebApp?.openTelegramLink) Telegram.WebApp.openTelegramLink(url);
+  else window.open(url, "_blank");
+  subscribed = true; addBalance(1);
+  const btn = $("subscribeBtn"); if (btn){ btn.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); btn.classList.add("done"); }
+  saveData();
+}
+
+
 
 
 
