@@ -54,19 +54,21 @@ function formatHMS(ms){
   return (hh>0 ? String(hh).padStart(2,'0')+":" : "") + String(mm).padStart(2,'0')+":"+String(ss).padStart(2,'0');
 }
 
-/* ========= CLOUD (legacy for balance/highscore) ========= */
+/* ========= CLOUDS ========= */
+/* Main cloud — рекорд / баланс (в HTML можна встановити window.CLOUD_URL + window.CLOUD_API_KEY) */
 const CLOUD = {
-  url: (typeof window !== 'undefined' && window.CLOUD_URL) || '',
-  api: (typeof window !== 'undefined' && window.CLOUD_API_KEY) || '',
+  url: (typeof window !== 'undefined' && window.CLOUD_URL) || 'https://script.google.com/macros/s/AKfycbxgak6ZgIqIY2mDkGUOCzYnksnSanjjM4UMryAdI1vV-ReFopFPoowg3muuvSBHrOILwA/exec',
+  api: (typeof window !== 'undefined' && window.CLOUD_API_KEY) || 'cgdhggfgf45d6e45wsd6w3sd5',
 };
 
-/* ========= WITHDRAW CLOUD (separate WebApp for payouts) =========
-   MUST be set in HTML: window.WITHDRAW_CLOUD_URL and window.WITHDRAW_API_KEY
+/* Withdraw cloud — окрема WebApp для таблиці виводів.
+   Якщо в HTML встановлено window.WITHDRAW_CLOUD_URL / window.WITHDRAW_API_KEY, вони будуть використані.
+   Інакше — значення, які ти давав раніше.
 */
-const WITHDRAW_CLOUD_URL = (typeof window !== 'undefined' && window.WITHDRAW_CLOUD_URL) || '';
-const WITHDRAW_API_KEY   = (typeof window !== 'undefined' && window.WITHDRAW_API_KEY) || '';
+const WITHDRAW_CLOUD_URL = (typeof window !== 'undefined' && window.WITHDRAW_CLOUD_URL) || 'https://script.google.com/macros/s/AKfycbzD5GxjFHSD7KFosC33qNqGVqT4zcbxhGJ_QgR5pa8mVaIv-hc-ZoTK11nAksvtegZ9/exec';
+const WITHDRAW_API_KEY   = (typeof window !== 'undefined' && window.WITHDRAW_API_KEY) || 'vgkgfghfgdxkyovbyuofyuf767f67ed54j';
 
-/** масив на 15 клітин (J..X): використовується для сумісності зі старою логікою */
+/** масив на 15 клітин (J..X): сумісність зі старою логікою */
 let serverWithdraws = [];
 let payoutTag = '';
 
@@ -78,7 +80,7 @@ function firstFreeWithdrawIndex(){
   return -1;
 }
 
-/* ========= CloudStore (legacy) ========= */
+/* ========= CloudStore (legacy for main cloud) ========= */
 const CloudStore = (() => {
   const st = {
     enabled: !!(CLOUD.url && CLOUD.api),
@@ -91,13 +93,26 @@ const CloudStore = (() => {
     pushing: false,
   };
 
-  function tgUser(){ return (window.Telegram?.WebApp?.initDataUnsafe?.user) || null; }
-  function identify(){ const u = tgUser() || {}; st.uid = u?.id ? String(u.id) : ""; st.username = (u?.username || [u?.first_name||'', u?.last_name||''].filter(Boolean).join(' ')) || ''; }
-  function makeTag(){ if (st.username) return st.username.startsWith('@') ? st.username : '@'+st.username; return ''; }
+  function tgUser(){
+    return (window.Telegram?.WebApp?.initDataUnsafe?.user) || null;
+  }
+  function identify(){
+    const u = tgUser() || {};
+    st.uid = u?.id ? String(u.id) : "";
+    st.username = (u?.username || [u?.first_name||'', u?.last_name||''].filter(Boolean).join(' ')) || '';
+  }
+  function makeTag(){
+    if (st.username) return st.username.startsWith('@') ? st.username : '@'+st.username;
+    return '';
+  }
 
   async function getRemote(){
     if (!st.enabled) return null;
-    const uid = st.uid; const tg = makeTag(); const nocache = "&_=" + Date.now();
+
+    const uid = st.uid;
+    const tg  = makeTag();
+    const nocache = "&_=" + Date.now();
+
     async function tryUrl(u){
       try{
         const r = await fetch(u, { method:'GET', headers:{'accept':'application/json'} });
@@ -107,6 +122,7 @@ const CloudStore = (() => {
       }catch(_){}
       return null;
     }
+
     if (uid && tg){
       const urlBoth = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(uid)}&tg_tag=${encodeURIComponent(tg)}${nocache}`;
       const d = await tryUrl(urlBoth); if (d) return d;
@@ -150,13 +166,15 @@ const CloudStore = (() => {
 
   function applyRemoteToState(rem){
     if (!rem) return;
+
     if (typeof rem.highscore === 'number' && rem.highscore > (highscore||0)){
-      highscore = rem.highscore; const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
+      highscore = rem.highscore;
+      const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
     }
     if (typeof rem.balance === 'number' && rem.balance !== balance){
-      // don't overwrite local non-zero balance with remote zero
       if (!(rem.balance === 0 && balance > 0)) {
-        balance = parseFloat(rem.balance.toFixed(2)); setBalanceUI();
+        balance = parseFloat(rem.balance.toFixed(2));
+        setBalanceUI();
       }
     }
     const localBattle = Number(localStorage.getItem('battle_record')||'0');
@@ -165,7 +183,6 @@ const CloudStore = (() => {
 
     if (rem.tg_tag && typeof rem.tg_tag === "string") payoutTag = rem.tg_tag.trim();
 
-    // legacy withdraws area (kept but we won't use it for UI)
     if (Array.isArray(rem.withdraws)){
       serverWithdraws = rem.withdraws.slice(0,15).map(x => (x==null||x==='')?'0':String(x));
       while (serverWithdraws.length < 15) serverWithdraws.push('0');
@@ -198,7 +215,6 @@ const CloudStore = (() => {
 
   return { initAndHydrate, queuePush, tgUser, getRemote, applyRemoteToState };
 })();
-
 
 /* ========= ЄДИНА ТОЧКА ДОБОВОГО РЕСЕТУ ========= */
 function ensureDailyReset() {
@@ -255,7 +271,6 @@ let challengeOpp = 0;
 
 /* ========= ЗБЕРЕЖЕННЯ ========= */
 function saveData(){
-  // Бережемо balance локально
   localStorage.setItem("balance", String(balance));
   localStorage.setItem("subscribed", subscribed ? "true" : "false");
   localStorage.setItem("task50Completed", task50Completed ? "true" : "false");
@@ -293,11 +308,21 @@ function getUserTag(){
   return "Гравець";
 }
 
+/* ========= HELP: showMessage ========= */
+function showMessage(text, kind = "info", timeout = 3000){
+  const el = $("withdrawStatus") || document.getElementById("message");
+  if (!el) {
+    alert(text);
+    return;
+  }
+  el.className = kind === "err" ? "err" : (kind === "ok" ? "ok" : "muted");
+  el.textContent = text;
+  if (timeout > 0) setTimeout(()=>{ if (el.className) { el.className = ""; el.textContent = ""; } }, timeout);
+}
+
 /* ===================== WITHDRAW: submit / fetch rows (5-column sheet) ===================== */
 
-/** POST → Withdraw GAS: запис у 5-колонний аркуш (№, tg_tag, time, amount, status) через action=withdraw_row
- * ПОВЕРТАЄ { ok:true, row: <sheetRow>, number: <withdrawNumber> } або { ok:false, error:... }
- */
+/** POST → Withdraw GAS: запис у 5-колонний аркуш (№, tg_tag, time, amount, status) */
 async function submitWithdrawalToSheet({ user_id, tag, username, amount, timeISO }) {
   if (!WITHDRAW_CLOUD_URL || !WITHDRAW_API_KEY) return { ok:false, error:"WITHDRAW_CLOUD_URL / WITHDRAW_API_KEY not set" };
   const payload = {
@@ -317,7 +342,7 @@ async function submitWithdrawalToSheet({ user_id, tag, username, amount, timeISO
     });
     let j=null; try { j = await r.json(); } catch {}
     if (r.ok && j && j.ok) {
-      return { ok:true, row: j.row || null, number: j.number || null, stored: j.stored || null };
+      return { ok:true, row: j.row ?? null, number: j.number ?? null, stored: j.stored ?? null };
     }
     return { ok:false, error: (j?.error || `HTTP ${r.status}`) };
   } catch(e){
@@ -336,9 +361,34 @@ async function fetchUserWithdrawRows({ user_id, tg_tag }) {
     const r = await fetch(q, { method:'GET', headers:{'accept':'application/json'} });
     if (!r.ok) return [];
     const j = await r.json().catch(()=>null);
-    if (j && j.ok && Array.isArray(j.rows)) return j.rows;
-  }catch(_){}
-  return [];
+    if (!(j && j.ok && Array.isArray(j.rows))) return [];
+
+    // нормалізація і клієнтська фільтрація по tg_tag / user_id
+    const rows = j.rows.map(x => {
+      return {
+        number: x.number ?? x._sheetRow ?? null,
+        tag: (x.tg_tag || x.tag || x['@tag'] || '').toString().trim(),
+        user_id: (x.user_id || x.tg_id || x.id || '').toString().trim(),
+        time: x.time || x.createdAt || x._time || '',
+        amount: Number(x.amount || x.sum || 0),
+        status: x.status || 'submitted',
+        raw: x
+      };
+    });
+
+    const wantedTag = (tg_tag||"").toString().trim();
+    const wantedId  = (user_id||"").toString().trim();
+
+    const filtered = rows.filter(r => {
+      if (wantedId && r.user_id && String(r.user_id) === String(wantedId)) return true;
+      if (wantedTag && r.tag && r.tag.toLowerCase() === wantedTag.toLowerCase()) return true;
+      return false;
+    });
+
+    return filtered;
+  }catch(_){
+    return [];
+  }
 }
 
 /* ========= LOCAL PENDING/HISTORY ========= */
@@ -357,22 +407,21 @@ async function renderPayoutList(){
   const tag = payoutTag || (u.username ? ("@"+u.username) : getUserTag());
   const user_id = u.id ? String(u.id) : "";
 
+  container.innerHTML = '<div class="muted">Завантаження записів виводів…</div>';
+
   let serverRows = [];
   try { serverRows = await fetchUserWithdrawRows({ user_id, tg_tag: tag }); } catch(e){ serverRows = []; }
 
   const pending = readPendingWithdrawals();
-
   const combined = [];
 
-  // Convert serverRows -> unified, newest first
-  if (Array.isArray(serverRows)){
-    // server may return rows sorted earliest-first; we'll display newest first
+  if (Array.isArray(serverRows) && serverRows.length > 0){
     for (let i = serverRows.length - 1; i >= 0; i--){
       const r = serverRows[i];
       combined.push({
-        number: r.number || r._sheetRow || '—',
-        tag: r.tag || r.tg_tag || tag,
-        time: r.time || r.createdAt || (new Date()).toISOString(),
+        number: r.number || '—',
+        tag: r.tag || tag,
+        time: r.time || '',
         amount: r.amount || 0,
         status: r.status || 'submitted',
         source: 'sheet'
@@ -380,15 +429,16 @@ async function renderPayoutList(){
     }
   }
 
-  // Add pending (at top) if not duplicate
   for (let i = pending.length - 1; i >= 0; i--){
     const p = pending[i];
-    const exists = combined.some(c => String(c.amount) === String(p.amount) && String(c.time) === String(p.time) && String(c.tag) === String(p.tag));
-    if (!exists){
+    const pTag = (p.tag||"").toString().trim();
+    const pTime = p.time || p.createdAt || "";
+    const dup = combined.some(c => String(c.amount) === String(p.amount) && String(c.time) === String(pTime) && ( (c.tag||'') === (pTag||'') ));
+    if (!dup && (pTag === tag || String(p.id||'') === String(user_id) || (!tag && !user_id))) {
       combined.unshift({
         number: p.number || '—',
-        tag: p.tag || tag,
-        time: p.time || (new Date()).toISOString(),
+        tag: pTag || tag,
+        time: pTime,
         amount: p.amount || 0,
         status: p.status || (p.synced ? 'submitted' : 'processing'),
         source: 'pending',
@@ -423,6 +473,7 @@ async function renderPayoutList(){
   }
 
   table.appendChild(tbody);
+  container.innerHTML = '';
   container.appendChild(table);
 }
 
@@ -456,7 +507,7 @@ async function withdraw50LocalFirst(){
 
   if (btn && btn.disabled) return;
   if (balance < WITHDRAW_CHUNK) {
-    if (statusEl){ statusEl.className="err"; statusEl.textContent=`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`; }
+    showMessage(`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`, "err");
     return;
   }
 
@@ -464,10 +515,9 @@ async function withdraw50LocalFirst(){
 
   const u = getTelegramUser();
   const tag = payoutTag || (u.username ? ("@"+u.username) : getUserTag());
-  const id  = u.id || "";
+  const id  = u.id ? String(u.id) : "";
   const uname = u.username || [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
 
-  // Optimistic local pending
   const nowISO = (new Date()).toISOString();
   const pend = readPendingWithdrawals();
   const newPending = {
@@ -484,15 +534,13 @@ async function withdraw50LocalFirst(){
   pend.push(newPending);
   writePendingWithdrawals(pend);
   renderPendingList();
-  if (statusEl){ statusEl.className="ok"; statusEl.textContent="Обробляється виводу…"; }
+  showMessage("Обробляється виводу…", "muted", 2000);
 
-  // Deduct local balance
   const oldBalance = balance;
   balance = parseFloat((balance - WITHDRAW_CHUNK).toFixed(2));
   if (balance < 0) balance = 0;
   setBalanceUI(); saveData();
 
-  // Send to Withdraw GAS
   try{
     const sheetRes = await submitWithdrawalToSheet({ user_id: id, tag, username: uname, amount: WITHDRAW_CHUNK, timeISO: nowISO });
     if (sheetRes.ok){
@@ -508,12 +556,11 @@ async function withdraw50LocalFirst(){
         }
       }
       writePendingWithdrawals(arr);
-      // append to history
       const hist = readHistory();
       hist.push({ number: sheetRes.number || null, tag, time: nowISO, amount: WITHDRAW_CHUNK, status:'submitted', _sheetRow: sheetRes.row || null });
       writeHistory(hist);
-      renderPendingList();
-      if (statusEl){ statusEl.className="ok"; statusEl.textContent="Вивід зафіксовано"; }
+
+      showMessage("Заявка успішно створена", "ok", 3500);
     } else {
       const arr = readPendingWithdrawals();
       for (let i=arr.length-1;i>=0;i--){
@@ -524,11 +571,10 @@ async function withdraw50LocalFirst(){
         }
       }
       writePendingWithdrawals(arr);
-      renderPendingList();
       balance = oldBalance; setBalanceUI(); saveData();
-      if (statusEl){ statusEl.className="err"; statusEl.textContent = "Помилка запису в таблицю: " + (sheetRes.error || "невідома"); }
+      showMessage("Помилка запису в таблицю: " + (sheetRes.error || "невідома"), "err", 5000);
     }
-  } catch(e){
+  }catch(e){
     const arr = readPendingWithdrawals();
     for (let i=arr.length-1;i>=0;i--){
       if (!arr[i].synced && arr[i].time === nowISO && arr[i].amount === WITHDRAW_CHUNK && arr[i].tag===tag){
@@ -539,10 +585,11 @@ async function withdraw50LocalFirst(){
     }
     writePendingWithdrawals(arr);
     renderPendingList();
-    if (statusEl){ statusEl.className="muted"; statusEl.textContent="Мережа недоступна — запис залишено локально"; }
+    showMessage("Мережа недоступна — запис залишено локально", "muted", 4000);
   } finally {
     if (btn) btn.disabled = false;
     try{ await renderPayoutList(); }catch(_){}
+    renderPendingList();
   }
 }
 
@@ -558,7 +605,6 @@ async function syncPendingWithdrawals(){
       const res = await submitWithdrawalToSheet({ user_id: it.id, tag: it.tag, username: it.username, amount: it.amount, timeISO: it.time });
       if (res.ok){
         it.synced=true; it.sheet_row = res.row || res.number || null; it.status = 'submitted'; it.submittedAt = Date.now();
-        // add history
         const hist = readHistory();
         hist.push({ number: res.number || null, tag: it.tag, time: it.time, amount: it.amount, status:'submitted', _sheetRow: it.sheet_row });
         writeHistory(hist);
@@ -585,104 +631,7 @@ async function syncPendingWithdrawals(){
   try{ await renderPayoutList(); }catch(_){}
 }
 
-/* ========= ІНІЦІАЛІЗАЦІЯ ========= */
-let dailyUiTicker = null;
-let challengeTicker = null;
-let syncTimer = null;
-
-window.onload = async function(){
-  // load balance from localStorage to avoid reset to 0 on start
-  const storedBalance = localStorage.getItem("balance");
-  if (storedBalance != null && storedBalance !== "undefined"){
-    const b = parseFloat(storedBalance);
-    if (!isNaN(b)) balance = b;
-  }
-
-  subscribed = localStorage.getItem("subscribed") === "true";
-  task50Completed = localStorage.getItem("task50Completed") === "true";
-  lastAnyAdAt      = parseInt(localStorage.getItem("lastAnyAdAt")  || "0", 10);
-  gamesPlayedSinceClaim = parseInt(localStorage.getItem("gamesPlayedSinceClaim") || "0", 10);
-  ad5Count = parseInt(localStorage.getItem("ad5Count") || "0", 10);
-  ad10Count = parseInt(localStorage.getItem("ad10Count") || "0", 10);
-  lastTask5RewardAt = parseInt(localStorage.getItem("lastTask5RewardAt") || "0", 10);
-  lastTask10RewardAt = parseInt(localStorage.getItem("lastTask10RewardAt") || "0", 10);
-  gramCount  = parseInt(localStorage.getItem('dailyGramCount')||'0',10);
-  exCount    = parseInt(localStorage.getItem('dailyExCount')||'0',10);
-  lastGramAt = parseInt(localStorage.getItem('lastGramAt')||'0',10);
-  lastExAt   = parseInt(localStorage.getItem('lastExAt')||'0',10);
-  dailyStamp = localStorage.getItem('dailyStamp') || _todayStamp();
-
-  ensureDailyReset();
-
-  setBalanceUI();
-  const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
-  updateGamesTaskUI();
-
-  renderPendingList();
-  await renderPayoutList();
-
-  const subBtn = $("subscribeBtn");
-  if (subBtn){
-    if (subscribed){ subBtn.innerText = (document.documentElement.lang==='en'?"Done":"Виконано"); subBtn.classList.add("done"); }
-    subBtn.addEventListener("click", subscribe);
-  }
-
-  const t50 = $("checkTask50");
-  if (t50){
-    if (task50Completed){ t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); t50.classList.add("done"); }
-    t50.addEventListener("click", ()=>{ if (highscore >= 75 && !task50Completed){ addBalance(5.15); t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); t50.classList.add("done"); task50Completed = true; saveData(); } else { alert(document.documentElement.lang==='en' ? "❌ Highscore is too low (need 75+)" : "❌ Твій рекорд замалий (потрібно 75+)"); } });
-  }
-
-  $("checkGames100Btn")?.addEventListener("click", onCheckGames100);
-  $("withdrawBtn")?.addEventListener("click", withdraw50LocalFirst);
-
-  $("watchAd5Btn")?.addEventListener("click", onWatchAd5);
-  $("watchAd10Btn")?.addEventListener("click", onWatchAd10);
-  $("watchAdsgramDailyBtn")?.addEventListener("click", onWatchGramDaily);
-
-  setupChallengeUI();
-  initAds();
-
-  // 3D гра
-  window.stackGame = new Game();
-
-  startDailyPlusTicker();
-  updateAdTasksUI();
-  updateDailyUI();
-
-  try { CloudStore.initAndHydrate(); } catch(e){ console.warn(e); }
-
-  // hydrate withdraw history from Withdraw GAS into local history (non-destructive)
-  try{
-    const u = getTelegramUser();
-    const user_id = u.id || '';
-    const tg_tag = u.username ? ("@"+u.username) : '';
-    const rows = await fetchUserWithdrawRows({ user_id, tg_tag });
-    if (Array.isArray(rows) && rows.length > 0){
-      const hist = readHistory();
-      for (let r of rows){
-        const keyRemote = String(r.number || r._sheetRow || '') + '|' + String(r.time || '') + '|' + String(r.amount || '');
-        const exists = hist.some(h => (String(h.number||'') + '|' + String(h.time||'') + '|' + String(h.amount||'')) === keyRemote);
-        if (!exists){
-          hist.push({
-            number: r.number || r._sheetRow || null,
-            tag: r.tag || r.tg_tag || '',
-            time: r.time || (new Date()).toISOString(),
-            amount: r.amount || 0,
-            status: r.status || 'submitted',
-            _sheetRow: r._sheetRow || null
-          });
-        }
-      }
-      writeHistory(hist);
-    }
-  }catch(e){ console.warn('init withdraw history failed', e); }
-
-  clearInterval(syncTimer);
-  syncTimer = setInterval(()=>{ syncPendingWithdrawals(); }, 20_000);
-};
-
-/* ========= РЕКЛАМА (Adsgram) - без змін від оригіналу ========= */
+/* ========= РЕКЛАМА (Adsgram) ========= */
 function initAds(){
   const sdk = window.Adsgram || window.SAD || null;
   if (!sdk){ console.warn("Adsgram SDK не завантажився"); return; }
@@ -868,16 +817,16 @@ function setupChallengeUI(){
   if (storedOpp && !isNaN(+storedOpp)) oppScorePending = +storedOpp;
   if (scoreBox) scoreBox.textContent = oppScorePending!=null ? String(oppScorePending) : "—";
 
-  genBtn.onclick = ()=>{
+  genBtn && (genBtn.onclick = ()=>{
     if (challengeActive) return;
     if (oppScorePending == null){
       oppScorePending = weightedOppScore();
       if (scoreBox) scoreBox.textContent = String(oppScorePending);
       saveData();
     }
-  };
+  });
 
-  startBtn.onclick = ()=>{
+  startBtn && (startBtn.onclick = ()=>{
     if (challengeActive) return;
     if (oppScorePending == null){
       alert("Спочатку згенеруй суперника.");
@@ -909,13 +858,11 @@ function setupChallengeUI(){
     challengeTicker = setInterval(()=>{
       const left = Math.max(0, challengeDeadline - Date.now());
       leftEl.textContent = formatHMS(left);
-      if (left<=0){
-        clearInterval(challengeTicker);
-      }
+      if (left<=0) clearInterval(challengeTicker);
     }, 1000);
-  };
+  });
 
-  checkBtn.onclick = ()=>{
+  checkBtn && (checkBtn.onclick = ()=>{
     if (!challengeActive){
       statusEl.textContent = "Немає активного виклику.";
       return;
@@ -942,7 +889,7 @@ function setupChallengeUI(){
     } else {
       statusEl.textContent = "Ще не побито рекорд суперника. Спробуй підвищити свій рекорд!";
     }
-  };
+  });
 
   const storedActive = localStorage.getItem("challengeActive")==="true";
   if (storedActive){
@@ -959,9 +906,7 @@ function setupChallengeUI(){
     challengeTicker = setInterval(()=>{
       const left = Math.max(0, challengeDeadline - Date.now());
       leftEl.textContent = formatHMS(left);
-      if (left<=0){
-        clearInterval(challengeTicker);
-      }
+      if (left<=0) clearInterval(challengeTicker);
     }, 1000);
   }
 }
@@ -982,8 +927,7 @@ function finishChallenge(){
 }
 
 /* ========= 3D Stack (гра) ========= */
-/* Inserted full game classes and logic (kept intact from original) */
-
+/* Тут вставлена логіка гри — як у твоєму оригіналі. Для стислості я залишаю класи Stage, Block, Game як у твоєму коді. */
 class Stage{
   constructor(){
     this.container = document.getElementById("container");
@@ -991,7 +935,7 @@ class Stage{
     this.renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setClearColor(0x000000, 0);
-    this.container.appendChild(this.renderer.domElement);
+    this.container && this.container.appendChild(this.renderer.domElement);
 
     const aspect = window.innerWidth / window.innerHeight, d = 20;
     this.camera = new THREE.OrthographicCamera(-d*aspect, d*aspect, d, -d, -100, 1000);
@@ -1021,8 +965,7 @@ class Stage{
     this.camera.updateProjectionMatrix();
   }
 }
-
-class Block{
+class Block{ /* ... copy your Block implementation ... */ 
   constructor(prev){
     this.STATES={ACTIVE:'active',STOPPED:'stopped',MISSED:'missed'};
     this.MOVE_AMOUNT=12;
@@ -1099,7 +1042,6 @@ class Block{
     }
   }
 }
-
 class Game{
   constructor(){
     this.STATES={LOADING:'loading',PLAYING:'playing',READY:'ready',ENDED:'ended',RESETTING:'resetting'};
@@ -1240,7 +1182,7 @@ function updateHighscore(currentScore){
   CloudStore.queuePush({ highscore, last_score: currentScore });
 }
 
-/* ========= Інші допоміжні функції (subscribe/addBalance/copy etc) ========= */
+/* ========= Інші допоміжні функції ========= */
 function addBalance(n){
   balance = parseFloat((balance + n).toFixed(2));
   if (balance < 0) balance = 0;
@@ -1258,55 +1200,102 @@ function subscribe(){
   saveData();
 }
 
+/* ========= ІНІЦІАЛІЗАЦІЯ ========= */
+let dailyUiTicker = null;
+let challengeTicker = null;
+let syncTimer = null;
 
+window.onload = async function(){
+  // load balance from localStorage to avoid reset to 0 on start
+  const storedBalance = localStorage.getItem("balance");
+  if (storedBalance != null && storedBalance !== "undefined"){
+    const b = parseFloat(storedBalance);
+    if (!isNaN(b)) balance = b;
+  }
 
+  subscribed = localStorage.getItem("subscribed") === "true";
+  task50Completed = localStorage.getItem("task50Completed") === "true";
+  lastAnyAdAt      = parseInt(localStorage.getItem("lastAnyAdAt")  || "0", 10);
+  gamesPlayedSinceClaim = parseInt(localStorage.getItem("gamesPlayedSinceClaim") || "0", 10);
+  ad5Count = parseInt(localStorage.getItem("ad5Count") || "0", 10);
+  ad10Count = parseInt(localStorage.getItem("ad10Count") || "0", 10);
+  lastTask5RewardAt = parseInt(localStorage.getItem("lastTask5RewardAt") || "0", 10);
+  lastTask10RewardAt = parseInt(localStorage.getItem("lastTask10RewardAt") || "0", 10);
+  gramCount  = parseInt(localStorage.getItem('dailyGramCount')||'0',10);
+  exCount    = parseInt(localStorage.getItem('dailyExCount')||'0',10);
+  lastGramAt = parseInt(localStorage.getItem('lastGramAt')||'0',10);
+  lastExAt   = parseInt(localStorage.getItem('lastExAt')||'0',10);
+  dailyStamp = localStorage.getItem('dailyStamp') || _todayStamp();
 
+  ensureDailyReset();
 
+  setBalanceUI();
+  const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
+  updateGamesTaskUI();
 
+  renderPendingList();
+  await renderPayoutList();
 
+  const subBtn = $("subscribeBtn");
+  if (subBtn){
+    if (subscribed){ subBtn.innerText = (document.documentElement.lang==='en'?"Done":"Виконано"); subBtn.classList.add("done"); }
+    subBtn.addEventListener("click", subscribe);
+  }
 
- 
+  const t50 = $("checkTask50");
+  if (t50){
+    if (task50Completed){ t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); t50.classList.add("done"); }
+    t50.addEventListener("click", ()=>{ if (highscore >= 75 && !task50Completed){ addBalance(5.15); t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); t50.classList.add("done"); task50Completed = true; saveData(); } else { alert(document.documentElement.lang==='en' ? "❌ Highscore is too low (need 75+)" : "❌ Твій рекорд замалий (потрібно 75+)"); } });
+  }
 
+  $("checkGames100Btn")?.addEventListener("click", onCheckGames100);
+  $("withdrawBtn")?.addEventListener("click", withdraw50LocalFirst);
 
+  $("watchAd5Btn")?.addEventListener("click", onWatchAd5);
+  $("watchAd10Btn")?.addEventListener("click", onWatchAd10);
+  $("watchAdsgramDailyBtn")?.addEventListener("click", onWatchGramDaily);
 
+  setupChallengeUI();
+  initAds();
 
+  // 3D гра
+  try { window.stackGame = new Game(); } catch(e){ console.warn('Game init failed', e); }
 
+  startDailyPlusTicker();
+  updateAdTasksUI();
+  updateDailyUI();
 
+  try { CloudStore.initAndHydrate(); } catch(e){ console.warn(e); }
 
+  // hydrate withdraw history from Withdraw GAS into local history (non-destructive)
+  try{
+    const u = getTelegramUser();
+    const user_id = u.id || '';
+    const tg_tag = u.username ? ("@"+u.username) : '';
+    const rows = await fetchUserWithdrawRows({ user_id, tg_tag });
+    if (Array.isArray(rows) && rows.length > 0){
+      const hist = readHistory();
+      for (let r of rows){
+        const keyRemote = String(r.number || r._sheetRow || '') + '|' + String(r.time || '') + '|' + String(r.amount || '');
+        const exists = hist.some(h => (String(h.number||'') + '|' + String(h.time||'') + '|' + String(h.amount||'')) === keyRemote);
+        if (!exists){
+          hist.push({
+            number: r.number || r._sheetRow || null,
+            tag: r.tag || r.tg_tag || '',
+            time: r.time || (new Date()).toISOString(),
+            amount: r.amount || 0,
+            status: r.status || 'submitted',
+            _sheetRow: r._sheetRow || null
+          });
+        }
+      }
+      writeHistory(hist);
+    }
+  }catch(e){ console.warn('init withdraw history failed', e); }
 
-
-
-
-
-
-
- 
-
-
-
-
-
-
-
-
-
-
- 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
- 
+  clearInterval(syncTimer);
+  syncTimer = setInterval(()=>{ syncPendingWithdrawals(); }, 20_000);
+};
 
 
 
