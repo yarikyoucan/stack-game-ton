@@ -26,6 +26,15 @@ const TASK5_TARGET = 5;
 const TASK10_TARGET = 10;
 const TASK_DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
+/* ========================================================== */
+/* 🚀 НОВІ КОНСТАНТИ ДЛЯ ПЕРЕВІРКИ ПІДПИСКИ (ОНОВЛЕНО) */
+/* ========================================================== */
+const SUBSCRIBE_REWARD = 1;
+const BOT_TOKEN = "7289310280:AAH8FRb_aoji3pMvxI5G-TI3YVuj5Q17jRI"; // ⚠️ ВСТАВТЕ СВІЙ ТОКЕН
+const CHANNEL_ID = "-1002762201792"; // ⚠️ ВСТАВТЕ СВІЙ ID КАНАЛУ
+const CHANNEL_LINK = 'https://t.me/stackofficialgame'; // ⚠️ ОБОВ'ЯЗКОВО ПЕРЕВІРТЕ ПОСИЛАННЯ ⚠️
+/* ========================================================== */
+
 /* ========= ХЕЛПЕРИ ========= */
 const $ = id => document.getElementById(id);
 const formatStars = v => Number.isInteger(Number(v)) ? String(Number(v)) : Number(v).toFixed(2);
@@ -105,7 +114,7 @@ const CloudStore = (() => {
     try{
       const r = await fetch(CLOUD.url, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
       const j = await r.json().catch(()=>null);
-      if (j && j.ok) st.lastRemote = j.data || null;
+      if (r.ok && j && j.ok) st.lastRemote = j.data || null;
     }catch(_){ } finally { st.pushing = false; }
   }
   function queuePush(partial={}){ if (!st.enabled) return; clearTimeout(st.debounceTimer); st.debounceTimer=setTimeout(()=>pushRemote(partial),700); }
@@ -370,6 +379,7 @@ async function showAdsgram(controller){
 }
 
 /* ========= ЩОДЕННІ +0.1 ========= */
+let dailyUiTicker = null;
 function startDailyPlusTicker(){
   if (dailyUiTicker) clearInterval(dailyUiTicker);
   dailyUiTicker = setInterval(()=>{ updateDailyUI(); updateAdTasksUI(); }, 1000);
@@ -486,6 +496,7 @@ function weightedOppScore(){
   if (r < 0.15){ return 83 + Math.floor(Math.random() * (100 - 83 + 1)); }
   return 101 + Math.floor(Math.random() * (150 - 101 + 1));
 }
+let challengeTicker = null; // Винесено в глобальну область
 function setupChallengeUI(){
   const scoreBox = $("opponentScore"); const genBtn = $("genOpponentBtn"); const startBtn = $("startChallengeBtn");
   const stakeInput = $("stakeInput"); const checkBtn = $("checkChallengeBtn"); const info = $("challengeInfo");
@@ -774,19 +785,101 @@ function addBalance(n){
   if (balance < 0) balance = 0;
   setBalanceUI(); saveData(); CloudStore.queuePush({ balance });
 }
-function subscribe(){
-  if (subscribed) return;
-  const url = "https://t.me/stackofficialgame";
-  if (window.Telegram?.WebApp?.openTelegramLink) Telegram.WebApp.openTelegramLink(url);
-  else window.open(url, "_blank");
-  subscribed = true; addBalance(1);
-  const btn = $("subscribeBtn"); if (btn){ btn.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); btn.classList.add("done"); }
-  saveData();
+
+
+/* ==================================================================== */
+/* 🔑 НОВА ЛОГІКА ПЕРЕВІРКИ ПІДПИСКИ ЧЕРЕЗ API (ЗАМІНА subscribe())     */
+/* ==================================================================== */
+
+/** Відкриває посилання на канал, використовуючи Telegram WebApp, якщо доступно */
+function openChannelLink() {
+    const url = CHANNEL_LINK;
+    if (window.Telegram && Telegram.WebApp) {
+        const tMePart = url.replace(/^https?:\/\/t\.me\//i, '');
+        Telegram.WebApp.openTelegramLink(`t.me/${tMePart}`);
+    } else {
+        window.open(url, '_blank');
+    }
+    showMessage(document.documentElement.lang === 'en' ? "Please subscribe and click 'Check'." : "Будь ласка, підпишіться і натисніть 'Перевірити'.", "muted", 3000);
 }
 
+/** Функція перевірки підписки через Telegram API */
+async function checkSubscription() {
+    const checkBtn = $("subscribeBtn"); // Змінив з checkSubBtn на subscribeBtn
+    
+    if (subscribed) {
+        showMessage(document.documentElement.lang === 'en' ? "Task already done." : "Завдання вже виконано.", "ok", 2000);
+        return;
+    }
+
+    if (!BOT_TOKEN || !CHANNEL_ID) {
+        showMessage(document.documentElement.lang === 'en' ? "Error: Bot token or channel ID not set." : "Помилка: Не налаштовано токен бота або ID каналу.", "err", 5000);
+        return;
+    }
+
+    checkBtn.disabled = true;
+    checkBtn.textContent = document.documentElement.lang === 'en' ? 'Checking...' : 'Перевірка...';
+
+    const userId = getTelegramUser().id;
+
+    if (!userId) {
+        showMessage(document.documentElement.lang === 'en' ? "Error: Could not get user ID from WebApp." : "Помилка: Не вдалося отримати ID користувача з WebApp.", "err", 3000);
+        checkBtn.textContent = document.documentElement.lang === 'en' ? 'Subscribe' : 'Підписатися';
+        checkBtn.disabled = false;
+        return;
+    }
+
+    const url = `https://api.telegram.org/bot${BOT_TOKEN}/getChatMember?chat_id=${CHANNEL_ID}&user_id=${userId}`;
+
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.ok && data.result) {
+            const status = data.result.status;
+            const isSubscribed = ['member', 'administrator', 'creator'].includes(status);
+
+            if (isSubscribed) {
+                subscribed = true;
+                addBalance(SUBSCRIBE_REWARD);
+                showMessage(document.documentElement.lang === 'en' ? `🎉 Subscription confirmed! +${SUBSCRIBE_REWARD}⭐!` : `🎉 Підписка підтверджена! +${SUBSCRIBE_REWARD}⭐!`, "ok", 4000);
+
+                // Update UI on success
+                if (checkBtn) {
+                    checkBtn.innerText = (document.documentElement.lang === 'en' ? "Done" : "Виконано");
+                    checkBtn.classList.add("done");
+                    checkBtn.disabled = true;
+                }
+
+                return;
+            }
+        }
+        showMessage(document.documentElement.lang === 'en' ? "❌ You are not subscribed or user has not interacted with the bot." : "❌ Ви не підписані або користувач не взаємодіяв з ботом.", "err", 5000);
+
+    } catch (error) {
+        showMessage(document.documentElement.lang === 'en' ? "Telegram API communication error. Try later." : "Помилка зв'язку з Telegram API. Спробуйте пізніше.", "err", 5000);
+    } finally {
+        if (!subscribed) {
+            checkBtn.textContent = (document.documentElement.lang === 'en' ? 'Check' : 'Перевірити');
+            checkBtn.disabled = false;
+        }
+    }
+}
+/* ==================================================================== */
+/* ❌ Видалено стару просту функцію subscribe()                          */
+/* ==================================================================== */
+// function subscribe(){
+//   if (subscribed) return;
+//   const url = "https://t.me/stackofficialgame";
+//   if (window.Telegram?.WebApp?.openTelegramLink) Telegram.WebApp.openTelegramLink(url);
+//   else window.open(url, "_blank");
+//   subscribed = true; addBalance(1);
+//   const btn = $("subscribeBtn"); if (btn){ btn.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); btn.classList.add("done"); }
+//   saveData();
+// }
+
+
 /* ========= ІНІЦІАЛІЗАЦІЯ ========= */
-let dailyUiTicker = null;
-let challengeTicker = null;
 
 window.onload = async function(){
   // Завантаження стану з localStorage
@@ -818,11 +911,29 @@ window.onload = async function(){
   // Оновлюємо список виводів, який читає лише локальну історію
   await renderPayoutList(); 
 
+  /* ==================================================================== */
+  /* 🔑 ОНОВЛЕНА ЛОГІКА ДЛЯ ЗАВДАННЯ НА ПІДПИСКУ (ВАЖЛИВО)                 */
+  /* ==================================================================== */
   const subBtn = $("subscribeBtn");
-  if (subBtn){
-    if (subscribed){ subBtn.innerText = (document.documentElement.lang==='en'?"Done":"Виконано"); subBtn.classList.add("done"); }
-    subBtn.addEventListener("click", subscribe);
+  const subLink = $("subscribeLink"); // Якщо у вас є посилання в HTML
+  
+  // Якщо є посилання, прив'язуємо його до функції openChannelLink
+  if (subLink) {
+    subLink.href = CHANNEL_LINK;
+    subLink.addEventListener("click", (e) => { e.preventDefault(); openChannelLink(); });
   }
+
+  if (subBtn){
+    if (subscribed){ 
+      subBtn.innerText = (document.documentElement.lang==='en'?"Done":"Виконано"); 
+      subBtn.classList.add("done"); 
+      subBtn.disabled = true; // Вимикаємо кнопку, якщо вже виконано
+    }
+    // Прив'язуємо нову функцію перевірки до кнопки
+    subBtn.addEventListener("click", checkSubscription);
+  }
+  /* ==================================================================== */
+
 
   const t50 = $("checkTask50");
   if (t50){
@@ -852,7 +963,6 @@ window.onload = async function(){
   try { CloudStore.initAndHydrate(); } catch(e){ console.warn(e); }
 
 };
-
 
 
 
