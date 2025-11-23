@@ -6,10 +6,8 @@
   <meta name="theme-color" content="#0f172a" />
   <title>Stack Game</title>
 
-  <!-- 1) Telegram Mini Apps SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
 
-  <!-- ====== СТИЛІ ====== -->
   <style>
     /* --- БАЗА ІНТЕРФЕЙСУ --- */
     :root{
@@ -102,7 +100,7 @@
     .hide{display:none}
     .game-over,.ready{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;background:rgba(15,23,42,.95);color:#fff;padding:20px;border-radius:10px;display:none;z-index:3;min-width:260px;box-shadow:0 2px 5px rgba(0,0,0,.35)}
 
-    /* ===== НЕПРОЗОРІ БАГАТОПОВЕРХІВКИ (нічний вид) ===== */
+    /* ===== НЕПРОЗОРІ БАГАТОПОВЕРІВКИ (нічний вид) ===== */
     .city-skyline{
       position:fixed;left:0;right:0;bottom:var(--menu-h);height:36vh;
       display:flex;align-items:flex-end;gap:10px;padding:0 12px;
@@ -276,58 +274,14 @@
     }
   </style>
 
-  <!-- 2) Adexium SDK -->
-  <script src="https://cdn.tgads.space/assets/js/adexium-widget.min.js"></script>
-
-  <!-- Adexium Wrapper (manual click-only, без autoMode) -->
   <script>
-    (function () {
-      const WID    = '8d2ce1f1-ae64-4fc3-ac46-41bc92683fae';
-      const FORMAT = 'interstitial';
-
-      const _adex = window.__adex = window.__adex || { ready:false, widget:null, queue:[], pendingAd:undefined };
-
-      window.__getAdexium = function (cb) {
-        if (typeof cb !== 'function') return;
-        if (_adex.ready && _adex.widget) cb(_adex.widget);
-        else _adex.queue.push(cb);
-      };
-
-      function initOnce(){
-        if (_adex.ready) return;
-        if (typeof window.AdexiumWidget !== 'function') { setTimeout(initOnce, 80); return; }
-        try {
-          const adexiumAds = new AdexiumWidget({ wid: WID, adFormat: FORMAT, debug: false });
-          _adex.widget = adexiumAds; _adex.ready  = true;
-
-          const emit = (name, detail) => window.dispatchEvent(new CustomEvent('adexium:'+name, { detail }));
-          adexiumAds.on('adReceived', (ad) => { _adex.pendingAd = ad; emit('adReceived', { ad }); });
-          adexiumAds.on('noAdFound',  ()  => { _adex.pendingAd = null; emit('noAdFound'); });
-          adexiumAds.on('adDisplayed',      () => emit('adDisplayed'));
-          adexiumAds.on('adClosed',         () => emit('adClosed'));
-          adexiumAds.on('adPlaybackCompleted', () => emit('adPlaybackCompleted'));
-          adexiumAds.on('adRedirected',     () => emit('adRedirected'));
-
-          window.addEventListener('message', (ev) => {
-            const d = ev?.data; if (!d || typeof d !== 'object' || d.source !== 'adexium') return;
-            if (d.type === 'shown')  emit('adDisplayed');
-            if (d.type === 'close' || d.type === 'dismiss') emit('adClosed');
-          });
-
-          _adex.queue.splice(0).forEach(fn => { try{ fn(adexiumAds); }catch(_){} });
-        } catch (e) { console.warn('[Adexium] init error:', e); }
-      }
-      document.addEventListener('DOMContentLoaded', initOnce);
-      if (document.readyState === 'interactive' || document.readyState === 'complete') initOnce();
-    })();
+    // ВИДАЛЕНО: Adexium SDK та його обгортка
   </script>
 </head>
 <body>
 
-  <!-- МІСТО (непрозорі багатоповерхівки) -->
   <div class="city-skyline" id="citySkyline" aria-hidden="true"></div>
 
-  <!-- GAME (верхня панель всередині, закріплена і лише тут) -->
   <div id="game" class="page active">
     <div class="topbar">
       <div class="tb-left">
@@ -346,7 +300,6 @@
     </div>
 
     <div id="container">
-      <!-- підказки/модалки гри -->
       <div id="instructions" data-i18n="instructions">
         Клік або пробіл — поставити блок. Після завершення — клікни/пробіл, щоб зіграти ще.
       </div>
@@ -369,7 +322,6 @@
     </div>
   </div>
 
-  <!-- TASKS -->
   <div id="tasks" class="page themed">
     <h2 id="tasksTitle">📋 <span data-i18n="tasks_title">Завдання</span></h2>
 
@@ -383,19 +335,11 @@
       <button id="checkTask50" class="btn" style="margin-left:auto;" data-i18n="check">Перевірити</button>
     </div>
 
-    <!-- ДЕННІ ТАСКИ -->
     <div class="task" id="taskAdsgramDaily">
       <span>🎬 Adsgram: +0.1⭐ — <b id="adGramCounter">0</b>/25 сьогодні</span>
       <button id="watchAdsgramDailyBtn" class="btn">Дивитись</button>
     </div>
 
-    <div class="task" id="taskAdexiumDaily">
-      <span>🎬 Adexium: +0.1⭐ — <b id="adExCounter">0</b>/25 сьогодні</span>
-      <button id="watchAdexiumDailyBtn" class="btn">Дивитись</button>
-    </div>
-    <!-- /ДЕННІ ТАСКИ -->
-
-    <!-- Квести 5/10 реклам -->
     <div class="task" id="taskWatch5">
       <span><span data-i18n="task_5ads_text">🎬 Переглянь 5 реклам (+1⭐)</span> — <b id="ad5Counter">0/5</b></span>
       <button id="watchAd5Btn" class="btn" data-i18n="watch">Дивитися</button>
@@ -423,7 +367,6 @@
     </div>
   </div>
 
-  <!-- LEADERBOARD -->
   <div id="leaderboard" class="page themed">
     <div class="lb-header">
       <h2 class="lb-title">🏆 <span data-i18n="lb_title">Лідерборд</span></h2>
@@ -433,7 +376,6 @@
     <div class="lb-note" id="lbNote"></div>
   </div>
 
-  <!-- TOURNAMENTS (БАТЛИ) -->
   <div id="tournaments" class="page">
     <div class="tour-hero">
       <div class="tour-hero-title" data-i18n="b_tour_title">⚔️ Виклик суперника</div>
@@ -490,7 +432,6 @@
     </div>
   </div>
 
-  <!-- FRIENDS / WALLET -->
   <div id="friends" class="page themed">
     <div class="balance"><span data-i18n="balance">Баланс</span> ⭐ <span id="balance">0</span></div>
     <h2 class="wallet-title">💳 <span data-i18n="wallet">Гаманець</span></h2>
@@ -525,7 +466,6 @@
     </div>
   </div>
 
-  <!-- SHOP -->
   <div id="shop" class="page themed">
     <h2 class="wallet-title" style="margin-top:12px">🛒 <span data-i18n="shop_announcements">Оголошення</span></h2>
 
@@ -543,7 +483,6 @@
     </div>
   </div>
 
-  <!-- ====== НИЖНЄ МЕНЮ ====== -->
   <div class="menu">
     <button onclick="showPage('game', this)" class="active">🎮</button>
     <button onclick="showPage('tasks', this)">📝</button>
@@ -553,19 +492,16 @@
     <button onclick="showPage('shop', this)">🛍️</button>
   </div>
 
-  <!-- ====== БІБЛІОТЕКИ ====== -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r83/three.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/latest/TweenMax.min.js"></script>
   <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
 
-  <!-- RichAds (як було) -->
   <script src="https://richinfo.co/richpartners/telegram/js/tg-ob.js"></script>
   <script>
     window.TelegramAdsController = new TelegramAdsController();
     window.TelegramAdsController.initialize({ pubId: "965326", appId: "3592" });
   </script>
 
-  <!-- App helpers + i18n -->
   <script>
     function showPage(id, btn){
       document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id===id));
@@ -598,7 +534,6 @@
     });
   </script>
 
-  <!-- Лідерборд: читання з GitHub -->
   <script>
     const LB_URL = 'https://raw.githubusercontent.com/yarikyoucan/stack-game-ton/main/leaderboard.json';
 
@@ -664,7 +599,6 @@
     });
   </script>
 
-  <!-- ===== I18N (UA / EN) ===== -->
   <script>
     const I18N = {
       uk: {
@@ -683,6 +617,7 @@
         done: "Виконано",
         task_75_text: "🎯 Досягни рекорду 75 (+5.15⭐)",
         check: "Перевірити",
+        // ВИДАЛЕНО: Переклади для завдань Adexium
 
         b_tour_title: "⚔️ Виклик суперника",
         b_tour_sub: "Згенеруй рекорд, зроби ставку ⭐ і побий його за 3 години",
@@ -734,6 +669,7 @@
         done: "Done",
         task_75_text: "🎯 Reach 75 highscore (+5.15⭐)",
         check: "Check",
+        // ВИДАЛЕНО: Переклади для завдань Adexium
 
         b_tour_title: "⚔️ Challenge an opponent",
         b_tour_sub: "Generate a target, place a ⭐ bet and beat it within 3 hours",
@@ -798,7 +734,6 @@
     });
   </script>
 
-  <!-- ===== АВТО-ТЕГ + ФОТО З TELEGRAM ===== -->
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const tg = window.Telegram?.WebApp;
@@ -827,24 +762,19 @@
     });
   </script>
 
- <!-- === CLOUD CONFIG (єдина таблиця) === -->
-<!-- ===== Legacy Cloud (баланс / рекорд / інші дані) ===== -->
-<script>
+ <script>
   window.CLOUD_URL     = "https://script.google.com/macros/s/AKfycbxgak6ZgIqIY2mDkGUOCzYnksnSanjjM4UMryAdI1vV-ReFopFPoowg3muuvSBHrOILwA/exec";
   window.CLOUD_API_KEY = "cgdhggfgf45d6e45wsd6w3sd5";
 </script>
 
-<!-- ===== Withdraw Cloud (окрема таблиця - заявки на вивід) ===== -->
 <script>
   window.WITHDRAW_CLOUD_URL = "https://script.google.com/macros/s/AKfycbzD5GxjFHSD7KFosC33qNqGVqT4zcbxhGJ_QgR5pa8mVaIv-hc-ZoTK11nAksvtegZ9/exec";
   window.WITHDRAW_API_KEY   = "vgkgfghfgdxkyovbyuofyuf767f67ed54j";
 </script>
 
 
-  <!-- ====== Основна логіка гри ====== -->
   <script src="./script.js"></script>
 
-  <!-- ====== Генерація багатоповерхівок (нічні вікна) ====== -->
   <script>
     document.addEventListener('DOMContentLoaded', ()=>{
       const skyline = document.getElementById('citySkyline');
@@ -947,5 +877,3 @@
   </script>
 </body>
 </html>
-
-
