@@ -330,6 +330,10 @@
       <button id="subscribeBtn" class="btn" data-i18n="open">Перейти</button>
     </div>
 
+    <div class="task">
+      <span data-i18n="task_sponsor1_text">Підпишись на Спонсора 1 +1⭐</span>
+      <button id="subscribeSponsorBtn" class="btn" data-i18n="open">Перейти</button>
+    </div>
     <div class="task" id="task50" style="justify-content:space-between;">
       <span data-i18n="task_75_text">🎯 Досягни рекорду 75 (+5.15⭐)</span>
       <button id="checkTask50" class="btn" style="margin-left:auto;" data-i18n="check">Перевірити</button>
@@ -531,6 +535,20 @@
         if (!infoPop || !infoBtn) return;
         if (!infoPop.contains(e.target) && !infoBtn.contains(e.target)) infoPop.style.display='none';
       });
+
+      // НОВА ЛОГІКА ДЛЯ КНОПКИ СПОНСОРА 1
+      const SPONSOR_CHANNEL_URL = 'https://t.me/SUPRESSED_NFTnews';
+      document.getElementById('subscribeSponsorBtn')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        const url = SPONSOR_CHANNEL_URL;
+        if (window.Telegram && Telegram.WebApp) {
+          Telegram.WebApp.openTelegramLink(url);
+        } else {
+          window.open(url, '_blank');
+        }
+      });
+      // КІНЕЦЬ НОВОЇ ЛОГІКИ
+
     });
   </script>
 
@@ -613,11 +631,21 @@
 
         tasks_title: "Завдання",
         task_subscribe_text: "Підпишись на канал +1⭐",
+        // ДОДАНО: Переклад для нового завдання
+        task_sponsor1_text: "Підпишись на Спонсора 1 +0.5⭐", 
+
         open: "Перейти",
         done: "Виконано",
         task_75_text: "🎯 Досягни рекорду 75 (+5.15⭐)",
         check: "Перевірити",
         // ВИДАЛЕНО: Переклади для завдань Adexium
+        task_5ads_text: "🎬 Переглянь 5 реклам (+1⭐)",
+        watch: "Дивитися",
+        task_5ads_available_in: "«5 реклам» доступне через:",
+        wait: "Очікуй…",
+        task_10ads_text: "🎬 Переглянь 10 реклам (+1.85⭐)",
+        task_10ads_available_in: "«10 реклам» доступне через:",
+        task_100games_text: "🎮 Зіграй 100 ігор (+5⭐) — зіграно:",
 
         b_tour_title: "⚔️ Виклик суперника",
         b_tour_sub: "Згенеруй рекорд, зроби ставку ⭐ і побий його за 3 години",
@@ -665,11 +693,21 @@
 
         tasks_title: "Tasks",
         task_subscribe_text: "Subscribe to channel +1⭐",
+        // ДОДАНО: Переклад для нового завдання
+        task_sponsor1_text: "Subscribe to Sponsor 1 +0.5⭐",
+
         open: "Open",
         done: "Done",
         task_75_text: "🎯 Reach 75 highscore (+5.15⭐)",
         check: "Check",
         // ВИДАЛЕНО: Переклади для завдань Adexium
+        task_5ads_text: "🎬 Watch 5 ads (+1⭐)",
+        watch: "Watch",
+        task_5ads_available_in: "«5 ads» available in:",
+        wait: "Wait…",
+        task_10ads_text: "🎬 Watch 10 ads (+1.85⭐)",
+        task_10ads_available_in: "«10 ads» available in:",
+        task_100games_text: "🎮 Play 100 games (+5⭐) — played:",
 
         b_tour_title: "⚔️ Challenge an opponent",
         b_tour_sub: "Generate a target, place a ⭐ bet and beat it within 3 hours",
@@ -722,6 +760,10 @@
       if (btn) btn.textContent = (lang==='en'?'EN':'UA');
       localStorage.setItem('lang', lang);
       document.documentElement.setAttribute('lang', lang==='en'?'en':'uk');
+
+      // Оновлення тексту для кнопки Спонсора 1 (залишається 'Перейти' / 'Open' до інтеграції перевірки)
+      const sponsorBtn=document.getElementById('subscribeSponsorBtn');
+      if(sponsorBtn) sponsorBtn.textContent = dict.open;
     }
 
     document.addEventListener('DOMContentLoaded', ()=>{
@@ -768,7 +810,7 @@
 </script>
 
 <script>
-  window.WITHDRAW_CLOUD_URL = "https://script.google.com/macros/s/AKfycbzD5GxjFHSD7KFosC33qNqGVqT4zcbxhGJ_QgR5pa8mVaIv-hc-ZoTK11nAksvtegZ9/exec";
+  window.WITHDRAW_CLOUD_URL = "https://script.google.com/macros/s/AKfycbzD5GxjFHSD7KFosC33qNqGVyT4zcbxhGJ_QgR5pa8mVaIv-hc-ZoTK11nAksvtegZ9/exec";
   window.WITHDRAW_API_KEY   = "vgkgfghfgdxkyovbyuofyuf767f67ed54j";
 </script>
 
