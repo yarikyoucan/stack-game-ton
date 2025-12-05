@@ -331,7 +331,11 @@
     </div>
 
     <div class="task">
-      <span data-i18n="task_sponsor1_text">Підпишись на Спонсора 1 +1⭐</span>
+      <span data-i18n="task_ambassador_text">Підпишись на Амбасадора +1⭐</span>
+      <button id="subscribeAmbassadorBtn" class="btn" data-i18n="open">Перейти</button>
+    </div>
+    <div class="task">
+      <span data-i18n="task_sponsor1_text">Підпишись на Спонсора 1 +0.5⭐</span>
       <button id="subscribeSponsorBtn" class="btn" data-i18n="open">Перейти</button>
     </div>
     <div class="task" id="task50" style="justify-content:space-between;">
@@ -536,7 +540,20 @@
         if (!infoPop.contains(e.target) && !infoBtn.contains(e.target)) infoPop.style.display='none';
       });
 
-      // НОВА ЛОГІКА ДЛЯ КНОПКИ СПОНСОРА 1
+      // ЛОГІКА ДЛЯ КНОПКИ АМБАСАДОРА
+      const AMBASSADOR_CHANNEL_URL = 'https://t.me/Maney_Craft';
+      document.getElementById('subscribeAmbassadorBtn')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        const url = AMBASSADOR_CHANNEL_URL;
+        if (window.Telegram && Telegram.WebApp) {
+          Telegram.WebApp.openTelegramLink(url);
+        } else {
+          window.open(url, '_blank');
+        }
+      });
+      // КІНЕЦЬ ЛОГІКИ АМБАСАДОРА
+
+      // ЛОГІКА ДЛЯ КНОПКИ СПОНСОРА 1
       const SPONSOR_CHANNEL_URL = 'https://t.me/SUPRESSED_NFTnews';
       document.getElementById('subscribeSponsorBtn')?.addEventListener('click', (e) => {
         e.preventDefault();
@@ -547,7 +564,7 @@
           window.open(url, '_blank');
         }
       });
-      // КІНЕЦЬ НОВОЇ ЛОГІКИ
+      // КІНЕЦЬ ЛОГІКИ СПОНСОРА 1
 
     });
   </script>
@@ -631,7 +648,9 @@
 
         tasks_title: "Завдання",
         task_subscribe_text: "Підпишись на канал +1⭐",
-        // ДОДАНО: Переклад для нового завдання
+        // ДОДАНО: Амбасадор +1⭐
+        task_ambassador_text: "Підпишись на Амбасадора +1⭐",
+        // ОНОВЛЕНО: Спонсор 1 тепер +0.5⭐
         task_sponsor1_text: "Підпишись на Спонсора 1 +0.5⭐", 
 
         open: "Перейти",
@@ -693,7 +712,9 @@
 
         tasks_title: "Tasks",
         task_subscribe_text: "Subscribe to channel +1⭐",
-        // ДОДАНО: Переклад для нового завдання
+        // ДОДАНО: Амбасадор +1⭐
+        task_ambassador_text: "Subscribe to Ambassador +1⭐",
+        // ОНОВЛЕНО: Спонсор 1 тепер +0.5⭐
         task_sponsor1_text: "Subscribe to Sponsor 1 +0.5⭐",
 
         open: "Open",
@@ -761,7 +782,9 @@
       localStorage.setItem('lang', lang);
       document.documentElement.setAttribute('lang', lang==='en'?'en':'uk');
 
-      // Оновлення тексту для кнопки Спонсора 1 (залишається 'Перейти' / 'Open' до інтеграції перевірки)
+      // Оновлення тексту для кнопки Амбасадора та Спонсора 1
+      const ambassadorBtn=document.getElementById('subscribeAmbassadorBtn');
+      if(ambassadorBtn) ambassadorBtn.textContent = dict.open;
       const sponsorBtn=document.getElementById('subscribeSponsorBtn');
       if(sponsorBtn) sponsorBtn.textContent = dict.open;
     }
@@ -876,7 +899,7 @@
         }
         for (let r = 1; r < rows; r++){
           const fy = Math.round(r * (winH + gapY) - gapY/2);
-          frames += `<rect x="0" y="${fy}" width="${w}" height="${1}" fill="rgba(5,8,15,.35)"/>`;
+          frames += `<rect x="0" y="${fy}" width="100%" height="${1}" fill="rgba(5,8,15,.35)"/>`;
         }
 
         const svg = `
