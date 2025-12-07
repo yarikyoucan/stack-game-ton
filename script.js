@@ -29,6 +29,8 @@ const TASK_DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 /* ========================================================== */
 /* 🚀 НОВІ КОНСТАНТИ ДЛЯ ПЕРЕВІРКИ ПІДПИСКИ (ОНОВЛЕНО) */
 /* ========================================================== */
+const AMB_CHANNEL_ID = "-1002321346142"; // ПЕРЕНЕСЕНО
+const AMB_CHANNEL_LINK = "https://t.me/Maney_Craft/1227"; // ПЕРЕНЕСЕНО
 const SUBSCRIBE_REWARD = 1;
 const BOT_TOKEN = "7289310280:AAH8FRb_aoji3pMvxI5G-TI3YVuj5Q17jRI"; // ⚠️ ВСТАВТЕ СВІЙ ТОКЕН
 const CHANNEL_ID = "-1002762201792"; // ⚠️ ВСТАВТЕ СВІЙ ID КАНАЛУ
@@ -690,7 +692,7 @@ class Game{
   }
   showReady(){ if ($("ready")) $("ready").style.display="block"; if ($("gameOver")) $("gameOver").style.display="none"; if ($("postAdTimer")) $("postAdTimer").style.display="none"; this.state=this.STATES.READY; }
   showGameOver(){ if ($("gameOver")) $("gameOver").style.display="block"; if ($("ready")) $("ready").style.display="none"; if ($("postAdTimer")) $("postAdTimer").style.display="none"; this.state=this.STATES.ENDED; }
-  hideOverlays(){ if ($("gameOver")) $("gameOver").style.display="none"; if ($("ready")) $("ready").style.display="none"; if ($("postAdTimer")) $("postAdTimer").style.display="none"; }
+  hideOverlays(){ if ($("gameOver")) $("gameOver").style.display="none"; if ($("ready")) $("ready").style.display="none"; if ($("postAdTimer")) $("postAdTimer").style.display="none"; this.state=this.STATES.PLAYING; }
   onAction(){
     switch(this.state){
       case this.STATES.READY:   this.startGame(); break;
@@ -962,6 +964,44 @@ window.onload = async function(){
   // Запуск фонової синхронізації (використовує CLOUD.url, НЕ WITHDRAW_CLOUD_URL)
   try { CloudStore.initAndHydrate(); } catch(e){ console.warn(e); }
 
+};
+
+
+// Функції, що використовують AMB_CHANNEL_ID та AMB_CHANNEL_LINK (використовують переміщені константи)
+async function checkAmbassadorSubscription() {
+  const user = getTelegramUser();
+  if (!user.id) return false;
+
+  const url = `https://api.telegram.org/bot${BOT_TOKEN}/getChatMember?chat_id=${AMB_CHANNEL_ID}&user_id=${user.id}`;
+  const r = await fetch(url);
+  const j = await r.json();
+
+  if (!j.ok) return false;
+  return ["member", "administrator", "creator"].includes(j.result.status);
+}
+
+document.getElementById("ambGoBtn").onclick = () => {
+  window.open(AMB_CHANNEL_LINK, "_blank");
+};
+
+document.getElementById("ambCheckBtn").onclick = async () => {
+  const ok = await checkAmbassadorSubscription();
+  if (!ok) {
+    alert("Ти ще не підписався!");
+    return;
+  }
+
+  if (localStorage.getItem("ambassadorTaskDone") === "true") {
+    alert("Вже отримано ⭐");
+    return;
+  }
+
+  addBalance(1);
+  saveData();
+  localStorage.setItem("ambassadorTaskDone", "true");
+
+  document.getElementById("ambCheckBtn").classList.add("done");
+  alert("🎉 Нагорода +1⭐");
 };
 
 
