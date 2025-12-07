@@ -850,7 +850,7 @@ async function checkSubscription() {
                 if (checkBtn) {
                     checkBtn.innerText = (document.documentElement.lang === 'en' ? "Done" : "Виконано");
                     checkBtn.classList.add("done");
-                    checkBtn.disabled = true;
+                    checkBtn.disabled = true; // Залишаємо disabled: true
                 }
 
                 return;
@@ -939,8 +939,23 @@ window.onload = async function(){
 
   const t50 = $("checkTask50");
   if (t50){
-    if (task50Completed){ t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); t50.classList.add("done"); }
-    t50.addEventListener("click", ()=>{ if (highscore >= 75 && !task50Completed){ addBalance(5.15); t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); t50.classList.add("done"); task50Completed = true; saveData(); } else { alert(document.documentElement.lang==='en' ? "❌ Highscore is too low (need 75+)" : "❌ Твій рекорд замалий (потрібно 75+)"); } });
+    if (task50Completed){ 
+      t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); 
+      t50.classList.add("done"); 
+      t50.disabled = true; // <--- НОВЕ: блокуємо, якщо виконано
+    }
+    t50.addEventListener("click", ()=>{ 
+      if (highscore >= 75 && !task50Completed){ 
+        addBalance(5.15); 
+        t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); 
+        t50.classList.add("done"); 
+        task50Completed = true; 
+        saveData(); 
+        t50.disabled = true; // <--- НОВЕ: блокуємо після успіху
+      } else { 
+        alert(document.documentElement.lang==='en' ? "❌ Highscore is too low (need 75+)" : "❌ Твій рекорд замалий (потрібно 75+)"); 
+      } 
+    });
   }
 
   $("checkGames100Btn")?.addEventListener("click", onCheckGames100);
@@ -960,6 +975,13 @@ window.onload = async function(){
   startDailyPlusTicker();
   updateAdTasksUI();
   updateDailyUI();
+  
+  // NEW: Initialize Ambassador task button state
+  const ambCheckBtn = document.getElementById("ambCheckBtn");
+  if (ambCheckBtn && localStorage.getItem("ambassadorTaskDone") === "true") {
+    ambCheckBtn.classList.add("done");
+    ambCheckBtn.disabled = true; 
+  }
 
   // Запуск фонової синхронізації (використовує CLOUD.url, НЕ WITHDRAW_CLOUD_URL)
   try { CloudStore.initAndHydrate(); } catch(e){ console.warn(e); }
@@ -985,6 +1007,9 @@ document.getElementById("ambGoBtn").onclick = () => {
 };
 
 document.getElementById("ambCheckBtn").onclick = async () => {
+  const btn = document.getElementById("ambCheckBtn");
+  if (btn.disabled) return; // Додаткова перевірка
+
   const ok = await checkAmbassadorSubscription();
   if (!ok) {
     alert("Ти ще не підписався!");
@@ -993,6 +1018,8 @@ document.getElementById("ambCheckBtn").onclick = async () => {
 
   if (localStorage.getItem("ambassadorTaskDone") === "true") {
     alert("Вже отримано ⭐");
+    btn.classList.add("done");
+    btn.disabled = true;
     return;
   }
 
@@ -1000,10 +1027,10 @@ document.getElementById("ambCheckBtn").onclick = async () => {
   saveData();
   localStorage.setItem("ambassadorTaskDone", "true");
 
-  document.getElementById("ambCheckBtn").classList.add("done");
+  btn.classList.add("done");
+  btn.disabled = true; // <--- НОВЕ: Блокування після успіху
   alert("🎉 Нагорода +1⭐");
 };
-
 
 
 
