@@ -172,6 +172,7 @@ function ensureDailyReset() {
 /* ========= СТАН ========= */
 let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
 let gamesPlayedSinceClaim = 0;
+let games100Completed = false; // <--- НОВЕ: Стан виконання завдання на 100 ігор
 let isPaused = false;
 let isWithdrawInFlight = false; 
 let ad5Count = 0, ad10Count = 0;
@@ -192,6 +193,7 @@ function saveData(){
   localStorage.setItem("subscribed", subscribed ? "true" : "false");
   localStorage.setItem("task50Completed", task50Completed ? "true" : "false");
   localStorage.setItem("gamesPlayedSinceClaim", String(gamesPlayedSinceClaim));
+  localStorage.setItem("games100Completed", games100Completed ? "true" : "false"); // <--- НОВЕ: Зберігаємо стан 100 ігор
   localStorage.setItem("lastAnyAdAt", String(lastAnyAdAt));
   localStorage.setItem("ad5Count", String(ad5Count));
   localStorage.setItem("ad10Count", String(ad10Count));
@@ -480,13 +482,44 @@ async function copyToClipboard(text){
   }catch{ alert("Не вдалося копіювати 😕"); }
 }
 
-/* ========= Завдання 100 ігор ========= */
-function updateGamesTaskUI(){ const c=$("gamesPlayedCounter"); if (c) c.textContent=String(Math.min(gamesPlayedSinceClaim, GAMES_TARGET)); }
+/* ========= Завдання 100 ігор (ОНОВЛЕНО) ========= */
+function updateGamesTaskUI(){ 
+  const c=$("gamesPlayedCounter"); 
+  if (c) c.textContent=String(Math.min(gamesPlayedSinceClaim, GAMES_TARGET)); 
+}
+
 function onCheckGames100(){
+  const btn = $("checkGames100Btn");
+  
+  // 1. Якщо вже виконано, виходимо та блокуємо кнопку, якщо вона активна
+  if (games100Completed) {
+    if (btn) btn.disabled = true;
+    alert(document.documentElement.lang === 'en' ? "Task already completed." : "Завдання вже виконано.");
+    return;
+  }
+
+  // 2. Якщо лічильник досягнуто
   if (gamesPlayedSinceClaim >= GAMES_TARGET){
-    gamesPlayedSinceClaim = 0; addBalance(GAMES_REWARD); saveData(); updateGamesTaskUI();
-    const btn=$("checkGames100Btn"); if (btn){ btn.classList.add("done"); setTimeout(()=>btn.classList.remove("done"), 1200); }
+    
+    // gamesPlayedSinceClaim = 0; // <--- ВИДАЛЕНО: Більше не скидаємо лічильник
+    
+    addBalance(GAMES_REWARD); 
+    
+    games100Completed = true; // <--- НОВЕ: Позначаємо як виконане
+    
+    saveData(); 
+    updateGamesTaskUI();
+    
+    if (btn){ 
+      btn.innerText=(document.documentElement.lang==='en'?"Done":"Виконано");
+      btn.classList.add("done"); 
+      btn.disabled = true; // <--- НОВЕ: Блокуємо кнопку
+    }
+    
+    alert(`🎉 Нагорода +${GAMES_REWARD}⭐`);
+    
   } else {
+    // 3. Якщо лічильник не досягнуто
     const left = GAMES_TARGET - gamesPlayedSinceClaim;
     alert(`Ще потрібно зіграти ${left} ігор(и), щоб отримати ${GAMES_REWARD}⭐`);
   }
@@ -826,7 +859,7 @@ async function checkSubscription() {
 
     if (!userId) {
         showMessage(document.documentElement.lang === 'en' ? "Error: Could not get user ID from WebApp." : "Помилка: Не вдалося отримати ID користувача з WebApp.", "err", 3000);
-        checkBtn.textContent = document.documentElement.lang === 'en' ? 'Subscribe' : 'Підписатися';
+        checkBtn.textContent = (document.documentElement.lang === 'en' ? 'Subscribe' : 'Підписатися');
         checkBtn.disabled = false;
         return;
     }
@@ -850,7 +883,7 @@ async function checkSubscription() {
                 if (checkBtn) {
                     checkBtn.innerText = (document.documentElement.lang === 'en' ? "Done" : "Виконано");
                     checkBtn.classList.add("done");
-                    checkBtn.disabled = true; // Залишаємо disabled: true
+                    checkBtn.disabled = true; 
                 }
 
                 return;
@@ -867,18 +900,6 @@ async function checkSubscription() {
         }
     }
 }
-/* ==================================================================== */
-/* ❌ Видалено стару просту функцію subscribe()                          */
-/* ==================================================================== */
-// function subscribe(){
-//   if (subscribed) return;
-//   const url = "https://t.me/stackofficialgame";
-//   if (window.Telegram?.WebApp?.openTelegramLink) Telegram.WebApp.openTelegramLink(url);
-//   else window.open(url, "_blank");
-//   subscribed = true; addBalance(1);
-//   const btn = $("subscribeBtn"); if (btn){ btn.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); btn.classList.add("done"); }
-//   saveData();
-// }
 
 
 /* ========= ІНІЦІАЛІЗАЦІЯ ========= */
@@ -892,6 +913,7 @@ window.onload = async function(){
   }
   subscribed = localStorage.getItem("subscribed") === "true";
   task50Completed = localStorage.getItem("task50Completed") === "true";
+  games100Completed = localStorage.getItem("games100Completed") === "true"; // <--- НОВЕ: Завантажуємо стан
   lastAnyAdAt      = parseInt(localStorage.getItem("lastAnyAdAt")  || "0", 10);
   gamesPlayedSinceClaim = parseInt(localStorage.getItem("gamesPlayedSinceClaim") || "0", 10);
   ad5Count = parseInt(localStorage.getItem("ad5Count") || "0", 10);
@@ -913,13 +935,10 @@ window.onload = async function(){
   // Оновлюємо список виводів, який читає лише локальну історію
   await renderPayoutList(); 
 
-  /* ==================================================================== */
-  /* 🔑 ОНОВЛЕНА ЛОГІКА ДЛЯ ЗАВДАННЯ НА ПІДПИСКУ (ВАЖЛИВО)                 */
-  /* ==================================================================== */
+  /* 🔑 ОНОВЛЕНА ЛОГІКА ДЛЯ ЗАВДАННЯ НА ПІДПИСКУ */
   const subBtn = $("subscribeBtn");
-  const subLink = $("subscribeLink"); // Якщо у вас є посилання в HTML
+  const subLink = $("subscribeLink"); 
   
-  // Якщо є посилання, прив'язуємо його до функції openChannelLink
   if (subLink) {
     subLink.href = CHANNEL_LINK;
     subLink.addEventListener("click", (e) => { e.preventDefault(); openChannelLink(); });
@@ -929,20 +948,18 @@ window.onload = async function(){
     if (subscribed){ 
       subBtn.innerText = (document.documentElement.lang==='en'?"Done":"Виконано"); 
       subBtn.classList.add("done"); 
-      subBtn.disabled = true; // Вимикаємо кнопку, якщо вже виконано
+      subBtn.disabled = true;
     }
-    // Прив'язуємо нову функцію перевірки до кнопки
     subBtn.addEventListener("click", checkSubscription);
   }
-  /* ==================================================================== */
-
-
+  
+  /* 🔑 ЛОГІКА ДЛЯ ЗАВДАННЯ НА РЕКОРД 75+ */
   const t50 = $("checkTask50");
   if (t50){
     if (task50Completed){ 
       t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); 
       t50.classList.add("done"); 
-      t50.disabled = true; // <--- НОВЕ: блокуємо, якщо виконано
+      t50.disabled = true; 
     }
     t50.addEventListener("click", ()=>{ 
       if (highscore >= 75 && !task50Completed){ 
@@ -951,14 +968,24 @@ window.onload = async function(){
         t50.classList.add("done"); 
         task50Completed = true; 
         saveData(); 
-        t50.disabled = true; // <--- НОВЕ: блокуємо після успіху
+        t50.disabled = true; 
       } else { 
         alert(document.documentElement.lang==='en' ? "❌ Highscore is too low (need 75+)" : "❌ Твій рекорд замалий (потрібно 75+)"); 
       } 
     });
   }
 
-  $("checkGames100Btn")?.addEventListener("click", onCheckGames100);
+  /* 🔑 ЛОГІКА ДЛЯ ЗАВДАННЯ НА 100 ІГОР (ОНОВЛЕНО) */
+  const games100Btn = $("checkGames100Btn");
+  if (games100Btn) {
+    if (games100Completed) {
+      games100Btn.innerText = (document.documentElement.lang === 'en' ? "Done" : "Виконано");
+      games100Btn.classList.add("done");
+      games100Btn.disabled = true;
+    }
+    games100Btn.addEventListener("click", onCheckGames100);
+  }
+  
   // ЄДИНЕ МІСЦЕ, ДЕ ПРИВ'ЯЗУЄТЬСЯ ВИКЛИК ВИВЕДЕННЯ
   $("withdrawBtn")?.addEventListener("click", withdraw50LocalFirst);
 
@@ -976,20 +1003,20 @@ window.onload = async function(){
   updateAdTasksUI();
   updateDailyUI();
   
-  // NEW: Initialize Ambassador task button state
+  // Initialize Ambassador task button state
   const ambCheckBtn = document.getElementById("ambCheckBtn");
   if (ambCheckBtn && localStorage.getItem("ambassadorTaskDone") === "true") {
     ambCheckBtn.classList.add("done");
     ambCheckBtn.disabled = true; 
   }
 
-  // Запуск фонової синхронізації (використовує CLOUD.url, НЕ WITHDRAW_CLOUD_URL)
+  // Запуск фонової синхронізації 
   try { CloudStore.initAndHydrate(); } catch(e){ console.warn(e); }
 
 };
 
 
-// Функції, що використовують AMB_CHANNEL_ID та AMB_CHANNEL_LINK (використовують переміщені константи)
+// Функції, що використовують AMB_CHANNEL_ID та AMB_CHANNEL_LINK
 async function checkAmbassadorSubscription() {
   const user = getTelegramUser();
   if (!user.id) return false;
@@ -1008,7 +1035,7 @@ document.getElementById("ambGoBtn").onclick = () => {
 
 document.getElementById("ambCheckBtn").onclick = async () => {
   const btn = document.getElementById("ambCheckBtn");
-  if (btn.disabled) return; // Додаткова перевірка
+  if (btn.disabled) return;
 
   const ok = await checkAmbassadorSubscription();
   if (!ok) {
@@ -1028,9 +1055,8 @@ document.getElementById("ambCheckBtn").onclick = async () => {
   localStorage.setItem("ambassadorTaskDone", "true");
 
   btn.classList.add("done");
-  btn.disabled = true; // <--- НОВЕ: Блокування після успіху
+  btn.disabled = true; 
   alert("🎉 Нагорода +1⭐");
 };
-
 
 
