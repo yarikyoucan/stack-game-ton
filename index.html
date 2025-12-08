@@ -476,21 +476,27 @@
   </div>
 
   <div id="shop" class="page themed">
-    <h2 class="wallet-title" style="margin-top:12px">🛒 <span data-i18n="shop_announcements">Оголошення</span></h2>
-
-    <div class="share-card shop-card" style="text-align:center; position:relative;">
-      <button class="info-btn" id="shopInfoBtn" aria-label="Info" style="position:absolute; right:12px; top:12px; width:28px;height:28px;border-radius:999px;border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.12); color:#fff;">i</button>
-
-      <div class="info-pop" id="shopInfoPop" style="display:none; margin-top:8px;">
-        <p data-i18n="shop_info_text">Якщо бажаєте продати NFT, зірки чи інші подарунки — пишіть у лс.</p>
-        <button class="btn" id="shopInfoClose" data-i18n="close">Закрити</button>
-      </div>
-
-      <p style="margin:6px 0 14px" class="muted"><span data-i18n="post_announcement">Виставити оголошення</span></p>
-      <button class="btn" id="dmOwnerBtn" data-i18n="write_dm">Написати в лс</button>
-      <div class="muted" style="margin-top:8px">@yArOsUlAv</div>
+    <div style="margin: 12px auto; width: 90%; text-align:center;">
+        <h1 style="font-size: 28px; margin: 0 0 20px; color: #eaf2ff; text-transform: uppercase; letter-spacing: 1px; font-weight: 800;">Співпраця</h1>
     </div>
-  </div>
+    
+    <div class="share-card shop-card" style="text-align:left; padding: 20px;">
+        <p style="margin-bottom: 20px;">
+            <strong style="font-size: 1.1em; color: #fff;">1) Прагнете стати амбасадором нашої гри?</strong> <br>
+            <span style="opacity: 0.9;">Умови співпраці: мати канал 1к+ підписників та активну аудиторію.</span> <br>
+            <span style="opacity: 0.9;">Переваги: прихід нових користувачів у ваш канал.</span>
+        </p>
+        <p style="margin-bottom: 20px;">
+            <strong style="font-size: 1.1em; color: #fff;">2) Прагнете додати своє завдання в гру?</strong> <br>
+            <span style="opacity: 0.9;">Пишіть -</span> 
+            <a href="#" class="tg-tag" style="color: #3b82f6; text-decoration: none; font-weight: bold;" onclick="openDMto('@yArOsUlAv'); return false;">@yArOsUlAv</a>
+        </p>
+        <p style="margin-bottom: 0;">
+            <strong style="font-size: 1.1em; color: #fff;">3) Підтримка гри</strong> - 
+            <a href="#" class="tg-tag" style="color: #3b82f6; text-decoration: none; font-weight: bold;" onclick="openDMto('@покипусто'); return false;">@покипусто</a>
+        </p>
+    </div>
+    </div>
 
   <div class="menu">
     <button onclick="showPage('game', this)" class="active">🎮</button>
@@ -498,8 +504,7 @@
     <button onclick="showPage('leaderboard', this)">🏆</button>
     <button onclick="showPage('tournaments', this)">⚔️</button>
     <button onclick="showPage('friends', this)">👛</button>
-    <button onclick="showPage('shop', this)">🛍️</button>
-  </div>
+    <button onclick="showPage('shop', this)">🤝</button> </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r83/three.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/latest/TweenMax.min.js"></script>
@@ -530,16 +535,20 @@
       else window.open(url,'_blank');
     }
     document.addEventListener('DOMContentLoaded', ()=>{
-      document.getElementById('dmOwnerBtn')?.addEventListener('click', ()=>openDMto('@yArOsUlAv'));
-      const infoBtn = document.getElementById('shopInfoBtn');
-      const infoPop = document.getElementById('shopInfoPop');
-      const infoClose = document.getElementById('shopInfoClose');
-      infoBtn?.addEventListener('click', ()=>{ infoPop.style.display = (infoPop.style.display==='block'?'none':'block'); });
-      infoClose?.addEventListener('click', ()=>{ infoPop.style.display='none'; });
-      document.addEventListener('click', (e)=>{
-        if (!infoPop || !infoBtn) return;
-        if (!infoPop.contains(e.target) && !infoBtn.contains(e.target)) infoPop.style.display='none';
-      });
+      // Видалено обробник для dmOwnerBtn, оскільки його немає в новому вмісті
+      // Видалено обробники для shopInfoBtn/Pop/Close, оскільки їх немає в новому вмісті
+
+      // // Цей код більше не потрібен, бо елементи видалені
+      // document.getElementById('dmOwnerBtn')?.addEventListener('click', ()=>openDMto('@yArOsUlAv'));
+      // const infoBtn = document.getElementById('shopInfoBtn');
+      // const infoPop = document.getElementById('shopInfoPop');
+      // const infoClose = document.getElementById('shopInfoClose');
+      // infoBtn?.addEventListener('click', ()=>{ infoPop.style.display = (infoPop.style.display==='block'?'none':'block'); });
+      // infoClose?.addEventListener('click', ()=>{ infoPop.style.display='none'; });
+      // document.addEventListener('click', (e)=>{
+      //   if (!infoPop || !infoBtn) return;
+      //   if (!infoPop.contains(e.target) && !infoBtn.contains(e.target)) infoPop.style.display='none';
+      // });
     });
   </script>
 
@@ -653,11 +662,12 @@
         withdraw_btn: "Вивести",
         payout_list_title: "Список виводів",
 
-        shop_announcements: "Оголошення",
-        post_announcement: "Виставити оголошення",
-        write_dm: "Написати в лс",
-        shop_info_text: "Якщо бажаєте продати NFT, зірки чи інші подарунки — пишіть у лс.",
-        close: "Закрити",
+        // ВИДАЛЕНО: Переклади для магазину
+        // shop_announcements: "Оголошення",
+        // post_announcement: "Виставити оголошення",
+        // write_dm: "Написати в лс",
+        // shop_info_text: "Якщо бажаєте продати NFT, зірки чи інші подарунки — пишіть у лс.",
+        // close: "Закрити",
 
         lb_title: "Лідерборд",
         lb_sub: "Попадай у ТОП — отримуй більше ⭐ за місце!"
@@ -705,11 +715,12 @@
         withdraw_btn: "Withdraw",
         payout_list_title: "Payouts",
 
-        shop_announcements: "Announcements",
-        post_announcement: "Post an announcement",
-        write_dm: "Message in DM",
-        shop_info_text: "If you want to sell NFTs, stars or other gifts — message me in DM.",
-        close: "Close",
+        // ВИДАЛЕНО: Переклади для магазину
+        // shop_announcements: "Announcements",
+        // post_announcement: "Post an announcement",
+        // write_dm: "Message in DM",
+        // shop_info_text: "If you want to sell NFTs, stars or other gifts — message me in DM.",
+        // close: "Close",
 
         lb_title: "Leaderboard",
         lb_sub: "Climb the TOP — earn more ⭐ for your rank!"
@@ -777,7 +788,7 @@
 </script>
 
 <script>
-  window.WITHDRAW_CLOUD_URL = "https://script.google.com/macros/s/AKfycbzD5GxjFHSD7KFosC33qNqGVqT4zcbxhGJ_QgR5pa8mVaIv-hc-ZoTK11nAksvtegZ9/exec";
+  window.WITHDRAW_CLOUD_URL = "https://script.google.com/macros/s/AKfycbzD5GxjFHSD7KFosC33qNqGVT4zcbxhGJ_QgR5pa8mVaIv-hc-ZoTK11nAksvtegZ9/exec";
   window.WITHDRAW_API_KEY   = "vgkgfghfgdxkyovbyuofyuf767f67ed54j";
 </script>
 
