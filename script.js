@@ -186,6 +186,7 @@ let AdTaskMinute = null, AdTask510 = null, AdGameover = null;
 let lastGameoverAdAt = 0, lastAnyAdAt = 0;
 let adInFlightGameover = false, adInFlightTask5 = false, adInFlightTask10 = false;
 let oppScorePending = null, challengeActive = false, challengeStartAt = 0, challengeDeadline = 0, challengeStake = 0, challengeOpp = 0;
+let lastGameScore = 0; // Додана змінна для збереження результату останньої гри
 
 /* ========= ЗБЕРЕЖЕННЯ ========= */
 function saveData(){
@@ -210,6 +211,7 @@ function saveData(){
   localStorage.setItem("challengeDeadline", String(challengeDeadline));
   localStorage.setItem("challengeStake", String(challengeStake));
   localStorage.setItem("challengeOpp", String(challengeOpp));
+  localStorage.setItem("lastGameScore", String(lastGameScore)); // Зберігаємо результат останньої гри
 }
 
 /* ========= ІД ТЕЛЕГРАМ ========= */
@@ -555,7 +557,10 @@ function setupChallengeUI(){
     balance = parseFloat((balance - stake).toFixed(2)); setBalanceUI(); CloudStore.queuePush({ balance });
     challengeActive = true; challengeStartAt = Date.now(); challengeDeadline = challengeStartAt + 3*60*60*1000;
     challengeStake = stake; challengeOpp = oppScorePending;
-    info.textContent = `Виклик активний! Твій суперник має рекорд ${challengeOpp}. Побий його до завершення таймера.`;
+    
+    // ОНОВЛЕНО: Опис завдання
+    info.textContent = `Виклик активний! Твій суперник має результат ${challengeOpp}. Переверш його в одній грі до завершення таймера.`;
+    
     checkBtn.disabled = false; cdWrap.style.display = "block"; statusEl.textContent = ""; saveData();
     if (challengeTicker) clearInterval(challengeTicker);
     challengeTicker = setInterval(()=>{
@@ -564,31 +569,55 @@ function setupChallengeUI(){
       if (left<=0) clearInterval(challengeTicker);
     }, 1000);
   });
+  
+  // ОНОВЛЕНО: Логіка перевірки тепер використовує lastGameScore
   checkBtn && (checkBtn.onclick = ()=>{
     if (!challengeActive){ statusEl.textContent = "Немає активного виклику."; return; }
+    
     const now = Date.now();
-    const won = (highscore > challengeOpp) && (now <= challengeDeadline);
     const expired = now > challengeDeadline;
-    if (won){
-      addBalance(challengeStake * 1.5); statusEl.textContent = "✅ Виконано! Нараховано " + (challengeStake*1.5).toFixed(2) + "⭐";
+    
+    // Нова логіка: перевіряємо останній зіграний score
+    const currentScoreToCheck = lastGameScore;
+    const targetScore = challengeOpp;
+    
+    const won = currentScoreToCheck >= targetScore; // Перемога, якщо останній score >= targetScore
+    
+    if (expired){
+      statusEl.textContent = "❌ Час вичерпано. Ставка втрачена."; checkBtn.disabled = true; finishChallenge();
+    
+    } else if (won){
+      // Успішне виконання: нарахування нагороди
+      addBalance(challengeStake * 1.5); 
+      
+      // Змінюємо текст кнопки та статус
+      checkBtn.innerText = "Забрано";
+      checkBtn.classList.add("done");
+      statusEl.textContent = `✅ Перемога з ${currentScoreToCheck} очками! Нараховано ${(challengeStake*1.5).toFixed(2)}⭐.`;
+      
       checkBtn.disabled = true;
       const prevBattle = Number(localStorage.getItem('battle_record')||'0');
-      const newBattle = Math.max(prevBattle, challengeOpp);
+      const newBattle = Math.max(prevBattle, targetScore);
       localStorage.setItem('battle_record', String(newBattle)); CloudStore.queuePush({ battle_record: newBattle });
       finishChallenge();
-    } else if (expired){
-      statusEl.textContent = "❌ Час вичерпано. Ставка втрачена."; checkBtn.disabled = true; finishChallenge();
+      
     } else {
-      statusEl.textContent = "Ще не побито рекорд суперника. Спробуй підвищити свій рекорд!";
+      // Активний, але результат недостатній
+      statusEl.textContent = `❌ Твій останній результат (${currentScoreToCheck} очок) недостатній. Потрібно ${targetScore} або більше. Спробуй зіграти ще раз!`;
     }
   });
+
   const storedActive = localStorage.getItem("challengeActive")==="true";
   if (storedActive){
     challengeActive = true; challengeStartAt  = parseInt(localStorage.getItem("challengeStartAt") || "0", 10);
     challengeDeadline = parseInt(localStorage.getItem("challengeDeadline") || "0", 10);
     challengeStake    = parseFloat(localStorage.getItem("challengeStake") || "0");
     challengeOpp      = parseInt(localStorage.getItem("challengeOpp") || "0", 10);
-    info.textContent = `Виклик активний! Твій суперник має рекорд ${challengeOpp}.`; checkBtn.disabled = false;
+    
+    // ОНОВЛЕНО: Опис активного завдання
+    info.textContent = `Виклик активний! Твій суперник має результат ${challengeOpp}.`; 
+    
+    checkBtn.disabled = false;
     cdWrap.style.display = "block";
     if (challengeTicker) clearInterval(challengeTicker);
     challengeTicker = setInterval(()=>{
@@ -777,6 +806,7 @@ class Game{
   }
   async endGame(){
     const currentScore=parseInt(this.scoreEl?.innerText||"0",10);
+    lastGameScore = currentScore; // Зберігаємо результат останньої гри для Батлу
     updateHighscore(currentScore);
     gamesPlayedSinceClaim += 1; saveData(); updateGamesTaskUI();
     const now = Date.now();
@@ -926,6 +956,13 @@ window.onload = async function(){
   lastExAt   = parseInt(localStorage.getItem('lastExAt')||'0',10);
   dailyStamp = localStorage.getItem('dailyStamp') || _todayStamp();
 
+  // Додане завантаження lastGameScore
+  const storedLastGameScore = localStorage.getItem("lastGameScore");
+  if (storedLastGameScore != null && storedLastGameScore !== "undefined"){
+    const s = parseFloat(storedLastGameScore);
+    if (!isNaN(s)) lastGameScore = s;
+  }
+
   ensureDailyReset();
 
   setBalanceUI();
@@ -1058,5 +1095,4 @@ document.getElementById("ambCheckBtn").onclick = async () => {
   btn.disabled = true; 
   alert("🎉 Нагорода +1⭐");
 };
-
 
