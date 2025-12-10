@@ -21,6 +21,10 @@ const ADSGRAM_BLOCK_ID_TASK_MINUTE = "int-13961";
 const ADSGRAM_BLOCK_ID_TASK_510    = "int-15276";
 const ADSGRAM_BLOCK_ID_GAMEOVER    = "int-15275";
 
+/* --- Monetag placeholders (НОВЕ) --- */
+const MONETAG_ZONE_TASK = 12345; // ⚠️ ВСТАВТЕ СВІЙ РЕАЛЬНИЙ ID ЗОНИ MONETAG для завдань ⚠️
+const MONETAG_ZONE_GAMEOVER = 67890; // ⚠️ ВСТАВТЕ СВІЙ РЕАЛЬНИЙ ID ЗОНИ MONETAG для геймоверу ⚠️
+
 /* --- Квести на рекламу 5 і 10 --- */
 const TASK5_TARGET = 5;
 const TASK10_TARGET = 10;
@@ -187,6 +191,8 @@ let lastGameoverAdAt = 0, lastAnyAdAt = 0;
 let adInFlightGameover = false, adInFlightTask5 = false, adInFlightTask10 = false;
 let oppScorePending = null, challengeActive = false, challengeStartAt = 0, challengeDeadline = 0, challengeStake = 0, challengeOpp = 0;
 let lastGameScore = 0; // Додана змінна для збереження результату останньої гри
+let lastAdNetworkUsed = "none"; // НОВЕ: 'adsgram' або 'monetag'
+let MonetagReady = false; // НОВЕ: Стан ініціалізації Monetag
 
 /* ========= ЗБЕРЕЖЕННЯ ========= */
 function saveData(){
@@ -212,6 +218,7 @@ function saveData(){
   localStorage.setItem("challengeStake", String(challengeStake));
   localStorage.setItem("challengeOpp", String(challengeOpp));
   localStorage.setItem("lastGameScore", String(lastGameScore)); // Зберігаємо результат останньої гри
+  localStorage.setItem("lastAdNetworkUsed", lastAdNetworkUsed); // НОВЕ: Зберігаємо стан мережі реклами
 }
 
 /* ========= ІД ТЕЛЕГРАМ ========= */
@@ -365,24 +372,96 @@ async function withdraw50LocalFirst(){
   if (btn) btn.disabled = false;
 }
 
-/* ========= РЕКЛАМА (Adsgram) ========= */
-function initAds(){
-  const sdk = window.Adsgram || window.SAD || null;
-  if (!sdk){ console.warn("Adsgram SDK не завантажився"); return; }
-  try { AdTaskMinute = (sdk.init ? sdk.init({ blockId: ADSGRAM_BLOCK_ID_TASK_MINUTE }) : sdk.AdController?.create({blockId: ADSGRAM_BLOCK_ID_TASK_MINUTE})); }
-  catch (e) { console.warn("Adsgram init (daily +0.1) error:", e); }
+/* ========= РЕКЛАМА (Adsgram) & Monetag Integration (ОНОВЛЕНО) ========= */
 
-  try { AdTask510 = (sdk.init ? sdk.init({ blockId: ADSGRAM_BLOCK_ID_TASK_510 }) : sdk.AdController?.create({blockId: ADSGRAM_BLOCK_ID_TASK_510})); }
-  catch (e) { console.warn("Adsgram init (5/10) error:", e); }
-
-  try { AdGameover = (sdk.init ? sdk.init({ blockId: ADSGRAM_BLOCK_ID_GAMEOVER }) : sdk.AdController?.create({blockId: ADSGRAM_BLOCK_ID_GAMEOVER})); }
-  catch (e) { console.warn("Adsgram init (gameover) error:", e); }
+/* --- Monetag Placeholder (НОВЕ) --- */
+// !!! Ця функція є заглушкою. В реальному проекті тут буде код інтеграції Monetag SDK.
+function initMonetag(){
+  MonetagReady = !!(window.MonetagSDK || window.monetag); // Припускаємо глобальний об'єкт SDK
+  if (!MonetagReady) { 
+    console.warn("Monetag SDK не завантажився або не інтегрований. Використовуватиметься лише Adsgram.");
+  }
 }
+
+async function showMonetagInterstitial(zoneId){
+  if (!MonetagReady) return { shown:false, reason:'monetag_not_ready' };
+  
+  // Імітація виклику реального SDK
+  console.log(`[Monetag Mock] Showing ad for zone ${zoneId}`);
+  // В ідеалі, тут має бути реальний виклик, який повертає promise
+  await new Promise(r => setTimeout(r, 1000)); 
+  
+  // Припускаємо, що показ успішний (заглушка)
+  return { shown: true };
+}
+
+/* --- Adsgram Functions (existing) --- */
 async function showAdsgram(controller){
   if (!controller) return { shown:false, reason:'adsgram_no_controller' };
   try{ await controller.show(); return { shown:true }; }
   catch(err){ return { shown:false, reason: err?.description || err?.state || "no_fill_or_error" }; }
 }
+
+/* --- Alternation Logic (НОВЕ) --- */
+async function showAlternatingAd(context = 'task_5_10') {
+  // Визначаємо, яку мережу спробувати ПЕРШОЮ
+  let primaryNetwork = (lastAdNetworkUsed === 'adsgram' || lastAdNetworkUsed === 'none') ? 'monetag' : 'adsgram';
+  let secondaryNetwork = (primaryNetwork === 'adsgram') ? 'monetag' : 'adsgram';
+  let result = { shown: false };
+  
+  // Вибір блоків/зон
+  const adsgramController = (context === 'gameover') ? AdGameover : ((context === 'task_minute') ? AdTaskMinute : AdTask510);
+  const monetagZone = (context === 'gameover') ? MONETAG_ZONE_GAMEOVER : MONETAG_ZONE_TASK;
+
+  // 1. Спроба показати рекламу ПЕРВИННОЇ мережі
+  if (primaryNetwork === 'monetag'){
+    result = await showMonetagInterstitial(monetagZone);
+  } else { // primaryNetwork === 'adsgram'
+    result = await showAdsgram(adsgramController);
+  }
+
+  // 2. Якщо первинна мережа НЕ показала, спроба показати рекламу ВТОРИННОЇ мережі (Fallback)
+  if (!result.shown) {
+    if (secondaryNetwork === 'monetag') {
+      result = await showMonetagInterstitial(monetagZone);
+    } else { // secondaryNetwork === 'adsgram'
+      result = await showAdsgram(adsgramController);
+    }
+  }
+
+  // 3. Оновлення стану, якщо показ відбувся
+  if (result.shown) {
+      // Перемикаємо стан, щоб наступного разу черга була у іншої мережі.
+      lastAdNetworkUsed = (lastAdNetworkUsed === 'adsgram' || lastAdNetworkUsed === 'none') ? 'monetag' : 'adsgram';
+      
+      lastAnyAdAt = Date.now();
+      saveData();
+  }
+
+  return { shown: result.shown };
+}
+
+/* --- Init (Modified) --- */
+function initAds(){
+  const sdk = window.Adsgram || window.SAD || null;
+  if (!sdk){ console.warn("Adsgram SDK не завантажився"); }
+  
+  // Ініціалізація Adsgram
+  if (sdk) {
+    try { AdTaskMinute = (sdk.init ? sdk.init({ blockId: ADSGRAM_BLOCK_ID_TASK_MINUTE }) : sdk.AdController?.create({blockId: ADSGRAM_BLOCK_ID_TASK_MINUTE})); }
+    catch (e) { console.warn("Adsgram init (daily +0.1) error:", e); }
+
+    try { AdTask510 = (sdk.init ? sdk.init({ blockId: ADSGRAM_BLOCK_ID_TASK_510 }) : sdk.AdController?.create({blockId: ADSGRAM_BLOCK_ID_TASK_510})); }
+    catch (e) { console.warn("Adsgram init (5/10) error:", e); }
+
+    try { AdGameover = (sdk.init ? sdk.init({ blockId: ADSGRAM_BLOCK_ID_GAMEOVER }) : sdk.AdController?.create({blockId: ADSGRAM_BLOCK_ID_GAMEOVER})); }
+    catch (e) { console.warn("Adsgram init (gameover) error:", e); }
+  }
+  
+  // Ініціалізація Monetag (placeholder)
+  initMonetag();
+}
+
 
 /* ========= ЩОДЕННІ +0.1 ========= */
 let dailyUiTicker = null;
@@ -416,9 +495,10 @@ function updateDailyUI(){
     eBtn.innerText = (exCount >= DAILY_CAP) ? `Ліміт до 00:00 (${leftTxt})` : (eBtn.dataset.label || eBtn.innerText);
   }
 }
+// ВИКОРИСТАННЯ showAlternatingAd (ОНОВЛЕНО)
 async function onWatchGramDaily(){
   if (gramCount >= DAILY_CAP) return;
-  const res = await showAdsgram(AdTaskMinute);
+  const res = await showAlternatingAd('task_minute'); // ВИКЛИК ЧЕРГУВАННЯ
   if (!res.shown) return;
   lastGramAt = Date.now(); gramCount += 1;
   addBalance(0.1); saveData(); updateDailyUI();
@@ -452,22 +532,24 @@ function updateAdTasksUI(){
     if (tenCD) tenCD.style.display = "none";
   }
 }
+// ВИКОРИСТАННЯ showAlternatingAd (ОНОВЛЕНО)
 async function onWatchAd5(){
   const now = Date.now(); if (now - lastTask5RewardAt < TASK_DAILY_COOLDOWN_MS) return;
   if (adInFlightTask5) return; adInFlightTask5 = true;
   try{
-    const res = await showAdsgram(AdTask510);
+    const res = await showAlternatingAd('task_5_10'); // ВИКЛИК ЧЕРГУВАННЯ
     if (!res.shown) return;
     ad5Count += 1;
     if (ad5Count >= TASK5_TARGET){ addBalance(1); ad5Count = 0; lastTask5RewardAt = Date.now(); }
     saveData(); updateAdTasksUI();
   } finally { adInFlightTask5 = false; }
 }
+// ВИКОРИСТАННЯ showAlternatingAd (ОНОВЛЕНО)
 async function onWatchAd10(){
   const now = Date.now(); if (now - lastTask10RewardAt < TASK_DAILY_COOLDOWN_MS) return;
   if (adInFlightTask10) return; adInFlightTask10 = true;
   try{
-    const res = await showAdsgram(AdTask510);
+    const res = await showAlternatingAd('task_5_10'); // ВИКЛИК ЧЕРГУВАННЯ
     if (!res.shown) return;
     ad10Count += 1;
     if (ad10Count >= TASK10_TARGET){ addBalance(1.85); ad10Count = 0; lastTask10RewardAt = Date.now(); }
@@ -804,19 +886,26 @@ class Game{
     this.stage.setCamera(this.blocks.length*2);
     if(this.blocks.length>=6) $("instructions")?.classList.add("hide");
   }
+  // ВИКОРИСТАННЯ showAlternatingAd (ОНОВЛЕНО)
   async endGame(){
     const currentScore=parseInt(this.scoreEl?.innerText||"0",10);
     lastGameScore = currentScore; // Зберігаємо результат останньої гри для Батлу
     updateHighscore(currentScore);
     gamesPlayedSinceClaim += 1; saveData(); updateGamesTaskUI();
     const now = Date.now();
+    
+    // Використовуємо функцію чергування для показу реклами Gameover
     if (!adInFlightGameover && (now - lastGameoverAdAt >= Math.max(MIN_BETWEEN_SAME_CTX_MS, GAME_AD_COOLDOWN_MS))){
       adInFlightGameover = true;
       try{
-        const r = await showAdsgram(AdGameover);
-        if (r.shown){ lastGameoverAdAt = Date.now(); lastAnyAdAt = lastGameoverAdAt; saveData(); }
+        const r = await showAlternatingAd('gameover');
+        if (r.shown){ 
+          lastGameoverAdAt = Date.now(); 
+          // lastAnyAdAt and saveData() is handled inside showAlternatingAd
+        }
       } finally { adInFlightGameover = false; }
     }
+    
     this.startPostAdCountdown();
   }
   startPostAdCountdown(){
@@ -955,6 +1044,9 @@ window.onload = async function(){
   lastGramAt = parseInt(localStorage.getItem('lastGramAt')||'0',10);
   lastExAt   = parseInt(localStorage.getItem('lastExAt')||'0',10);
   dailyStamp = localStorage.getItem('dailyStamp') || _todayStamp();
+  
+  // Додане завантаження стану мережі реклами (НОВЕ)
+  lastAdNetworkUsed = localStorage.getItem("lastAdNetworkUsed") || "none"; 
 
   // Додане завантаження lastGameScore
   const storedLastGameScore = localStorage.getItem("lastGameScore");
@@ -1031,7 +1123,7 @@ window.onload = async function(){
   $("watchAdsgramDailyBtn")?.addEventListener("click", onWatchGramDaily);
 
   setupChallengeUI();
-  initAds();
+  initAds(); // initAds тепер також викликає initMonetag
 
   // 3D гра
   try { window.stackGame = new Game(); } catch(e){ console.warn('Game init failed', e); }
