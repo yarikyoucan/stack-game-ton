@@ -325,16 +325,16 @@
   <div id="tasks" class="page themed">
     <h2 id="tasksTitle">📋 <span data-i18n="tasks_title">Завдання</span></h2>
 
-    <!-- (контент завдань збережено як у твоєму оригіналі) -->
-    <div class="task" id="taskSubscribeAmbassador">
-      <span>💠 Підпишись на амбасадора (+1⭐)</span>
-      <div style="display:flex; gap:8px;">
-        <button id="ambGoBtn" class="btn">Перейти</button>
-        <button id="ambCheckBtn" class="btn">Перевірити</button>
-      </div>
-    </div>
+    
+<div class="task" id="taskSubscribeAmbassador">
+  <span>💠 Підпишись на амбасадора (+1⭐)</span>
+  <div style="display:flex; gap:8px;">
+    <button id="ambGoBtn" class="btn">Перейти</button>
+    <button id="ambCheckBtn" class="btn">Перевірити</button>
+  </div>
+</div>
 
-    <div class="task">
+<div class="task">
       <span data-i18n="task_subscribe_text">Підпишись на канал +1⭐</span>
       <button id="subscribeBtn" class="btn" data-i18n="open">Перейти</button>
     </div>
@@ -386,7 +386,6 @@
   </div>
 
   <div id="tournaments" class="page">
-    <!-- (контент tournaments збережено) -->
     <div class="tour-hero">
       <div class="tour-hero-title" data-i18n="b_tour_title">⚔️ Виклик суперника</div>
       <div class="tour-hero-sub" data-i18n="b_tour_sub">Згенеруй рекорд, зроби ставку ⭐ і побий його за 3 години</div>
@@ -539,84 +538,6 @@
     window.TelegramAdsController.initialize({ pubId: "965326", appId: "3592" });
   </script>
 
-  <!-- ===== Monetag SDK (додано) ===== -->
-  <script src='//libtl.com/sdk.js' data-zone='10304410' data-sdk='show_10304410'></script>
-
-  <!-- ===== Wrapper: Monetag ↔ Adsgram чергування (додано) ===== -->
-  <script>
-    /**
-     * Простий wrapper, який чергує покази:
-     * Adsgram -> Monetag -> Adsgram -> Monetag ...
-     *
-     * Використання у script.js:
-     *   await showAdAlternate(adController);
-     *
-     * Якщо Adsgram не доступний, wrapper спробує Monetag.
-     */
-
-    window.nextAdIsMonetag = false;
-
-    function showMonetagPromise(){
-      return new Promise(resolve => {
-        try{
-          if (typeof show_10304410 === 'function'){
-            show_10304410({
-              type: 'inApp',
-              inAppSettings: {
-                frequency: 2,
-                capping: 0.1,
-                interval: 30,
-                timeout: 5,
-                everyPage: false
-              },
-              onComplete: () => resolve(true),
-              onClose: () => resolve(true),
-              onError: () => resolve(false)
-            });
-          } else {
-            console.warn('Monetag SDK is not ready: show_10304410 not defined');
-            resolve(false);
-          }
-        }catch(err){
-          console.error('Monetag call error', err);
-          resolve(false);
-        }
-      });
-    }
-
-    async function showAdAlternate(adController){
-      // adController — опціональний об'єкт для Adsgram
-      let shown = false;
-      if (window.nextAdIsMonetag){
-        shown = await showMonetagPromise();
-      } else {
-        if (typeof window.showAdsgram === 'function'){
-          try{
-            // showAdsgram може повертати { shown:true } або boolean
-            const res = await window.showAdsgram(adController);
-            if (res === true) shown = true;
-            else if (res && typeof res === 'object' && res.shown) shown = true;
-            else shown = false;
-          }catch(e){
-            console.warn('showAdsgram failed — fallback to Monetag', e);
-            shown = await showMonetagPromise();
-          }
-        } else {
-          // Якщо Adsgram не доступний — fallback
-          shown = await showMonetagPromise();
-        }
-      }
-
-      // Переключити прапорець — чергування
-      window.nextAdIsMonetag = !window.nextAdIsMonetag;
-      return shown;
-    }
-
-    // Експортуємо глобально, щоб script.js міг викликати
-    window.showMonetagPromise = showMonetagPromise;
-    window.showAdAlternate = showAdAlternate;
-  </script>
-
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const tg = window.Telegram?.WebApp;
@@ -648,14 +569,14 @@
   <script>
   window.CLOUD_URL     = "https://script.google.com/macros/s/AKfycbxgak6ZgIqIY2mDkGUOCzYnksnSanjjM4UMryAdI1vV-ReFopFPoowg3muuvSBHrOILwA/exec";
   window.CLOUD_API_KEY = "cgdhggfgf45d6e45wsd6w3sd5";
-  </script>
+</script>
 
-  <script>
-    window.WITHDRAW_CLOUD_URL = "https://script.google.com/macros/s/AKfycbzD5GxjFHSD7KFosC33qNqGVqT4zcbxhGJ_QgR5pa8mVaIv-hc-ZoTK11nAksvtegZ9/exec";
-    window.WITHDRAW_API_KEY   = "vgkgfghfgdxkyovbyuofyuf767f67ed54j";
-  </script>
+<script>
+  window.WITHDRAW_CLOUD_URL = "https://script.google.com/macros/s/AKfycbzD5GxjFHSD7KFosC33qNqGVqT4zcbxhGJ_QgR5pa8mVaIv-hc-ZoTK11nAksvtegZ9/exec";
+  window.WITHDRAW_API_KEY   = "vgkgfghfgdxkyovbyuofyuf767f67ed54j";
+</script>
 
-  <!-- Твій основний скрипт -->
+
   <script src="./script.js"></script>
 
   <script>
@@ -747,8 +668,243 @@
     });
   </script>
 
-  <!-- (інші inline-скрипти та i18n, skyline тощо з твого оригіналу залишено) -->
+  <script>
+    const I18N = {
+      uk: {
+        instructions: "Клік або пробіл — поставити блок. Після завершення — клікни/пробіл, щоб зіграти ще.",
+        game_over: "Гра закінчена",
+        nice_try: "Ти молодець 👍",
+        restart_hint: "Клікни або натисни пробіл, щоб почати знову",
+        start_btn: "▶ Старт",
+        pause_before_new_game: "Пауза перед новою гророю",
+        you_can_start_in: "Можна буде почати через:",
+        sec_suffix: "с",
 
+        tasks_title: "Завдання",
+        task_subscribe_text: "Підпишись на канал +1⭐",
+        open: "Перейти",
+        done: "Виконано",
+        task_75_text: "🎯 Досягни рекорду 75 (+5.15⭐)",
+        check: "Перевірити",
+        // ВИДАЛЕНО: Переклади для завдань Adexium
+
+        b_tour_title: "⚔️ Виклик суперника",
+        b_tour_sub: "Згенеруй рекорд, зроби ставку ⭐ і побий його за 3 години",
+        opponent: "Суперник",
+        generate: "Згенерувати",
+        stake: "Ставка ⭐",
+        start_challenge: "Старт",
+        no_active_challenge: "Немає активного виклику.",
+        time_left_prefix: "Залишилось:",
+        rule_goal: "🎯 Мета: побий рекорд за 3 год",
+        rule_prize: "💎 Виграш: ×1.5 від ставки",
+        rule_risk: "⚠️ Якщо не встигаєш — ставка згорає",
+        make_bet: "Зробити ставку",
+
+        balance: "Баланс",
+        wallet: "Гаманець",
+        invite_friends: "Запроси друзів",
+        bot_link: "Посилання на бота:",
+        open_bot: "➡ Відкрити бота @Stacktongame_bot",
+        copy: "Скопіювати",
+        one_link: "Це одна силка для всіх 👍",
+        withdraw_title: "Вивід зірок",
+        withdraw_hint: "За натискання списується рівно 50⭐, решта лишається. Далі в таблицю піде ваш тег(@) так що до моменту успішного виводу не міняйте його.",
+        withdraw_btn: "Вивести",
+        payout_list_title: "Список виводів",
+
+        // Оновлені переклади для "Співпраця" (хоча вони тут не використовуються, оскільки контент статичний)
+        shop_announcements: "Співпраця",
+        post_announcement: "Співпраця", 
+        write_dm: "Написати в лс",
+        shop_info_text: "Інформація про співпрацю", 
+        close: "Закрити",
+
+        lb_title: "Лідерборд",
+        lb_sub: "Попадай у ТОП — отримуй більше ⭐ за місце!"
+      },
+      en: {
+        instructions: "Click or Space — drop the block. After game over, click/space to play again.",
+        game_over: "Game Over",
+        nice_try: "Nice try 👍",
+        restart_hint: "Click or press Space to start again",
+        start_btn: "▶ Start",
+        pause_before_new_game: "Pause before new game",
+        you_can_start_in: "You can start in:",
+        sec_suffix: "s",
+
+        tasks_title: "Tasks",
+        task_subscribe_text: "Subscribe to channel +1⭐",
+        open: "Open",
+        done: "Done",
+        task_75_text: "🎯 Reach 75 highscore (+5.15⭐)",
+        check: "Check",
+        // ВИДАЛЕНО: Переклади для завдань Adexium
+
+        b_tour_title: "⚔️ Challenge an opponent",
+        b_tour_sub: "Generate a target, place a ⭐ bet and beat it within 3 hours",
+        opponent: "Opponent",
+        generate: "Generate",
+        stake: "Stake ⭐",
+        start_challenge: "Start",
+        no_active_challenge: "No active challenge.",
+        time_left_prefix: "Time left:",
+        rule_goal: "🎯 Goal: beat the score in 3 hours",
+        rule_prize: "💎 Prize: ×1.5 of your stake",
+        rule_risk: "⚠️ If you fail — you lose the stake",
+        make_bet: "Make a bet",
+
+        balance: "Balance",
+        wallet: "Wallet",
+        invite_friends: "Invite friends",
+        bot_link: "Bot link:",
+        open_bot: "➡ Open @Stacktongame_bot",
+        copy: "Copy",
+        one_link: "Same link for everyone 👍",
+        withdraw_title: "Withdraw stars",
+        withdraw_hint: "Clicking deducts exactly 50⭐. The rest remains. Your tag (@) will go into the table, so do not change it until the output is successful.",
+        withdraw_btn: "Withdraw",
+        payout_list_title: "Payouts",
+
+        // Оновлені переклади для "Співпраця" (хоча вони тут не використовуються, оскільки контент статичний)
+        shop_announcements: "Partnership",
+        post_announcement: "Partnership",
+        write_dm: "Message in DM",
+        shop_info_text: "Partnership info",
+        close: "Close",
+
+        lb_title: "Leaderboard",
+        lb_sub: "Climb the TOP — earn more ⭐ for your rank!"
+      }
+    };
+
+    function applyLang(lang){
+      const dict = I18N[lang] || I18N.uk;
+      document.querySelectorAll('[data-i18n]').forEach(el=>{
+        const key = el.getAttribute('data-i18n');
+        if (dict[key] != null) el.innerHTML = dict[key];
+      });
+      const subBtn=document.getElementById('subscribeBtn');
+      if (subBtn){
+        const subscribed=(localStorage.getItem('subscribed')==='true');
+        subBtn.textContent = subscribed ? dict.done : dict.open;
+      }
+      const btn=document.getElementById('langToggle');
+      if (btn) btn.textContent = (lang==='en'?'EN':'UA');
+      localStorage.setItem('lang', lang);
+      document.documentElement.setAttribute('lang', lang==='en'?'en':'uk');
+    }
+
+    document.addEventListener('DOMContentLoaded', ()=>{
+      const saved = localStorage.getItem('lang') || 'uk';
+      applyLang(saved);
+      document.getElementById('langToggle')?.addEventListener('click', ()=>{
+        const cur = localStorage.getItem('lang') || 'uk';
+        applyLang(cur==='uk' ? 'en' : 'uk');
+      });
+    });
+  </script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', ()=>{
+      const skyline = document.getElementById('citySkyline');
+      if (!skyline) return;
+
+      function makeWindowsSVG(w, h){
+        const cols = Math.max(3, Math.round(w / 12));
+        const rows = Math.max(6, Math.round(h / 14));
+        const gapX = Math.max(2, Math.round(w * 0.02));
+        const gapY = Math.max(2, Math.round(h * 0.025));
+        const winW = Math.max(6, Math.floor((w - (cols - 1) * gapX) / cols));
+        const winH = Math.max(8, Math.floor((h - (rows - 1) * gapY) / rows));
+
+        const base = 0.48 + (Math.random() * 0.18);
+        const phase = Math.random() * Math.PI * 2;
+
+        const warm = ['#ffd166','#ffe29a','#fff1c4','#ffc86b','#ffd98c'];
+        const cool = ['#a7c4ff','#8ecbff','#b3f0ff'];
+
+        const defs = `
+          <defs>
+            <filter id="glow" color-interpolation-filters="sRGB">
+              <feGaussianBlur stdDeviation="0.7" result="b"/>
+              <feMerge>
+                <feMergeNode in="b"/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+          </defs>`;
+
+        let litRects = '';
+        for (let r = 0; r < rows; r++){
+          let p = base + 0.18 * Math.sin(r * 0.9 + phase) - 0.07 * (r / rows);
+          p = Math.max(0.18, Math.min(0.88, p));
+          for (let c = 0; c < cols; c++){
+            if (Math.random() < p){
+              const x = Math.round(c * (winW + gapX));
+              const y = Math.round(r * (winH + gapY));
+              const tv = Math.random() < 0.06;
+              const col = tv ? cool[(Math.random()*cool.length)|0] : warm[(Math.random()*warm.length)|0];
+              const op = tv ? (0.75 + Math.random()*0.2) : (0.85 + Math.random()*0.15);
+              const hasBlinds = Math.random() < 0.18;
+              const blindsH = hasBlinds ? Math.max(2, Math.round(winH * (0.25 + Math.random()*0.3))) : 0;
+
+              litRects += `<g filter="url(#glow)">
+                <rect x="${x}" y="${y}" width="${winW}" height="${winH}" rx="1.2" ry="1.2" fill="${col}" fill-opacity="${op}"/>
+                ${hasBlinds ? `<rect x="${x}" y="${y}" width="${winW}" height="${blindsH}" fill="rgba(0,0,0,.18)"/>` : ``}
+              </g>`;
+            }
+          }
+        }
+
+        let frames = '';
+        for (let c = 1; c < cols; c++){
+          const fx = Math.round(c * (winW + gapX) - gapX/2);
+          frames += `<rect x="${fx}" y="0" width="1" height="${h}" fill="rgba(5,8,15,.35)"/>`;
+        }
+        for (let r = 1; r < rows; r++){
+          const fy = Math.round(r * (winH + gapY) - gapY/2);
+          frames += `<rect x="0" y="${fy}" width="${w}" height="${1}" fill="rgba(5,8,15,.35)"/>`;
+        }
+
+        const svg = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" shape-rendering="crispEdges">
+            ${defs}
+            <rect width="100%" height="100%" fill="rgba(8,12,22,.85)"/>
+            ${frames}
+            ${litRects}
+          </svg>`;
+        return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+      }
+
+      function buildSkyline(){
+        skyline.innerHTML = '';
+        const count = Math.max(8, Math.round(window.innerWidth / 70));
+        for (let i=0;i<count;i++){
+          const b = document.createElement('div');
+          b.className = 'bldg';
+          const h = Math.floor(Math.random()*20)+12; // 12–32vh
+          b.style.setProperty('--h', h+'vh');
+
+          b.style.setProperty('--twinkle', (5 + Math.random()*4).toFixed(2) + 's');
+          b.style.setProperty('--twinkle-delay', (Math.random()*3).toFixed(2) + 's');
+
+          skyline.appendChild(b);
+
+          const glassW = Math.max(20, b.clientWidth  - 16);
+          const glassH = Math.max(20, b.clientHeight - 22);
+
+          const win = document.createElement('div');
+          win.className = 'win';
+          win.style.backgroundImage = `url("${makeWindowsSVG(glassW, glassH)}")`;
+          b.appendChild(win);
+        }
+      }
+
+      buildSkyline();
+      window.addEventListener('resize', buildSkyline);
+    });
+  </script>
 </body>
 </html>
 
