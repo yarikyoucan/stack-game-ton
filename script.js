@@ -1,9 +1,7 @@
 "use strict";
 console.clear();
 
-/* ========================================================== */
 /* ========= КОНСТАНТИ ========= */
-/* ========================================================== */
 const DAILY_CAP = 25;
 const DAILY_COOLDOWN_MS = 0;
 
@@ -23,16 +21,13 @@ const ADSGRAM_BLOCK_ID_TASK_MINUTE = "int-13961";
 const ADSGRAM_BLOCK_ID_TASK_510    = "int-15276";
 const ADSGRAM_BLOCK_ID_GAMEOVER    = "int-15275";
 
-/* --- Monetag Zone ID (ВСТАВТЕ СВІЙ ID) --- */
-const MONETAG_ZONE_ID = '10304410'; 
-
 /* --- Квести на рекламу 5 і 10 --- */
 const TASK5_TARGET = 5;
 const TASK10_TARGET = 10;
 const TASK_DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
 /* ========================================================== */
-/* 🚀 КОНСТАНТИ ДЛЯ ПЕРЕВІРКИ ПІДПИСКИ ТА АМБАСАДОРКИ */
+/* 🚀 НОВІ КОНСТАНТИ ДЛЯ ПЕРЕВІРКИ ПІДПИСКИ (ОНОВЛЕНО) */
 /* ========================================================== */
 const AMB_CHANNEL_ID = "-1002321346142"; // ПЕРЕНЕСЕНО
 const AMB_CHANNEL_LINK = "https://t.me/Maney_Craft/1227"; // ПЕРЕНЕСЕНО
@@ -92,11 +87,7 @@ const CloudStore = (() => {
   function makeTag(){ if (st.username) return st.username.startsWith('@') ? st.username : '@'+st.username; return ''; }
   async function getRemote(){
     if (!st.enabled) return null;
-    identify(); // Перевірка ID перед запитом
-    const uid = st.uid; 
-    const tg  = makeTag(); 
-    const nocache = "&_=" + Date.now();
-    
+    const uid = st.uid; const tg  = makeTag(); const nocache = "&_=" + Date.now();
     async function tryUrl(u){
       try{
         const r = await fetch(u, { method:'GET', headers:{'accept':'application/json'} });
@@ -106,19 +97,13 @@ const CloudStore = (() => {
       }catch(_){}
       return null;
     }
-    
-    // 1. Спроба завантаження за ID + Tag
     if (uid && tg){ const urlBoth = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(uid)}&tg_tag=${encodeURIComponent(tg)}${nocache}`; const d = await tryUrl(urlBoth); if (d) return d; }
-    
-    // 2. Спроба завантаження лише за ID
     if (uid){ const urlUid = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&user_id=${encodeURIComponent(uid)}${nocache}`; const d = await tryUrl(urlUid); if (d) return d; }
-    
-    // 3. Спроба завантаження лише за Tag (як резерв, якщо ID чомусь немає)
     if (tg){ const urlTag = `${CLOUD.url}?api=${encodeURIComponent(CLOUD.api)}&cmd=get&tg_tag=${encodeURIComponent(tg)}${nocache}`; const d = await tryUrl(urlTag); if (d) return d; }
-    
     return null;
   }
   async function pushRemote(partial){
+    // Ця функція викликає CLOUD.url (основний скрипт), а НЕ WITHDRAW_CLOUD_URL (скрипт виводу)
     if (!st.enabled || (!st.uid && !makeTag())) return;
     const body = {
       api: CLOUD.api, user_id: st.uid || undefined, username: st.username.replace(/^@/,''), tg_tag: makeTag() || undefined,
@@ -138,15 +123,7 @@ const CloudStore = (() => {
   function applyRemoteToState(rem){
     if (!rem) return;
     if (typeof rem.highscore === 'number' && rem.highscore > (highscore||0)){ highscore = rem.highscore; const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore; }
-    
-    // ⬅️ Захист від скидання позитивного локального балансу на 0
-    if (typeof rem.balance === 'number' && rem.balance !== balance){ 
-      if (!(rem.balance === 0 && balance > 0)) { 
-        balance = parseFloat(rem.balance.toFixed(2)); 
-        setBalanceUI(); 
-      } 
-    }
-    
+    if (typeof rem.balance === 'number' && rem.balance !== balance){ if (!(rem.balance === 0 && balance > 0)) { balance = parseFloat(rem.balance.toFixed(2)); setBalanceUI(); } }
     const localBattle = Number(localStorage.getItem('battle_record')||'0');
     const newBattle = Math.max(localBattle, Number(rem.battle_record||0));
     if (newBattle !== localBattle){ localStorage.setItem('battle_record', String(newBattle)); }
@@ -195,7 +172,7 @@ function ensureDailyReset() {
 /* ========= СТАН ========= */
 let balance = 0, subscribed = false, task50Completed = false, highscore = 0;
 let gamesPlayedSinceClaim = 0;
-let games100Completed = false; 
+let games100Completed = false; // <--- НОВЕ: Стан виконання завдання на 100 ігор
 let isPaused = false;
 let isWithdrawInFlight = false; 
 let ad5Count = 0, ad10Count = 0;
@@ -209,8 +186,7 @@ let AdTaskMinute = null, AdTask510 = null, AdGameover = null;
 let lastGameoverAdAt = 0, lastAnyAdAt = 0;
 let adInFlightGameover = false, adInFlightTask5 = false, adInFlightTask10 = false;
 let oppScorePending = null, challengeActive = false, challengeStartAt = 0, challengeDeadline = 0, challengeStake = 0, challengeOpp = 0;
-let lastGameScore = 0; 
-let nextAdMonetag = false; // ⬅️ СТАН ДЛЯ ЧЕРГУВАННЯ
+let lastGameScore = 0; // Додана змінна для збереження результату останньої гри
 
 /* ========= ЗБЕРЕЖЕННЯ ========= */
 function saveData(){
@@ -218,7 +194,7 @@ function saveData(){
   localStorage.setItem("subscribed", subscribed ? "true" : "false");
   localStorage.setItem("task50Completed", task50Completed ? "true" : "false");
   localStorage.setItem("gamesPlayedSinceClaim", String(gamesPlayedSinceClaim));
-  localStorage.setItem("games100Completed", games100Completed ? "true" : "false"); 
+  localStorage.setItem("games100Completed", games100Completed ? "true" : "false"); // <--- НОВЕ: Зберігаємо стан 100 ігор
   localStorage.setItem("lastAnyAdAt", String(lastAnyAdAt));
   localStorage.setItem("ad5Count", String(ad5Count));
   localStorage.setItem("ad10Count", String(ad10Count));
@@ -235,8 +211,7 @@ function saveData(){
   localStorage.setItem("challengeDeadline", String(challengeDeadline));
   localStorage.setItem("challengeStake", String(challengeStake));
   localStorage.setItem("challengeOpp", String(challengeOpp));
-  localStorage.setItem("lastGameScore", String(lastGameScore)); 
-  localStorage.setItem("nextAdMonetag", nextAdMonetag ? "true" : "false"); 
+  localStorage.setItem("lastGameScore", String(lastGameScore)); // Зберігаємо результат останньої гри
 }
 
 /* ========= ІД ТЕЛЕГРАМ ========= */
@@ -264,6 +239,7 @@ function showMessage(text, kind = "info", timeout = 3000){
 }
 
 /* ===================== WITHDRAW: submit (5-column sheet) ===================== */
+
 /** POST → Withdraw GAS: запис у 5-колонний аркуш (№, tg_tag, time, amount, status) */
 async function submitWithdrawalToSheet({ user_id, tag, username, amount, timeISO }) {
   if (!WITHDRAW_CLOUD_URL || !WITHDRAW_API_KEY) return { ok:false, error:"WITHDRAW_CLOUD_URL / WITHDRAW_API_KEY not set" };
@@ -327,6 +303,8 @@ async function renderPayoutList(){
 /* ========= WITHDRAW ACTION (МОДИФІКОВАНО: Списання та повідомлення про успіх безумовні) ========= */
 async function withdraw50LocalFirst(){
   const btn = $("withdrawBtn");
+
+  // 1. Захист від повторного виклику та КРИТИЧНА перевірка балансу
   if (isWithdrawInFlight) return; 
 
   if (balance < WITHDRAW_CHUNK) {
@@ -334,7 +312,7 @@ async function withdraw50LocalFirst(){
     return;
   }
 
-  isWithdrawInFlight = true; 
+  isWithdrawInFlight = true; // БЛОКУЄМО
   if (btn) btn.disabled = true;
 
   const u = getTelegramUser();
@@ -347,8 +325,9 @@ async function withdraw50LocalFirst(){
   balance = parseFloat((balance - WITHDRAW_CHUNK).toFixed(2));
   if (balance < 0) balance = 0;
   setBalanceUI(); 
-  CloudStore.queuePush({ balance }); 
+  CloudStore.queuePush({ balance }); // Оновлюємо баланс на основному сервері
 
+  // Зберігаємо зміну балансу локально
   saveData();
 
   showMessage("Створення заявки...", "muted", 0);
@@ -356,7 +335,7 @@ async function withdraw50LocalFirst(){
   let sheetResNumber = null;
   let sheetResRow = null;
 
-  // 3. Спроба запису на сервер
+  // 3. Спроба запису на сервер (Ігноруємо помилку, але чекаємо для отримання номера)
   try{
     const sheetRes = await submitWithdrawalToSheet({ user_id: id, tag, username: uname, amount: WITHDRAW_CHUNK, timeISO: nowISO });
     if (sheetRes.ok){
@@ -367,7 +346,7 @@ async function withdraw50LocalFirst(){
     // Мережева помилка - ігноруємо, продовжуємо виконувати запит
   }
 
-  // 4. БЕЗУМОВНЕ ДОДАВАННЯ В ЛОКАЛЬНУ ІСТОРІЮ 
+  // 4. БЕЗУМОВНЕ ДОДАВАННЯ В ЛОКАЛЬНУ ІСТОРІЮ (1 запис)
   const hist = readHistory();
   hist.push({ 
       number: sheetResNumber, 
@@ -399,56 +378,11 @@ function initAds(){
   try { AdGameover = (sdk.init ? sdk.init({ blockId: ADSGRAM_BLOCK_ID_GAMEOVER }) : sdk.AdController?.create({blockId: ADSGRAM_BLOCK_ID_GAMEOVER})); }
   catch (e) { console.warn("Adsgram init (gameover) error:", e); }
 }
-
 async function showAdsgram(controller){
-  if (!controller) return { shown:false, reason:'adsgram_no_controller', network: 'adsgram' };
-  try{ await controller.show(); return { shown:true, network: 'adsgram' }; }
-  catch(err){ return { shown:false, reason: err?.description || err?.state || "no_fill_or_error", network: 'adsgram' }; }
+  if (!controller) return { shown:false, reason:'adsgram_no_controller' };
+  try{ await controller.show(); return { shown:true }; }
+  catch(err){ return { shown:false, reason: err?.description || err?.state || "no_fill_or_error" }; }
 }
-
-// ================= Monetag Interstitial ==================
-
-function showMonetag() {
-  return new Promise(resolve => {
-    try {
-      // show_10304410 - ЦЕ ІМ'Я ФУНКЦІЇ ВАШОЇ MONETAG-ЗОНИ (Zone ID: 10304410)
-      window[`show_${MONETAG_ZONE_ID}`]({ 
-        type: 'inApp',
-        inAppSettings: {
-          frequency: 2,
-          capping: 0.1,
-          interval: 30,
-          timeout: 5,
-          everyPage: false
-        },
-        onComplete: () => resolve(true),
-        onClose: () => resolve(true),
-        onError: () => resolve(false)
-      });
-    } catch (err) {
-      resolve(false);
-    }
-  });
-}
-
-// ================= Функція ЧЕРГУВАННЯ Adsgram ↔ Monetag ==================
-
-async function showAdAlternate(adController) {
-  let ok = false;
-
-  if (nextAdMonetag) {
-    ok = await showMonetag();
-  } else {
-    const res = await showAdsgram(adController);
-    ok = res?.shown ?? false;
-  }
-
-  nextAdMonetag = !nextAdMonetag; // Змінюємо стан для наступного виклику
-  saveData(); // Зберігаємо змінений стан чергування
-
-  return ok;
-}
-
 
 /* ========= ЩОДЕННІ +0.1 ========= */
 let dailyUiTicker = null;
@@ -484,10 +418,8 @@ function updateDailyUI(){
 }
 async function onWatchGramDaily(){
   if (gramCount >= DAILY_CAP) return;
-  
-  const ok = await showAdAlternate(AdTaskMinute); // ⬅️ ВИКЛИК ЧЕРГУВАННЯ
-  if (!ok) return;
-
+  const res = await showAdsgram(AdTaskMinute);
+  if (!res.shown) return;
   lastGramAt = Date.now(); gramCount += 1;
   addBalance(0.1); saveData(); updateDailyUI();
 }
@@ -524,9 +456,8 @@ async function onWatchAd5(){
   const now = Date.now(); if (now - lastTask5RewardAt < TASK_DAILY_COOLDOWN_MS) return;
   if (adInFlightTask5) return; adInFlightTask5 = true;
   try{
-    const ok = await showAdAlternate(AdTask510); // ⬅️ ВИКЛИК ЧЕРГУВАННЯ
-    if (!ok) return;
-    
+    const res = await showAdsgram(AdTask510);
+    if (!res.shown) return;
     ad5Count += 1;
     if (ad5Count >= TASK5_TARGET){ addBalance(1); ad5Count = 0; lastTask5RewardAt = Date.now(); }
     saveData(); updateAdTasksUI();
@@ -536,9 +467,8 @@ async function onWatchAd10(){
   const now = Date.now(); if (now - lastTask10RewardAt < TASK_DAILY_COOLDOWN_MS) return;
   if (adInFlightTask10) return; adInFlightTask10 = true;
   try{
-    const ok = await showAdAlternate(AdTask510); // ⬅️ ВИКЛИК ЧЕРГУВАННЯ
-    if (!ok) return;
-    
+    const res = await showAdsgram(AdTask510);
+    if (!res.shown) return;
     ad10Count += 1;
     if (ad10Count >= TASK10_TARGET){ addBalance(1.85); ad10Count = 0; lastTask10RewardAt = Date.now(); }
     saveData(); updateAdTasksUI();
@@ -563,133 +493,75 @@ function updateGamesTaskUI(){
 function onCheckGames100(){
   const btn = $("checkGames100Btn");
   
+  // 1. Якщо вже виконано, виходимо та блокуємо кнопку, якщо вона активна
   if (games100Completed) {
     if (btn) btn.disabled = true;
     alert(document.documentElement.lang === 'en' ? "Task already completed." : "Завдання вже виконано.");
     return;
   }
 
+  // 2. Якщо лічильник досягнуто
   if (gamesPlayedSinceClaim >= GAMES_TARGET){
     
-    addBalance(GAMES_REWARD); // ⬅️ НАГОРОДА (5)
+    // gamesPlayedSinceClaim = 0; // <--- ВИДАЛЕНО: Більше не скидаємо лічильник
     
-    games100Completed = true; 
+    addBalance(GAMES_REWARD); 
+    
+    games100Completed = true; // <--- НОВЕ: Позначаємо як виконане
     
     saveData(); 
     updateGamesTaskUI();
     
     if (btn){ 
       btn.innerText=(document.documentElement.lang==='en'?"Done":"Виконано");
-      btn.disabled = true; 
+      btn.classList.add("done"); 
+      btn.disabled = true; // <--- НОВЕ: Блокуємо кнопку
     }
-
-    alert(document.documentElement.lang === 'en' ? `Task completed! Claimed +${GAMES_REWARD}⭐` : `Завдання виконано! Нараховано +${GAMES_REWARD}⭐`);
     
-    return;
+    alert(`🎉 Нагорода +${GAMES_REWARD}⭐`);
+    
+  } else {
+    // 3. Якщо лічильник не досягнуто
+    const left = GAMES_TARGET - gamesPlayedSinceClaim;
+    alert(`Ще потрібно зіграти ${left} ігор(и), щоб отримати ${GAMES_REWARD}⭐`);
   }
-
-  alert(document.documentElement.lang === 'en' ? `Need to play ${GAMES_TARGET} games. Played: ${gamesPlayedSinceClaim}` : `Потрібно зіграти ${GAMES_TARGET} ігор. Зіграно: ${gamesPlayedSinceClaim}`);
 }
 
-/* ========= БОНУСИ ЗА РЕКОРДИ ========= */
-function onCheckScoreTask(targetScore, reward){
-  return (e) => {
-    const taskKey = `scoreTask${targetScore}Done`;
-    const btn = e.currentTarget;
-    const lang = document.documentElement.lang;
-
-    if (localStorage.getItem(taskKey) === "true"){
-      alert(lang === 'en' ? "Task already claimed." : "Нагороду вже отримано.");
-      if (btn) btn.disabled = true;
-      return;
-    }
-
-    const currentHighscore = highscore || Number(localStorage.getItem("highscore") || "0");
-
-    if (currentHighscore >= targetScore){
-      addBalance(reward); // ⬅️ НАГОРОДА (наприклад, 1.5 для 75 очок)
-      localStorage.setItem(taskKey, "true");
-
-      if (btn){
-        btn.innerText = (lang === 'en' ? "Claimed" : "Забрано");
-        btn.classList.add("done");
-        btn.disabled = true;
-      }
-      alert(lang === 'en' ? `Task completed! Claimed +${reward}⭐` : `Завдання виконано! Нараховано +${reward}⭐`);
-    } else {
-      alert(lang === 'en' ? `❌ Your highscore is too low (need ${targetScore}+)` : `❌ Твій рекорд замалий (потрібно ${targetScore}+)`);
-    }
-  };
-}
-
-/* ========= ЧЕЛЕНДЖІ (Challenge) ========= */
+/* ========= БАТЛ ========= */
 function weightedOppScore(){
-  const currentBattleRecord = Number(localStorage.getItem('battle_record')||'0');
-  const base = Math.min(250, currentBattleRecord + 5) || 5; 
-  const rand = Math.random();
-  if (rand < 0.2) return Math.floor(base * 0.5 + Math.random() * base * 0.5); 
-  if (rand < 0.6) return Math.floor(base + Math.random() * base * 1.5); 
-  if (rand < 0.9) return Math.floor(base * 2.5 + Math.random() * base * 2); 
-  return Math.floor(base * 4.5 + Math.random() * base * 3.5); 
+  const r = Math.random();
+  if (r < 0.15){ return 83 + Math.floor(Math.random() * (100 - 83 + 1)); }
+  return 101 + Math.floor(Math.random() * (150 - 101 + 1));
 }
-
-let challengeTicker = null;
-
-function initChallengeUI(){
-  const scoreBox = $("opponentScore");
-  const genBtn = $("generateOpponent");
-  const startBtn = $("startChallenge");
-  const checkBtn = $("checkChallenge");
-  const stakeInput = $("challengeStake");
-  const info = $("challengeInfo");
-  const cdWrap = $("challengeCountdown");
-  const leftEl = $("challengeLeft");
-  const statusEl = $("challengeStatus");
-
+let challengeTicker = null; // Винесено в глобальну область
+function setupChallengeUI(){
+  const scoreBox = $("opponentScore"); const genBtn = $("genOpponentBtn"); const startBtn = $("startChallengeBtn");
+  const stakeInput = $("stakeInput"); const checkBtn = $("checkChallengeBtn"); const info = $("challengeInfo");
+  const cdWrap = $("challengeCountdown"); const leftEl = $("challengeLeft"); const statusEl = $("challengeStatus");
   const storedOpp = localStorage.getItem("oppScorePending");
   if (storedOpp && !isNaN(+storedOpp)) oppScorePending = +storedOpp;
-
   if (scoreBox) scoreBox.textContent = oppScorePending!=null ? String(oppScorePending) : "—";
-  
   genBtn && (genBtn.onclick = ()=>{
     if (challengeActive) return;
     if (oppScorePending == null){
       oppScorePending = weightedOppScore();
-      if (scoreBox) scoreBox.textContent = String(oppScorePending);
-      saveData();
+      if (scoreBox) scoreBox.textContent = String(oppScorePending); saveData();
     }
   });
-
   startBtn && (startBtn.onclick = ()=>{
     if (challengeActive) return;
-    if (oppScorePending == null){
-      alert("Спочатку згенеруй суперника.");
-      return;
-    }
-
+    if (oppScorePending == null){ alert("Спочатку згенеруй суперника."); return; }
     const stake = parseFloat(stakeInput.value || "0");
     if (!(stake>0)) return;
-    if (balance < stake){
-      alert("Недостатньо ⭐ для ставки.");
-      return;
-    }
-
-    balance = parseFloat((balance - stake).toFixed(2));
-    setBalanceUI();
-    CloudStore.queuePush({ balance });
-
-    challengeActive = true;
-    challengeStartAt = Date.now();
-    challengeDeadline = challengeStartAt + 3*60*60*1000;
-    challengeStake = stake;
-    challengeOpp = oppScorePending;
-
+    if (balance < stake){ alert("Недостатньо ⭐ для ставки."); return; }
+    balance = parseFloat((balance - stake).toFixed(2)); setBalanceUI(); CloudStore.queuePush({ balance });
+    challengeActive = true; challengeStartAt = Date.now(); challengeDeadline = challengeStartAt + 3*60*60*1000;
+    challengeStake = stake; challengeOpp = oppScorePending;
+    
+    // ОНОВЛЕНО: Опис завдання
     info.textContent = `Виклик активний! Твій суперник має результат ${challengeOpp}. Переверш його в одній грі до завершення таймера.`;
-    checkBtn.disabled = false;
-    cdWrap.style.display = "block";
-    statusEl.textContent = "";
-    saveData();
-
+    
+    checkBtn.disabled = false; cdWrap.style.display = "block"; statusEl.textContent = ""; saveData();
     if (challengeTicker) clearInterval(challengeTicker);
     challengeTicker = setInterval(()=>{
       const left = Math.max(0, challengeDeadline - Date.now());
@@ -697,48 +569,56 @@ function initChallengeUI(){
       if (left<=0) clearInterval(challengeTicker);
     }, 1000);
   });
-
+  
+  // ОНОВЛЕНО: Логіка перевірки тепер використовує lastGameScore
   checkBtn && (checkBtn.onclick = ()=>{
-    if (!challengeActive){
-      statusEl.textContent = "Немає активного виклику.";
-      return;
-    }
+    if (!challengeActive){ statusEl.textContent = "Немає активного виклику."; return; }
     
     const now = Date.now();
     const expired = now > challengeDeadline;
-
+    
+    // Нова логіка: перевіряємо останній зіграний score
     const currentScoreToCheck = lastGameScore;
     const targetScore = challengeOpp;
-    const won = currentScoreToCheck >= targetScore; 
-
+    
+    const won = currentScoreToCheck >= targetScore; // Перемога, якщо останній score >= targetScore
+    
     if (expired){
-      statusEl.textContent = "❌ Час вичерпано. Ставка втрачена.";
-      checkBtn.disabled = true;
-      finishChallenge();
+      statusEl.textContent = "❌ Час вичерпано. Ставка втрачена."; checkBtn.disabled = true; finishChallenge();
+    
     } else if (won){
+      // Успішне виконання: нарахування нагороди
       addBalance(challengeStake * 1.5); 
-
+      
+      // Змінюємо текст кнопки та статус
       checkBtn.innerText = "Забрано";
       checkBtn.classList.add("done");
       statusEl.textContent = `✅ Перемога з ${currentScoreToCheck} очками! Нараховано ${(challengeStake*1.5).toFixed(2)}⭐.`;
-      checkBtn.disabled = true;
       
+      checkBtn.disabled = true;
       const prevBattle = Number(localStorage.getItem('battle_record')||'0');
       const newBattle = Math.max(prevBattle, targetScore);
-      localStorage.setItem('battle_record', String(newBattle));
-      CloudStore.queuePush({ battle_record: newBattle });
-
+      localStorage.setItem('battle_record', String(newBattle)); CloudStore.queuePush({ battle_record: newBattle });
       finishChallenge();
+      
     } else {
-      statusEl.textContent = `Твій останній результат ${currentScoreToCheck} недостатній. Потрібно ${targetScore} або більше. Спробуй ще!`;
+      // Активний, але результат недостатній
+      statusEl.textContent = `❌ Твій останній результат (${currentScoreToCheck} очок) недостатній. Потрібно ${targetScore} або більше. Спробуй зіграти ще раз!`;
     }
   });
 
-  if (challengeActive){
-    if (info) info.textContent = `Виклик активний! Твій суперник має результат ${challengeOpp}.`;
-    if (checkBtn) checkBtn.disabled = false;
-    if (cdWrap) cdWrap.style.display = "block";
+  const storedActive = localStorage.getItem("challengeActive")==="true";
+  if (storedActive){
+    challengeActive = true; challengeStartAt  = parseInt(localStorage.getItem("challengeStartAt") || "0", 10);
+    challengeDeadline = parseInt(localStorage.getItem("challengeDeadline") || "0", 10);
+    challengeStake    = parseFloat(localStorage.getItem("challengeStake") || "0");
+    challengeOpp      = parseInt(localStorage.getItem("challengeOpp") || "0", 10);
     
+    // ОНОВЛЕНО: Опис активного завдання
+    info.textContent = `Виклик активний! Твій суперник має результат ${challengeOpp}.`; 
+    
+    checkBtn.disabled = false;
+    cdWrap.style.display = "block";
     if (challengeTicker) clearInterval(challengeTicker);
     challengeTicker = setInterval(()=>{
       const left = Math.max(0, challengeDeadline - Date.now());
@@ -747,51 +627,32 @@ function initChallengeUI(){
     }, 1000);
   }
 }
-
 function finishChallenge(){
-  challengeActive = false;
-  challengeStartAt = 0;
-  challengeDeadline = 0;
-  challengeStake = 0;
-  challengeOpp = 0;
-  oppScorePending = null;
-  const scoreBox = $("opponentScore");
+  challengeActive = false; challengeStartAt = 0; challengeDeadline = 0; challengeStake = 0; challengeOpp = 0;
+  oppScorePending = null; const scoreBox = $("opponentScore");
   if (scoreBox) scoreBox.textContent = "—";
-  const cd = $("challengeCountdown");
-  if (cd) cd.style.display = "none";
-  const info = $("challengeInfo");
-  if (info) info.textContent = "Немає активного виклику.";
-  saveData();
+  const cd = $("challengeCountdown"); if (cd) cd.style.display = "none";
+  const info = $("challengeInfo"); if (info) info.textContent = "Немає активного виклику."; saveData();
 }
 
 /* ========= 3D Stack (гра) ========= */
 class Stage{
   constructor(){
-    this.container = document.getElementById("container");
-    this.scene = new THREE.Scene();
+    this.container = document.getElementById("container"); this.scene = new THREE.Scene();
     this.renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setClearColor(0x000000, 0);
+    this.renderer.setSize(window.innerWidth, window.innerHeight); this.renderer.setClearColor(0x000000, 0);
     this.container && this.container.appendChild(this.renderer.domElement);
     const aspect = window.innerWidth / window.innerHeight, d = 20;
     this.camera = new THREE.OrthographicCamera(-d*aspect, d*aspect, d, -d, -100, 1000);
-    this.camera.position.set(2,2,2);
-    this.cameraTarget = new THREE.Vector3(0,0,0);
+    this.camera.position.set(2,2,2); this.cameraTarget = new THREE.Vector3(0,0,0);
     this.camera.lookAt(this.cameraTarget);
-    this.light = new THREE.DirectionalLight(0xffffff,0.5);
-    this.light.position.set(0,499,0);
+    this.light = new THREE.DirectionalLight(0xffffff,0.5); this.light.position.set(0,499,0);
     this.softLight = new THREE.AmbientLight(0xffffff,0.4);
-    this.scene.add(this.light);
-    this.scene.add(this.softLight);
-    window.addEventListener('resize', ()=>this.onResize());
-    this.onResize();
+    this.scene.add(this.light); this.scene.add(this.softLight);
+    window.addEventListener('resize', ()=>this.onResize()); this.onResize();
   }
-  add(o){ this.scene.add(o); }
-  remove(o){ this.scene.remove(o); }
-  render(){
-    this.camera.lookAt(this.cameraTarget);
-    this.renderer.render(this.scene,this.camera);
-  }
+  add(o){ this.scene.add(o); } remove(o){ this.scene.remove(o); }
+  render(){ this.camera.lookAt(this.cameraTarget); this.renderer.render(this.scene,this.camera); }
   setCamera(y, t=0.3){
     TweenMax.to(this.camera.position, t, {y:y+4, ease:Power1.easeInOut});
     TweenMax.to(this.cameraTarget, t, {y:y, ease:Power1.easeInOut});
@@ -799,67 +660,61 @@ class Stage{
   onResize(){
     const viewSize=30;
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.camera.left = window.innerWidth / -viewSize;
-    this.camera.right = window.innerWidth / viewSize;
-    this.camera.top = window.innerHeight / viewSize;
-    this.camera.bottom = window.innerHeight / -viewSize;
+    this.camera.left = window.innerWidth / -viewSize; this.camera.right = window.innerWidth / viewSize;
+    this.camera.top = window.innerHeight / viewSize; this.camera.bottom = window.innerHeight / -viewSize;
     this.camera.updateProjectionMatrix();
   }
 }
-class Block{
+class Block{ 
   constructor(prev){
-    this.STATES={ACTIVE:'active',STOPPED:'stopped',MISSED:'missed'};
-    this.MOVE_AMOUNT=12;
-    this.targetBlock = prev;
-    this.index = (prev?prev.index:0)+1;
-    this.workingPlane = this.index%2 ? 'x' : 'z';
-    this.workingDimension = this.index%2 ? 'width' : 'depth';
+    this.STATES={ACTIVE:'active',STOPPED:'stopped',MISSED:'missed'}; this.MOVE_AMOUNT=12;
+    this.targetBlock = prev; this.index = (prev?prev.index:0)+1;
+    this.workingPlane = this.index%2 ? 'x' : 'z'; this.workingDimension = this.index%2 ? 'width' : 'depth';
     this.dimension = { width: prev?prev.dimension.width:10, height: prev?prev.dimension.height:2, depth: prev?prev.dimension.depth:10 };
-    this.position = { x:0, y:this.index*this.dimension.height, z:0 };
-    this.color = 0x00A0FF;
-    const geometry = new THREE.BoxGeometry(this.dimension.width, this.dimension.height, this.dimension.depth);
-    geometry.translate(this.dimension.width/2, this.dimension.height/2, this.dimension.depth/2);
-    this.material = new THREE.MeshPhongMaterial({ color:this.color, flatShading:true });
-    this.mesh = new THREE.Mesh(geometry, this.material);
+    this.position = { x: prev?prev.position.x:0, y: this.dimension.height*this.index, z: prev?prev.position.z:0 };
+    this.colorOffset = prev?prev.colorOffset:Math.round(Math.random()*100);
+    if(!prev){ this.color=0x333344; } else {
+      const o=this.index+this.colorOffset;
+      const r=Math.sin(0.3*o)*55+200, g=Math.sin(0.3*o+2)*55+200, b=Math.sin(0.3*o+4)*55+200;
+      this.color=new THREE.Color(r/255,g/255,b/255);
+    }
+    this.state = this.index>1 ? this.STATES.ACTIVE : this.STATES.STOPPED;
+    this.speed = -0.1 - (this.index*0.005); if (this.speed<-4) this.speed=-4;
+    this.direction = this.speed;
+    const geom = new THREE.BoxGeometry(this.dimension.width, this.dimension.height, this.dimension.depth);
+    geom.translate(this.dimension.width/2, this.dimension.height/2, this.dimension.depth/2);
+    this.material = new THREE.MeshToonMaterial({color:this.color});
+    this.mesh = new THREE.Mesh(geom, this.material);
     this.mesh.position.set(this.position.x, this.position.y, this.position.z);
-    this.state = this.STATES.ACTIVE;
-    this.direction = this.index%2 ? -1 : 1;
-    this.speed = 0.05 + (this.index/150);
+    if (this.state===this.STATES.ACTIVE) {
+      this.position[this.workingPlane] = Math.random()>0.5 ? -this.MOVE_AMOUNT : this.MOVE_AMOUNT;
+    }
   }
-  reverseDirection(){ this.direction *= -1; }
+  reverseDirection(){ this.direction = this.direction>0 ? this.speed : Math.abs(this.speed); }
   place(){
-    this.state = this.STATES.STOPPED;
-    const overlap = Math.max(0, this.targetBlock.dimension[this.workingDimension] - Math.abs(this.position[this.workingPlane] - this.targetBlock.position[this.workingPlane]));
-    const offset = (this.targetBlock.dimension[this.workingDimension] - overlap) / 2;
-    const dir = this.position[this.workingPlane] > this.targetBlock.position[this.workingPlane] ? 1 : -1;
-    this.position[this.workingPlane] = this.targetBlock.position[this.workingPlane] + dir * offset;
-    this.mesh.position[this.workingPlane] = this.position[this.workingPlane];
-    const ret = { hit: overlap > 0, bonus: overlap > 0 && overlap === this.targetBlock.dimension[this.workingDimension], placed:null, chopped:null };
-
-    if (ret.hit){
-      const placedDim = { width:this.dimension.width, height:this.dimension.height, depth:this.dimension.depth };
-      const choppedDim = { width:this.dimension.width, height:this.dimension.height, depth:this.dimension.depth };
-      const delta = this.dimension[this.workingDimension] - overlap;
-      this.dimension[this.workingDimension] = overlap;
-      placedDim[this.workingDimension] = overlap;
-      choppedDim[this.workingDimension] = delta;
-
-      const placedG = new THREE.BoxGeometry(placedDim.width,placedDim.height,placedDim.depth);
-      placedG.translate(placedDim.width/2,placedDim.height/2,placedDim.depth/2);
+    this.state=this.STATES.STOPPED;
+    let overlap = this.targetBlock.dimension[this.workingDimension] - Math.abs(this.position[this.workingPlane]-this.targetBlock.position[this.workingPlane]);
+    const ret={plane:this.workingPlane,direction:this.direction};
+    if (this.dimension[this.workingDimension]-overlap<0.3){
+      overlap=this.dimension[this.workingDimension]; ret.bonus=true;
+      this.position.x=this.targetBlock.position.x; this.position.z=this.targetBlock.position.z;
+      this.dimension.width=this.targetBlock.dimension.width; this.dimension.depth=this.targetBlock.dimension.depth;
+    }
+    if (overlap>0){
+      const choppedDim={width:this.dimension.width,height:this.dimension.height,depth:this.dimension.depth};
+      choppedDim[this.workingDimension]-=overlap; this.dimension[this.workingDimension]=overlap;
+      const placedG=new THREE.BoxGeometry(this.dimension.width,this.dimension.height,this.dimension.depth);
+      placedG.translate(this.dimension.width/2,this.dimension.height/2,this.dimension.depth/2);
       const placed=new THREE.Mesh(placedG,this.material);
-
       const choppedG=new THREE.BoxGeometry(choppedDim.width,choppedDim.height,choppedDim.depth);
       choppedG.translate(choppedDim.width/2,choppedDim.height/2,choppedDim.depth/2);
       const chopped=new THREE.Mesh(choppedG,this.material);
-      
       const choppedPos={x:this.position.x,y:this.position.y,z:this.position.z};
-
       if (this.position[this.workingPlane] < this.targetBlock.position[this.workingPlane]) {
         this.position[this.workingPlane] = this.targetBlock.position[this.workingPlane];
       } else {
         choppedPos[this.workingPlane] += overlap;
       }
-
       placed.position.set(this.position.x,this.position.y,this.position.z);
       chopped.position.set(choppedPos.x,choppedPos.y,choppedPos.z);
       ret.placed=placed;
@@ -874,7 +729,7 @@ class Block{
     if (this.state===this.STATES.ACTIVE){
       const v=this.position[this.workingPlane];
       if (v>this.MOVE_AMOUNT || v<-this.MOVE_AMOUNT) this.reverseDirection();
-      this.position[this.workingPlane] += this.direction * this.speed;
+      this.position[this.workingPlane] += this.direction;
       this.mesh.position[this.workingPlane] = this.position[this.workingPlane];
     }
   }
@@ -882,139 +737,92 @@ class Block{
 class Game{
   constructor(){
     this.STATES={LOADING:'loading',PLAYING:'playing',READY:'ready',ENDED:'ended',RESETTING:'resetting'};
-    this.state=this.STATES.LOADING;
-    this.blocks=[];
+    this.state=this.STATES.LOADING; this.blocks=[];
     this.stage=new Stage();
-    this.newBlocks=new THREE.Group();
-    this.placedBlocks=new THREE.Group();
-    this.choppedBlocks=new THREE.Group();
-    this.stage.add(this.newBlocks);
-    this.stage.add(this.placedBlocks);
-    this.stage.add(this.choppedBlocks);
-    this.scoreEl=$("score");
-    if (this.scoreEl) this.scoreEl.innerHTML="0";
-    this.addBlock();
-    this.tick();
-    this.showReady();
-    
-    document.addEventListener("keydown",(e)=>{
-      if(isPaused || postAdTimerActive) return;
-      if(e.keyCode===32) this.onAction();
-    });
-    document.addEventListener("click",(e)=>{
-      if(isPaused || postAdTimerActive) return;
-      if($("game")?.classList.contains("active") && e.target.tagName.toLowerCase()==="canvas") this.onAction();
-    });
-    $("start-button")?.addEventListener("click",()=>{
-      if (postAdTimerActive) return;
-      this.onAction();
-    });
+    this.newBlocks=new THREE.Group(); this.placedBlocks=new THREE.Group(); this.choppedBlocks=new THREE.Group();
+    this.stage.add(this.newBlocks); this.stage.add(this.placedBlocks); this.stage.add(this.choppedBlocks);
+    this.scoreEl=$("score"); if (this.scoreEl) this.scoreEl.innerHTML="0";
+    this.addBlock(); this.tick(); this.showReady();
+    document.addEventListener("keydown",(e)=>{ if(isPaused || postAdTimerActive) return; if(e.keyCode===32) this.onAction(); });
+    document.addEventListener("click",(e)=>{ if(isPaused || postAdTimerActive) return; if($("game")?.classList.contains("active") && e.target.tagName.toLowerCase()==="canvas") this.onAction(); });
+    $("start-button")?.addEventListener("click",()=>{ if (postAdTimerActive) return; this.onAction(); });
   }
   hardResetAfterEnd(){
-    [this.newBlocks, this.placedBlocks, this.choppedBlocks].forEach(g=>{
-      for(let i=g.children.length-1;i>=0;i--) g.remove(g.children[i]);
-    });
-    this.blocks = [];
-    this.stage.setCamera(2, 0);
-    if (this.scoreEl) this.scoreEl.innerHTML = "0";
-    $("instructions")?.classList.remove("hide");
-    this.addBlock();
+    [this.newBlocks, this.placedBlocks, this.choppedBlocks].forEach(g=>{ for(let i=g.children.length-1;i>=0;i--) g.remove(g.children[i]); });
+    this.blocks = []; this.stage.setCamera(2, 0); if (this.scoreEl) this.scoreEl.innerHTML = "0";
+    $("instructions")?.classList.remove("hide"); this.addBlock();
   }
-  showReady(){
-    this.state=this.STATES.READY;
-    $("start-button")?.classList.remove("hide");
-    $("instructions")?.classList.add("hide");
-    $("postAdTimer") && ($("postAdTimer").style.display = "none");
+  showReady(){ if ($("ready")) $("ready").style.display="block"; if ($("gameOver")) $("gameOver").style.display="none"; if ($("postAdTimer")) $("postAdTimer").style.display="none"; this.state=this.STATES.READY; }
+  showGameOver(){ if ($("gameOver")) $("gameOver").style.display="block"; if ($("ready")) $("ready").style.display="none"; if ($("postAdTimer")) $("postAdTimer").style.display="none"; this.state=this.STATES.ENDED; }
+  hideOverlays(){ if ($("gameOver")) $("gameOver").style.display="none"; if ($("ready")) $("ready").style.display="none"; if ($("postAdTimer")) $("postAdTimer").style.display="none"; this.state=this.STATES.PLAYING; }
+  onAction(){
+    switch(this.state){
+      case this.STATES.READY:   this.startGame(); break;
+      case this.STATES.PLAYING: this.placeBlock(); break;
+      case this.STATES.ENDED:   this.restartGame(); break;
+    }
   }
   startGame(){
-    this.state=this.STATES.PLAYING;
-    $("start-button")?.classList.add("hide");
-    $("instructions")?.classList.add("hide");
+    if (this.blocks.length && this.blocks[this.blocks.length-1].state === 'missed'){ this.hardResetAfterEnd(); }
+    if(this.state===this.STATES.PLAYING) return;
+    if (this.scoreEl) this.scoreEl.innerHTML="0"; this.hideOverlays();
+    this.state=this.STATES.PLAYING; this.addBlock();
   }
-  addBlock(){
-    const current = this.blocks.length>0 ? this.blocks[this.blocks.length-1] : null;
-    const newBlock = new Block(current);
-    this.blocks.push(newBlock);
-    this.newBlocks.add(newBlock.mesh);
-    this.stage.setCamera(newBlock.position.y);
-    this.startGame();
-  }
-  onAction(){
-    if (this.state===this.STATES.READY){
-      this.startGame();
-      return;
+  restartGame(){
+    this.state=this.STATES.RESETTING;
+    const old=this.placedBlocks.children.slice(); const removeSpeed=0.2, delay=0.02;
+    for(let i=0;i<old.length;i++){
+      TweenMax.to(old[i].scale, removeSpeed, {x:0,y:0,z:0, delay:(old.length-i)*delay, ease:Power1.easeIn, onComplete:()=>this.placedBlocks.remove(old[i])});
+      TweenMax.to(old[i].rotation, removeSpeed, {y:0.5, delay:(old.length-i)*delay, ease:Power1.easeIn});
     }
-    if (this.state===this.STATES.PLAYING){
-      const block=this.blocks[this.blocks.length-1];
-      const result=block.place();
-      
-      lastGameScore = block.index - 1; 
-      saveData();
-
-      if (result.hit){
-        this.newBlocks.remove(block.mesh);
-        this.placedBlocks.add(result.placed);
-        if (result.chopped){
-          this.choppedBlocks.add(result.chopped);
-          
-          const fall = new TweenMax.to(result.chopped.position, 0.5, { y: result.chopped.position.y - 10, ease:Power1.easeIn, onComplete:()=>{ this.choppedBlocks.remove(result.chopped); } });
-          const rotate = new TweenMax.to(result.chopped.rotation, 0.5, { x: 5, z: 5, ease:Power1.easeIn });
-        }
-        
-        const score = this.blocks.length-1;
-        if (this.scoreEl) this.scoreEl.innerHTML = score;
-        updateHighscore(score);
-        
-        gamesPlayedSinceClaim += 1; 
-        saveData();
-        updateGamesTaskUI();
-
-        this.addBlock();
-      }else{
-        this.endGame();
-      }
-    }
+    const camT=removeSpeed*2+(old.length*delay); this.stage.setCamera(2,camT);
+    const cd={v:this.blocks.length-1};
+    TweenMax.to(cd, camT, {v:0, onUpdate:()=>{ if (this.scoreEl) this.scoreEl.innerHTML=String(Math.round(cd.v)); }});
+    this.blocks=this.blocks.slice(0,1);
+    setTimeout(()=>this.startGame(), camT*1000);
   }
-  endGame(){
-    this.state=this.STATES.ENDED;
-    this.blocks[this.blocks.length-1].mesh.geometry.dispose();
-    this.blocks[this.blocks.length-1].mesh.material.dispose();
-    this.newBlocks.remove(this.blocks[this.blocks.length-1].mesh);
-
+  placeBlock(){
+    const cur=this.blocks[this.blocks.length-1]; const res=cur.place();
+    this.newBlocks.remove(cur.mesh);
+    if(res.placed) this.placedBlocks.add(res.placed);
+    if(res.chopped){
+      this.choppedBlocks.add(res.chopped);
+      const pos={y:'-=30', ease:Power1.easeIn, onComplete:()=>this.choppedBlocks.remove(res.chopped)};
+      const rnd=10;
+      const rot={delay:0.05, x: res.plane==='z'?((Math.random()*rnd)-(rnd/2)):0.1, z: res.plane==='x'?((Math.random()*rnd)-(rnd/2)):0.1, y: Math.random()*0.1};
+      if(res.chopped.position[res.plane] > res.placed.position[res.plane]) pos[res.plane] = '+=' + (40*Math.abs(res.direction)); else pos[res.plane] = '-=' + (40*Math.abs(res.direction));
+      TweenMax.to(res.chopped.position, 1, pos);
+      TweenMax.to(res.chopped.rotation, 1, rot);
+    }
+    this.addBlock();
+  }
+  async addBlock(){
+    const last=this.blocks[this.blocks.length-1];
+    if(last && last.state===last.STATES.MISSED) return this.endGame();
+    if (this.scoreEl) this.scoreEl.innerHTML=String(this.blocks.length-1);
+    const b=new Block(last); this.newBlocks.add(b.mesh); this.blocks.push(b);
+    this.stage.setCamera(this.blocks.length*2);
+    if(this.blocks.length>=6) $("instructions")?.classList.add("hide");
+  }
+  async endGame(){
+    const currentScore=parseInt(this.scoreEl?.innerText||"0",10);
+    lastGameScore = currentScore; // Зберігаємо результат останньої гри для Батлу
+    updateHighscore(currentScore);
+    gamesPlayedSinceClaim += 1; saveData(); updateGamesTaskUI();
     const now = Date.now();
-    
-    // Блокування від реклами частіше ніж раз на 60 секунд
-    const canShowAnyAd = now - lastAnyAdAt > ANY_AD_COOLDOWN_MS;
-    // Блокування від реклами програшу частіше ніж раз на 15 секунд
-    const canShowGameoverAd = now - lastGameoverAdAt > GAME_AD_COOLDOWN_MS;
-
-    if (canShowAnyAd && canShowGameoverAd){
-      this.showAdGameover();
-    } else {
-      this.startPostAdCountdown();
-    }
-  }
-  async showAdGameover(){
-    if (adInFlightGameover) return;
-    adInFlightGameover = true;
-    try{
-      const ok = await showAdAlternate(AdGameover); // ⬅️ ВИКЛИК ЧЕРГУВАННЯ
-      if (ok){ 
-        lastGameoverAdAt = Date.now(); 
-        lastAnyAdAt = Date.now(); 
-        saveData(); 
-      }
-    }finally{
-      adInFlightGameover = false;
+    if (!adInFlightGameover && (now - lastGameoverAdAt >= Math.max(MIN_BETWEEN_SAME_CTX_MS, GAME_AD_COOLDOWN_MS))){
+      adInFlightGameover = true;
+      try{
+        const r = await showAdsgram(AdGameover);
+        if (r.shown){ lastGameoverAdAt = Date.now(); lastAnyAdAt = lastGameoverAdAt; saveData(); }
+      } finally { adInFlightGameover = false; }
     }
     this.startPostAdCountdown();
   }
   startPostAdCountdown(){
-    postAdTimerActive = true;
-    this.state = this.STATES.ENDED;
+    postAdTimerActive = true; this.state = this.STATES.ENDED;
     if ($("postAdTimer")) $("postAdTimer").style.display = "block";
-    const el = $("postAdCountdown");
-    let remain = POST_AD_TIMER_MS;
+    const el = $("postAdCountdown"); let remain = POST_AD_TIMER_MS;
     if (postAdInterval) clearInterval(postAdInterval);
     if (el) el.textContent = Math.ceil(remain/1000);
     postAdInterval = setInterval(()=>{
@@ -1022,107 +830,110 @@ class Game{
       if (remain <= 0){
         clearInterval(postAdInterval);
         if ($("postAdTimer")) $("postAdTimer").style.display = "none";
-        postAdTimerActive = false;
-        this.hardResetAfterEnd();
-        this.showReady();
+        postAdTimerActive = false; this.hardResetAfterEnd(); this.showReady();
       } else {
         if (el) el.textContent = Math.ceil(remain/1000);
       }
     }, 1000);
   }
-  tick(){
-    if(!isPaused){
-      this.blocks[this.blocks.length-1].tick();
-      this.stage.render();
-    }
-    requestAnimationFrame(()=>this.tick());
-  }
+  tick(){ if(!isPaused){ this.blocks[this.blocks.length-1].tick(); this.stage.render(); } requestAnimationFrame(()=>this.tick()); }
 }
+
 function updateHighscore(currentScore){
-  if(currentScore>highscore){
-    highscore=currentScore;
-    const hs=$("highscore");
-    if (hs) hs.innerText="🏆 "+highscore;
-  }
+  if(currentScore>highscore){ highscore=currentScore; const hs=$("highscore"); if (hs) hs.innerText="🏆 "+highscore; }
   CloudStore.queuePush({ highscore, last_score: currentScore });
 }
+
 /* ========= Інші допоміжні функції ========= */
 function addBalance(n){
   balance = parseFloat((balance + n).toFixed(2));
   if (balance < 0) balance = 0;
-  setBalanceUI();
-  saveData();
-  CloudStore.queuePush({ balance });
+  setBalanceUI(); saveData(); CloudStore.queuePush({ balance });
 }
+
+
 /* ==================================================================== */
-/* 🔑 НОВА ЛОГІКА ПЕРЕВІРКИ ПІДПИСКИ ЧЕРЕЗ API */
+/* 🔑 НОВА ЛОГІКА ПЕРЕВІРКИ ПІДПИСКИ ЧЕРЕЗ API (ЗАМІНА subscribe())     */
 /* ==================================================================== */
+
 /** Відкриває посилання на канал, використовуючи Telegram WebApp, якщо доступно */
 function openChannelLink() {
-  const url = CHANNEL_LINK;
-  if (window.Telegram && Telegram.WebApp) {
-    const tMePart = url.replace(/^https?:\/\/t\.me\//i, '');
-    Telegram.WebApp.openTelegramLink(`t.me/${tMePart}`);
-  } else {
-    window.open(url, '_blank');
-  }
-  showMessage(document.documentElement.lang === 'en' ? "Please subscribe and click 'Check'." : "Будь ласка, підпишіться і натисніть 'Перевірити'.", "muted", 3000);
+    const url = CHANNEL_LINK;
+    if (window.Telegram && Telegram.WebApp) {
+        const tMePart = url.replace(/^https?:\/\/t\.me\//i, '');
+        Telegram.WebApp.openTelegramLink(`t.me/${tMePart}`);
+    } else {
+        window.open(url, '_blank');
+    }
+    showMessage(document.documentElement.lang === 'en' ? "Please subscribe and click 'Check'." : "Будь ласка, підпишіться і натисніть 'Перевірити'.", "muted", 3000);
 }
+
 /** Функція перевірки підписки через Telegram API */
 async function checkSubscription() {
-  const checkBtn = $("subscribeBtn");
+    const checkBtn = $("subscribeBtn"); // Змінив з checkSubBtn на subscribeBtn
+    
+    if (subscribed) {
+        showMessage(document.documentElement.lang === 'en' ? "Task already done." : "Завдання вже виконано.", "ok", 2000);
+        return;
+    }
 
-  if (checkBtn) {
+    if (!BOT_TOKEN || !CHANNEL_ID) {
+        showMessage(document.documentElement.lang === 'en' ? "Error: Bot token or channel ID not set." : "Помилка: Не налаштовано токен бота або ID каналу.", "err", 5000);
+        return;
+    }
+
     checkBtn.disabled = true;
-    checkBtn.textContent = (document.documentElement.lang === 'en' ? 'Checking...' : 'Перевірка...');
-  }
+    checkBtn.textContent = document.documentElement.lang === 'en' ? 'Checking...' : 'Перевірка...';
 
-  const user = getTelegramUser();
-  if (!user.id) {
-    showMessage(document.documentElement.lang === 'en' ? "Telegram user data not available." : "Дані користувача Telegram недоступні.", "err", 5000);
-    if (checkBtn) {
-      checkBtn.textContent = (document.documentElement.lang === 'en' ? 'Check' : 'Перевірити');
-      checkBtn.disabled = false;
-    }
-    return;
-  }
-  
-  // 1. Перевірка підписки на основний канал
-  try {
-    const url = `https://api.telegram.org/bot${BOT_TOKEN}/getChatMember?chat_id=${CHANNEL_ID}&user_id=${user.id}`;
-    const r = await fetch(url);
-    const j = await r.json();
+    const userId = getTelegramUser().id;
 
-    if (j.ok && ["member", "administrator", "creator"].includes(j.result.status)) {
-      if (!subscribed) {
-        subscribed = true;
-        addBalance(SUBSCRIBE_REWARD); // ⬅️ НАГОРОДА (1)
-      }
-
-      showMessage(document.documentElement.lang === 'en' ? `🎉 Subscription confirmed! +${SUBSCRIBE_REWARD}⭐!` : `🎉 Підписка підтверджена! +${SUBSCRIBE_REWARD}⭐!`, "ok", 4000);
-
-      // Update UI on success
-      if (checkBtn) {
-        checkBtn.innerText = (document.documentElement.lang === 'en' ? "Done" : "Виконано");
-        checkBtn.classList.add("done");
-        checkBtn.disabled = true;
-      }
-      return;
+    if (!userId) {
+        showMessage(document.documentElement.lang === 'en' ? "Error: Could not get user ID from WebApp." : "Помилка: Не вдалося отримати ID користувача з WebApp.", "err", 3000);
+        checkBtn.textContent = (document.documentElement.lang === 'en' ? 'Subscribe' : 'Підписатися');
+        checkBtn.disabled = false;
+        return;
     }
 
-    showMessage(document.documentElement.lang === 'en' ? "❌ You are not subscribed or user has not interacted with the bot." : "❌ Ви не підписані або користувач не взаємодіяв з ботом.", "err", 5000);
+    const url = `https://api.telegram.org/bot${BOT_TOKEN}/getChatMember?chat_id=${CHANNEL_ID}&user_id=${userId}`;
 
-  } catch (error) {
-    showMessage(document.documentElement.lang === 'en' ? "Telegram API communication error. Try later." : "Помилка зв'язку з Telegram API. Спробуйте пізніше.", "err", 5000);
-  } finally {
-    if (!subscribed) {
-      checkBtn.textContent = (document.documentElement.lang === 'en' ? 'Check' : 'Перевірити');
-      checkBtn.disabled = false;
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.ok && data.result) {
+            const status = data.result.status;
+            const isSubscribed = ['member', 'administrator', 'creator'].includes(status);
+
+            if (isSubscribed) {
+                subscribed = true;
+                addBalance(SUBSCRIBE_REWARD);
+                showMessage(document.documentElement.lang === 'en' ? `🎉 Subscription confirmed! +${SUBSCRIBE_REWARD}⭐!` : `🎉 Підписка підтверджена! +${SUBSCRIBE_REWARD}⭐!`, "ok", 4000);
+
+                // Update UI on success
+                if (checkBtn) {
+                    checkBtn.innerText = (document.documentElement.lang === 'en' ? "Done" : "Виконано");
+                    checkBtn.classList.add("done");
+                    checkBtn.disabled = true; 
+                }
+
+                return;
+            }
+        }
+        showMessage(document.documentElement.lang === 'en' ? "❌ You are not subscribed or user has not interacted with the bot." : "❌ Ви не підписані або користувач не взаємодіяв з ботом.", "err", 5000);
+
+    } catch (error) {
+        showMessage(document.documentElement.lang === 'en' ? "Telegram API communication error. Try later." : "Помилка зв'язку з Telegram API. Спробуйте пізніше.", "err", 5000);
+    } finally {
+        if (!subscribed) {
+            checkBtn.textContent = (document.documentElement.lang === 'en' ? 'Check' : 'Перевірити');
+            checkBtn.disabled = false;
+        }
     }
-  }
 }
 
+
 /* ========= ІНІЦІАЛІЗАЦІЯ ========= */
+
 window.onload = async function(){
   // Завантаження стану з localStorage
   const storedBalance = localStorage.getItem("balance");
@@ -1132,80 +943,76 @@ window.onload = async function(){
   }
   subscribed = localStorage.getItem("subscribed") === "true";
   task50Completed = localStorage.getItem("task50Completed") === "true";
-  games100Completed = localStorage.getItem("games100Completed") === "true"; 
-  lastAnyAdAt = parseInt(localStorage.getItem("lastAnyAdAt") || "0", 10);
+  games100Completed = localStorage.getItem("games100Completed") === "true"; // <--- НОВЕ: Завантажуємо стан
+  lastAnyAdAt      = parseInt(localStorage.getItem("lastAnyAdAt")  || "0", 10);
   gamesPlayedSinceClaim = parseInt(localStorage.getItem("gamesPlayedSinceClaim") || "0", 10);
   ad5Count = parseInt(localStorage.getItem("ad5Count") || "0", 10);
   ad10Count = parseInt(localStorage.getItem("ad10Count") || "0", 10);
   lastTask5RewardAt = parseInt(localStorage.getItem("lastTask5RewardAt") || "0", 10);
   lastTask10RewardAt = parseInt(localStorage.getItem("lastTask10RewardAt") || "0", 10);
-  gramCount = parseInt(localStorage.getItem("dailyGramCount") || "0", 10);
-  exCount = parseInt(localStorage.getItem("dailyExCount") || "0", 10);
-  dailyStamp = localStorage.getItem("dailyStamp") || _todayStamp();
-  lastGameScore = parseInt(localStorage.getItem("lastGameScore") || "0", 10); 
-  
-  // Завантаження стану чергування
-  nextAdMonetag = localStorage.getItem("nextAdMonetag") === "true"; 
+  gramCount  = parseInt(localStorage.getItem('dailyGramCount')||'0',10);
+  exCount    = parseInt(localStorage.getItem('dailyExCount')||'0',10);
+  lastGramAt = parseInt(localStorage.getItem('lastGramAt')||'0',10);
+  lastExAt   = parseInt(localStorage.getItem('lastExAt')||'0',10);
+  dailyStamp = localStorage.getItem('dailyStamp') || _todayStamp();
 
-  // Challenge
-  challengeActive = localStorage.getItem("challengeActive") === "true";
-  challengeStartAt = parseInt(localStorage.getItem("challengeStartAt") || "0", 10);
-  challengeDeadline = parseInt(localStorage.getItem("challengeDeadline") || "0", 10);
-  challengeStake = parseFloat(localStorage.getItem("challengeStake") || "0"); 
-  challengeOpp = parseInt(localStorage.getItem("challengeOpp") || "0", 10);
-
-  // Highscore
-  const storedHighscore = localStorage.getItem("highscore");
-  if (storedHighscore != null && storedHighscore !== "undefined"){
-    const h = parseInt(storedHighscore, 10);
-    if (!isNaN(h)) highscore = h;
+  // Додане завантаження lastGameScore
+  const storedLastGameScore = localStorage.getItem("lastGameScore");
+  if (storedLastGameScore != null && storedLastGameScore !== "undefined"){
+    const s = parseFloat(storedLastGameScore);
+    if (!isNaN(s)) lastGameScore = s;
   }
-  const hs = $("highscore");
-  if (hs) hs.innerText = "🏆 " + highscore;
 
-  // UI
+  ensureDailyReset();
+
   setBalanceUI();
+  const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
   updateGamesTaskUI();
-  
-  // Кнопка підписки (UI)
+
+  // Оновлюємо список виводів, який читає лише локальну історію
+  await renderPayoutList(); 
+
+  /* 🔑 ОНОВЛЕНА ЛОГІКА ДЛЯ ЗАВДАННЯ НА ПІДПИСКУ */
   const subBtn = $("subscribeBtn");
-  if (subBtn) {
-    if (subscribed) {
-      subBtn.innerText = (document.documentElement.lang === 'en' ? "Done" : "Виконано");
-      subBtn.classList.add("done");
+  const subLink = $("subscribeLink"); 
+  
+  if (subLink) {
+    subLink.href = CHANNEL_LINK;
+    subLink.addEventListener("click", (e) => { e.preventDefault(); openChannelLink(); });
+  }
+
+  if (subBtn){
+    if (subscribed){ 
+      subBtn.innerText = (document.documentElement.lang==='en'?"Done":"Виконано"); 
+      subBtn.classList.add("done"); 
       subBtn.disabled = true;
     }
     subBtn.addEventListener("click", checkSubscription);
   }
-  const goBtn = $("subscribeGoBtn");
-  if (goBtn) goBtn.addEventListener("click", openChannelLink);
-
-  // Кнопка виводу
-  const withdrawBtn = $("withdrawBtn");
-  if (withdrawBtn) withdrawBtn.addEventListener("click", withdraw50LocalFirst);
-  try{ await renderPayoutList(); }catch(_){} 
-
-  // Щоденні ads
-  initAds(); 
-  startDailyPlusTicker();
-
-  // Завдання на 5 і 10
-  const ad5Btn = $("watchAd5Btn"); if (ad5Btn) ad5Btn.addEventListener("click", onWatchAd5);
-  const ad10Btn = $("watchAd10Btn"); if (ad10Btn) ad10Btn.addEventListener("click", onWatchAd10);
-  updateAdTasksUI();
-
-  // Завдання на рекорди (бонуси)
-  const score75Btn = $("checkScore75Btn");
-  if (score75Btn) {
-    if (localStorage.getItem("scoreTask75Done") === "true") {
-      score75Btn.innerText = (document.documentElement.lang === 'en' ? "Claimed" : "Забрано");
-      score75Btn.classList.add("done");
-      score75Btn.disabled = true;
+  
+  /* 🔑 ЛОГІКА ДЛЯ ЗАВДАННЯ НА РЕКОРД 75+ */
+  const t50 = $("checkTask50");
+  if (t50){
+    if (task50Completed){ 
+      t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); 
+      t50.classList.add("done"); 
+      t50.disabled = true; 
     }
-    score75Btn.addEventListener("click", onCheckScoreTask(75, 1.5)); 
+    t50.addEventListener("click", ()=>{ 
+      if (highscore >= 75 && !task50Completed){ 
+        addBalance(5.15); 
+        t50.innerText=(document.documentElement.lang==='en'?"Done":"Виконано"); 
+        t50.classList.add("done"); 
+        task50Completed = true; 
+        saveData(); 
+        t50.disabled = true; 
+      } else { 
+        alert(document.documentElement.lang==='en' ? "❌ Highscore is too low (need 75+)" : "❌ Твій рекорд замалий (потрібно 75+)"); 
+      } 
+    });
   }
 
-  // ЛОГІКА ДЛЯ ЗАВДАННЯ НА 100 ІГОР
+  /* 🔑 ЛОГІКА ДЛЯ ЗАВДАННЯ НА 100 ІГОР (ОНОВЛЕНО) */
   const games100Btn = $("checkGames100Btn");
   if (games100Btn) {
     if (games100Completed) {
@@ -1215,11 +1022,25 @@ window.onload = async function(){
     }
     games100Btn.addEventListener("click", onCheckGames100);
   }
+  
+  // ЄДИНЕ МІСЦЕ, ДЕ ПРИВ'ЯЗУЄТЬСЯ ВИКЛИК ВИВЕДЕННЯ
+  $("withdrawBtn")?.addEventListener("click", withdraw50LocalFirst);
 
-  // ЧЕЛЕНДЖ
-  initChallengeUI();
+  $("watchAd5Btn")?.addEventListener("click", onWatchAd5);
+  $("watchAd10Btn")?.addEventListener("click", onWatchAd10);
+  $("watchAdsgramDailyBtn")?.addEventListener("click", onWatchGramDaily);
 
-  // Амбасадор
+  setupChallengeUI();
+  initAds();
+
+  // 3D гра
+  try { window.stackGame = new Game(); } catch(e){ console.warn('Game init failed', e); }
+
+  startDailyPlusTicker();
+  updateAdTasksUI();
+  updateDailyUI();
+  
+  // Initialize Ambassador task button state
   const ambCheckBtn = document.getElementById("ambCheckBtn");
   if (ambCheckBtn && localStorage.getItem("ambassadorTaskDone") === "true") {
     ambCheckBtn.classList.add("done");
@@ -1260,13 +1081,18 @@ document.getElementById("ambCheckBtn").onclick = async () => {
   }
 
   if (localStorage.getItem("ambassadorTaskDone") === "true") {
-    alert("Вже виконано!");
+    alert("Вже отримано ⭐");
+    btn.classList.add("done");
+    btn.disabled = true;
     return;
   }
 
-  alert("Завдання виконано! Нараховано +1.5⭐");
-  addBalance(1.5); // ⬅️ НАГОРОДА ЗА АМБАСАДОРА (1.5)
+  addBalance(1);
+  saveData();
   localStorage.setItem("ambassadorTaskDone", "true");
+
   btn.classList.add("done");
-  btn.disabled = true;
+  btn.disabled = true; 
+  alert("🎉 Нагорода +1⭐");
 };
+
