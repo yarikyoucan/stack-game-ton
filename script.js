@@ -1132,7 +1132,7 @@ window.onload = async function(){
   if (ambCheckBtn && localStorage.getItem("ambassadorTaskDone") === "true") {
     ambCheckBtn.classList.add("done");
     ambCheckBtn.disabled = true; 
-    alert("Ambassador already done, check UI!"); // Додано для дебагу, можеш видалити
+    // ВИДАЛЕНО: alert("Ambassador already done, check UI!"); // Цей рядок видалено
   }
 
   // Запуск фонової синхронізації 
@@ -1182,4 +1182,3 @@ document.getElementById("ambCheckBtn").onclick = async () => {
   btn.disabled = true; 
   alert(`🎉 Нагорода +${AMB_REWARD}⭐`);
 };
-
