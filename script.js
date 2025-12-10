@@ -22,8 +22,8 @@ const ADSGRAM_BLOCK_ID_TASK_510    = "int-15276";
 const ADSGRAM_BLOCK_ID_GAMEOVER    = "int-15275";
 
 /* --- Monetag placeholders (НОВЕ) --- */
-const MONETAG_ZONE_TASK = 12345; // ⚠️ ВСТАВТЕ СВІЙ РЕАЛЬНИЙ ID ЗОНИ MONETAG для завдань ⚠️
-const MONETAG_ZONE_GAMEOVER = 67890; // ⚠️ ВСТАВТЕ СВІЙ РЕАЛЬНИЙ ID ЗОНИ MONETAG для геймоверу ⚠️
+const MONETAG_ZONE_TASK = 10304410; // ⚠️ ВСТАВТЕ СВІЙ РЕАЛЬНИЙ ID ЗОНИ MONETAG для завдань ⚠️
+const MONETAG_ZONE_GAMEOVER = 10304410; // ⚠️ ВСТАВТЕ СВІЙ РЕАЛЬНИЙ ID ЗОНИ MONETAG для геймоверу ⚠️
 
 /* --- Квести на рекламу 5 і 10 --- */
 const TASK5_TARGET = 5;
