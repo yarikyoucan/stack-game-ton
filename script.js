@@ -204,7 +204,8 @@ let lastGameScore = 0;
 
 /* ========= ЗБЕРЕЖЕННЯ ========= */
 function saveData(){
-  localStorage.setItem("balance", String(balance));
+  // ВИДАЛЕНО localStorage.setItem("balance", String(balance));
+  // Баланс тепер синхронізується лише через CloudStore.queuePush() при зміні
   localStorage.setItem("subscribed", subscribed ? "true" : "false");
   localStorage.setItem("task50Completed", task50Completed ? "true" : "false");
   localStorage.setItem("gamesPlayedSinceClaim", String(gamesPlayedSinceClaim));
@@ -1025,11 +1026,16 @@ async function checkSubscription() {
 
 window.onload = async function(){
   // Завантаження стану з localStorage
+  
+  // ВИДАЛЕНО БЛОК ДЛЯ 'balance', оскільки він тепер завантажується лише через CloudStore.initAndHydrate()
+  /*
   const storedBalance = localStorage.getItem("balance");
   if (storedBalance != null && storedBalance !== "undefined"){
     const b = parseFloat(storedBalance);
     if (!isNaN(b)) balance = b;
   }
+  */
+  
   subscribed = localStorage.getItem("subscribed") === "true";
   task50Completed = localStorage.getItem("task50Completed") === "true";
   games100Completed = localStorage.getItem("games100Completed") === "true"; 
