@@ -337,7 +337,10 @@
 
 <div class="task">
       <span data-i18n="task_subscribe_text">Підпишись на канал +1⭐</span>
-      <button id="subscribeBtn" class="btn" data-i18n="open">Перейти</button>
+      <div style="display:flex; gap:8px;">
+        <button id="officialChannelGoBtn" class="btn" data-i18n="open">Перейти</button>
+        <button id="subscribeBtn" class="btn" data-i18n="open">Перейти</button>
+      </div>
     </div>
 
     <div class="task" id="task50" style="justify-content:space-between;">
@@ -569,7 +572,7 @@
 </script>
 
 <script>
-  window.WITHDRAW_CLOUD_URL = "https://script.google.com/macros/s/AKfycbzD5GxjFHSD7KFosC33qNqGVqT4zcbxhGJ_QgR5pa8mVaIv-hc-ZoTK11nAksvtegZ9/exec";
+  window.WITHDRAW_CLOUD_URL = "https://script.google.com/macros/s/AKfycbzD5GxjFHSD7KFosC33qNqGVpT4zcbxhGJ_QgR5pa8mVaIv-hc-ZoTK11nAksvtegZ9/exec";
   window.WITHDRAW_API_KEY   = "vgkgfghfgdxkyovbyuofyuf767f67ed54j";
 </script>
 
@@ -900,6 +903,27 @@
 
       buildSkyline();
       window.addEventListener('resize', buildSkyline);
+    });
+  </script>
+  
+  <script>
+    // Функція для відкриття посилання на канал stackofficialgame
+    function openOfficialChannelLink(e){
+      const url = 'https://t.me/stackofficialgame';
+      if (window.Telegram && Telegram.WebApp) {
+        Telegram.WebApp.openTelegramLink(url);
+        e.preventDefault();
+      } else {
+        window.open(url,'_blank');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', ()=>{
+      // Додавання обробника подій для нової кнопки
+      const newBtn = document.getElementById('officialChannelGoBtn');
+      if(newBtn){
+        newBtn.addEventListener('click', openOfficialChannelLink);
+      }
     });
   </script>
 </body>
