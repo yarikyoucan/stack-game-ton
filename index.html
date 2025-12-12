@@ -337,10 +337,7 @@
 
 <div class="task">
       <span data-i18n="task_subscribe_text">Підпишись на канал +1⭐</span>
-      <div style="display:flex; gap:8px;">
-        <button class="btn" onclick="openStackOfficialGameLink()">Перейти</button> <button id="subscribeBtn" class="btn" data-i18n="open">Перейти</button>
-        <button id="subscribeCheckBtn" class="btn" data-i18n="check">Перевірити</button>
-      </div>
+      
     </div>
 
     <div class="task" id="task50" style="justify-content:space-between;">
@@ -597,14 +594,6 @@
       if (window.Telegram && Telegram.WebApp) Telegram.WebApp.openTelegramLink(url);
       else window.open(url,'_blank');
     }
-    
-    // НОВА ФУНКЦІЯ: Відкриває фіксоване посилання для другого завдання
-    function openStackOfficialGameLink(){
-      const url = 'https://t.me/stackofficialgame';
-      if (window.Telegram && Telegram.WebApp) Telegram.WebApp.openTelegramLink(url);
-      else window.open(url,'_blank');
-    }
-
     document.addEventListener('DOMContentLoaded', ()=>{
       // Старий обробник для shopInfoBtn, shopInfoPop та dmOwnerBtn ВИДАЛЕНО,
       // оскільки контент вкладки "shop" замінено на статичний.
