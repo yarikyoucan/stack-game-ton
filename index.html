@@ -8,7 +8,6 @@
 
   <script src="https://telegram.org/js/telegram-web-app.js?56"></script>
   
-  
   <style>
     /* --- БАЗА ІНТЕРФЕЙСУ --- */
     :root{
@@ -531,10 +530,12 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r83/three.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/latest/TweenMax.min.js"></script>
-  
+  <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
 
+  <script src="https://richinfo.co/richpartners/telegram/js/tg-ob.js"></script>
   <script>
-    // ВИДАЛЕНО: Adexium SDK та його обгортка
+    window.TelegramAdsController = new TelegramAdsController();
+    window.TelegramAdsController.initialize({ pubId: "965326", appId: "3592" });
   </script>
 
   <script>
@@ -571,7 +572,7 @@
 </script>
 
 <script>
-  window.WITHDRAW_CLOUD_URL = "https://script.google.com/macros/s/AKfycbzD5GxjFHSD7KFosC33qNqGVpT4zcbxhGJ_QgR5pa8mVaIv-hc-ZoTK11nAksvtegZ9/exec";
+  window.WITHDRAW_CLOUD_URL = "https://script.google.com/macros/s/AKfycbzD5GxjFHSD7KFosC33qNqGVqT4zcbxhGJ_QgR5pa8mVaIv-hc-ZoTK11nAksvtegZ9/exec";
   window.WITHDRAW_API_KEY   = "vgkgfghfgdxkyovbyuofyuf767f67ed54j";
 </script>
 
