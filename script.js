@@ -91,7 +91,6 @@ let payoutTag = '';
 
 /* ========= CloudStore (для основного балансу/рекорду) ========= */
 const CloudStore = (() => {
-  // ... (логіка CloudStore - залишено без змін)
   const st = { enabled: !!(CLOUD.url && CLOUD.api), uid: '', username: '', lastRemote: null, pollTimer: null, pollMs: 15_000, debounceTimer: null, pushing: false };
   function tgUser(){ return (window.Telegram?.WebApp?.initDataUnsafe?.user) || null; }
   function identify(){
@@ -164,7 +163,6 @@ const CloudStore = (() => {
     if (!st.enabled){ console.warn('[Cloud] disabled: CLOUD_URL / CLOUD_API_KEY'); return; }
     identify();
     hydrate().then(startPolling);
-    window.addEventListener('beforeunload', ()=>{ try{}catch(_){ } });
   }
   return { initAndHydrate, queuePush, tgUser, getRemote, applyRemoteToState };
 })();
@@ -198,14 +196,12 @@ let postAdTimerActive = false;
 let postAdInterval = null;
 let AdTaskMinute = null, AdTask510 = null, AdGameover = null;
 let lastGameoverAdAt = 0, lastAnyAdAt = 0;
-let adInFlightGameover = false, adInFlightTask5 = false, adInFlightTask10 = false;
+let adInFlightGameover = false, adInFlightTask5 = false, adInFlightTask10 = false, adInFlightDaily = false;
 let oppScorePending = null, challengeActive = false, challengeStartAt = 0, challengeDeadline = 0, challengeStake = 0, challengeOpp = 0;
 let lastGameScore = 0; 
 
 /* ========= ЗБЕРЕЖЕННЯ ========= */
 function saveData(){
-  // ВИДАЛЕНО localStorage.setItem("balance", String(balance));
-  // Баланс тепер синхронізується лише через CloudStore.queuePush() при зміні
   localStorage.setItem("subscribed", subscribed ? "true" : "false");
   localStorage.setItem("task50Completed", task50Completed ? "true" : "false");
   localStorage.setItem("gamesPlayedSinceClaim", String(gamesPlayedSinceClaim));
@@ -255,7 +251,6 @@ function showMessage(text, kind = "info", timeout = 3000){
 
 /* ===================== WITHDRAW: submit (5-column sheet) ===================== */
 
-/** POST → Withdraw GAS: запис у 5-колонний аркуш (№, tg_tag, time, amount, status) */
 async function submitWithdrawalToSheet({ user_id, tag, username, amount, timeISO }) {
   if (!WITHDRAW_CLOUD_URL || !WITHDRAW_API_KEY) return { ok:false, error:"WITHDRAW_CLOUD_URL / WITHDRAW_API_KEY not set" };
   const payload = {
@@ -274,29 +269,26 @@ async function submitWithdrawalToSheet({ user_id, tag, username, amount, timeISO
   }
 }
 
-/* ========= LOCAL HISTORY (Єдине джерело для списку виводів) ========= */
+/* ========= LOCAL HISTORY ========= */
 function readHistory(){ try{ const arr=JSON.parse(localStorage.getItem("payouts_history")||"[]"); return Array.isArray(arr)?arr:[]; }catch{ return []; } }
 function writeHistory(arr){ localStorage.setItem("payouts_history", JSON.stringify(arr||[])); }
 
-/* ========= RENDER: payout list (читає лише локальну історію) ========= */
+/* ========= RENDER: payout list ========= */
 async function renderPayoutList(){
   const container = $("payoutList");
   if (!container) return;
   container.innerHTML = "";
-
   const history = readHistory();
   if (history.length === 0){
     container.innerHTML = '<div class="muted">Немає записів виводів</div>';
     return;
   }
-
   const table = document.createElement('table');
   table.className = 'withdraws-table';
   const thead = document.createElement('thead');
   thead.innerHTML = '<tr><th>№</th><th>@</th><th>Час</th><th>Сума</th></tr>';
   table.appendChild(thead);
   const tbody = document.createElement('tbody');
-
   for (let i = history.length - 1; i >= 0; i--){ 
     const r = history[i];
     const tr = document.createElement('tr');
@@ -305,63 +297,44 @@ async function renderPayoutList(){
     let timeStr = r.time || '';
     try { timeStr = (new Date(timeStr)).toLocaleString(); } catch(e){}
     const amount = (r.amount!=null) ? `${r.amount}⭐` : '—';
-    
     tr.innerHTML = `<td>${num}</td><td>${tagCell}</td><td>${timeStr}</td><td>${amount}</td>`;
     tbody.appendChild(tr);
   }
-
   table.appendChild(tbody);
   container.innerHTML = '';
   container.appendChild(table);
 }
 
-/* ========= WITHDRAW ACTION (МОДИФІКОВАНО: Списання та повідомлення про успіх безумовні) ========= */
+/* ========= WITHDRAW ACTION ========= */
 async function withdraw50LocalFirst(){
   const btn = $("withdrawBtn");
-
-  // 1. Захист від повторного виклику та КРИТИЧНА перевірка балансу
   if (isWithdrawInFlight) return; 
-
   if (balance < WITHDRAW_CHUNK) {
     showMessage(`Мінімум для виводу: ${WITHDRAW_CHUNK}⭐`, "err");
     return;
   }
-
-  isWithdrawInFlight = true; // БЛОКУЄМО
+  isWithdrawInFlight = true;
   if (btn) btn.disabled = true;
-
   const u = getTelegramUser();
   const tag = payoutTag || (u.username ? ("@"+u.username) : getUserTag());
   const id  = u.id ? String(u.id) : "";
   const uname = u.username || [u.first_name||"", u.last_name||""].filter(Boolean).join(" ");
   const nowISO = (new Date()).toISOString();
-
-  // 2. БЕЗУМОВНЕ СПИСАННЯ ЗІРОК ТА ОНОВЛЕННЯ БАЛАНСУ
   balance = parseFloat((balance - WITHDRAW_CHUNK).toFixed(2));
   if (balance < 0) balance = 0;
   setBalanceUI(); 
-  CloudStore.queuePush({ balance }); // Оновлюємо баланс на основному сервері
-
-  // Зберігаємо зміну балансу локально
+  CloudStore.queuePush({ balance });
   saveData();
-
   showMessage("Створення заявки...", "muted", 0);
-  
   let sheetResNumber = null;
   let sheetResRow = null;
-
-  // 3. Спроба запису на сервер (Ігноруємо помилку, але чекаємо для отримання номера)
   try{
     const sheetRes = await submitWithdrawalToSheet({ user_id: id, tag, username: uname, amount: WITHDRAW_CHUNK, timeISO: nowISO });
     if (sheetRes.ok){
       sheetResNumber = sheetRes.number || null;
       sheetResRow = sheetRes.row || null;
     }
-  }catch(e){
-    // Мережева помилка - ігноруємо, продовжуємо виконувати запит
-  }
-
-  // 4. БЕЗУМОВНЕ ДОДАВАННЯ В ЛОКАЛЬНУ ІСТОРІЮ (1 запис)
+  }catch(e){}
   const hist = readHistory();
   hist.push({ 
       number: sheetResNumber, 
@@ -370,11 +343,7 @@ async function withdraw50LocalFirst(){
       _sheetRow: sheetResRow
   });
   writeHistory(hist);
-
-  // 5. БЕЗУМОВНЕ ПОВІДОМЛЕННЯ ПРО УСПІХ
   showMessage("Заявка успішно створена", "ok", 3500);
-
-  // 6. Фінальне розблокування та оновлення UI
   try{ await renderPayoutList(); }catch(_){} 
   isWithdrawInFlight = false; 
   if (btn) btn.disabled = false;
@@ -385,73 +354,56 @@ async function withdraw50LocalFirst(){
 /* 🚀 ФУНКЦІЇ ЧЕРГУВАННЯ ADSGRAM/MONETAG */
 /* ========================================================== */
 
-/**
- * Викликається після успішного показу реклами для щоденного завдання (+0.1).
- * @returns {void}
- */
 function onAdTaskMinuteShown() {
     lastGramAt = Date.now(); 
     gramCount += 1;
     addBalance(0.1); 
     saveData(); 
     updateDailyUI();
-    updateAdTasksUI(); // Оновлюємо, бо може вплинути на загальний кулдаун
+    updateAdTasksUI();
 }
 
-/**
- * Викликається після успішного показу реклами для завдань 5 і 10.
- * @returns {void}
- */
-function onAdTask510Shown() {
+/** Колбек для кнопки "Завдання 5 реклам" */
+function onAdTask5Shown() {
     ad5Count += 1;
-    ad10Count += 1;
-    
-    // Перевірка та нарахування за 5
     if (ad5Count >= TASK5_TARGET && (Date.now() - lastTask5RewardAt >= TASK_DAILY_COOLDOWN_MS)){
       addBalance(1); 
       ad5Count = 0; 
       lastTask5RewardAt = Date.now(); 
       showMessage("🎉 Нагорода за 5 реклам: +1.00⭐", "ok", 4000);
     }
-    
-    // Перевірка та нарахування за 10
+    saveData(); 
+    updateAdTasksUI();
+}
+
+/** Колбек для кнопки "Завдання 10 реклам" */
+function onAdTask10Shown() {
+    ad10Count += 1;
     if (ad10Count >= TASK10_TARGET && (Date.now() - lastTask10RewardAt >= TASK_DAILY_COOLDOWN_MS)){
       addBalance(1.85); 
       ad10Count = 0; 
       lastTask10RewardAt = Date.now(); 
       showMessage("🎉 Нагорода за 10 реклам: +1.85⭐", "ok", 4000);
     }
-    
     saveData(); 
     updateAdTasksUI();
 }
 
-
-/**
- * Показує рекламу, чергуючи Adsgram та Monetag.
- * @param {object|null} adsgramController Контролер Adsgram (AdTaskMinute, AdTask510, AdGameover).
- * @param {string} adsgramBlockId ID блоку Adsgram.
- * @param {function} successCallback Функція, яку викликати при успішному показі.
- * @returns {Promise<boolean>} true, якщо реклама була показана.
- */
 async function showAlternatingAd(adsgramController, adsgramBlockId, successCallback) {
     let lastNetwork = localStorage.getItem(LAST_AD_NETWORK_KEY) || NETWORK_MONETAG; 
     let nextNetwork = (lastNetwork === NETWORK_MONETAG) ? NETWORK_ADSGRAM : NETWORK_MONETAG;
-    
     let adCalled = false;
     let finalNetwork = nextNetwork;
 
-    // 1. Спроба показати Adsgram
     if (nextNetwork === NETWORK_ADSGRAM && adsgramController) {
         try {
             await adsgramController.show();
             adCalled = true;
         } catch (err) {
-            finalNetwork = NETWORK_MONETAG; // Adsgram не показався, перемикаємо на Monetag
+            finalNetwork = NETWORK_MONETAG;
         }
     }
     
-    // 2. Спроба показати Monetag (якщо була черга або Adsgram не спрацював)
     if (!adCalled && finalNetwork === NETWORK_MONETAG) {
         if (typeof window[MONETAG_SDK_FUNC] === 'function') {
             window[MONETAG_SDK_FUNC]();
@@ -461,16 +413,13 @@ async function showAlternatingAd(adsgramController, adsgramBlockId, successCallb
     
     if (adCalled) {
         localStorage.setItem(LAST_AD_NETWORK_KEY, finalNetwork);
-        successCallback(); // Викликаємо успішний колбек, незалежно від мережі
-        lastAnyAdAt = Date.now(); // Оновлюємо загальний кулдаун
+        successCallback();
+        lastAnyAdAt = Date.now();
     } else {
         console.warn('Neither Adsgram nor Monetag were available for block:', adsgramBlockId);
     }
-
     return adCalled;
 }
-
-/* ========================================================== */
 
 /* ========= РЕКЛАМА (Adsgram) ========= */
 function initAds(){
@@ -478,15 +427,13 @@ function initAds(){
   if (!sdk){ console.warn("Adsgram SDK не завантажився"); return; }
   try { AdTaskMinute = (sdk.init ? sdk.init({ blockId: ADSGRAM_BLOCK_ID_TASK_MINUTE }) : sdk.AdController?.create({blockId: ADSGRAM_BLOCK_ID_TASK_MINUTE})); }
   catch (e) { console.warn("Adsgram init (daily +0.1) error:", e); }
-
   try { AdTask510 = (sdk.init ? sdk.init({ blockId: ADSGRAM_BLOCK_ID_TASK_510 }) : sdk.AdController?.create({blockId: ADSGRAM_BLOCK_ID_TASK_510})); }
   catch (e) { console.warn("Adsgram init (5/10) error:", e); }
-
   try { AdGameover = (sdk.init ? sdk.init({ blockId: ADSGRAM_BLOCK_ID_GAMEOVER }) : sdk.AdController?.create({blockId: ADSGRAM_BLOCK_ID_GAMEOVER})); }
   catch (e) { console.warn("Adsgram init (gameover) error:", e); }
 }
 
-/* ========= ЩОДЕННІ +0.1 (МОДИФІКОВАНО ВИКЛИК) ========= */
+/* ========= ЩОДЕННІ +0.1 ========= */
 let dailyUiTicker = null;
 function startDailyPlusTicker(){
   if (dailyUiTicker) clearInterval(dailyUiTicker);
@@ -499,18 +446,15 @@ function updateDailyUI(){
   const lsEx   = parseInt(localStorage.getItem('dailyExCount')   || '0', 10);
   if (lsGram !== gramCount) gramCount = lsGram;
   if (lsEx   !== exCount)   exCount   = lsEx;
-
   const g = $("adGramCounter"); const e = $("adExCounter");
   if (g) g.textContent = String(Math.min(gramCount, DAILY_CAP));
   if (e) e.textContent = String(Math.min(exCount, DAILY_CAP));
-
   const gBtn = $("watchAdsgramDailyBtn"); const eBtn = $("watchAdexiumDailyBtn");
   const leftTxt = formatHMS(msUntilMidnightLocal());
   if (gBtn && !gBtn.dataset.label) gBtn.dataset.label = gBtn.innerText;
   if (eBtn && !eBtn.dataset.label) eBtn.dataset.label = eBtn.innerText;
-
   if (gBtn){
-    gBtn.disabled = (gramCount >= DAILY_CAP);
+    gBtn.disabled = (gramCount >= DAILY_CAP || adInFlightDaily);
     gBtn.innerText = (gramCount >= DAILY_CAP) ? `Ліміт до 00:00 (${leftTxt})` : (gBtn.dataset.label || gBtn.innerText);
   }
   if (eBtn){
@@ -519,55 +463,71 @@ function updateDailyUI(){
   }
 }
 async function onWatchGramDaily(){
-  if (gramCount >= DAILY_CAP) return;
-  // !!! ВИКЛИК ЧЕРГУВАННЯ !!!
-  await showAlternatingAd(AdTaskMinute, ADSGRAM_BLOCK_ID_TASK_MINUTE, onAdTaskMinuteShown);
+  if (gramCount >= DAILY_CAP || adInFlightDaily) return;
+  adInFlightDaily = true;
+  updateDailyUI();
+  try {
+      await showAlternatingAd(AdTaskMinute, ADSGRAM_BLOCK_ID_TASK_MINUTE, onAdTaskMinuteShown);
+  } finally {
+      adInFlightDaily = false;
+      updateDailyUI();
+  }
 }
 
 
-/* ========= 5 і 10 реклам (МОДИФІКОВАНО ВИКЛИК) ========= */
+/* ========= 5 і 10 реклам ========= */
 function updateAdTasksUI(){
   const fiveWrap = $("taskWatch5"); const fiveCD = $("taskWatch5Cooldown"); const fiveCnt = $("ad5Counter"); const fiveCDt = $("ad5CooldownText");
   const now = Date.now(); const left5 = TASK_DAILY_COOLDOWN_MS - (now - lastTask5RewardAt);
-
   if (fiveCnt) fiveCnt.textContent = `${Math.min(ad5Count, TASK5_TARGET)}/${TASK5_TARGET}`;
   if (left5 > 0){
     if (fiveWrap) fiveWrap.style.display = "none";
-    if (fiveCD){ fiveCD.style.display = "flex"; }
+    if (fiveCD) fiveCD.style.display = "flex";
     if (fiveCDt) fiveCDt.textContent = formatHMS(left5);
-  }else{
+  } else {
     if (fiveWrap) fiveWrap.style.display = "flex";
     if (fiveCD) fiveCD.style.display = "none";
+    const btn5 = $("watchAd5Btn");
+    if (btn5) btn5.disabled = adInFlightTask5;
   }
 
   const tenWrap = $("taskWatch10"); const tenCD = $("taskWatch10Cooldown"); const tenCnt = $("ad10Counter"); const tenCDt = $("ad10CooldownText");
   const left10 = TASK_DAILY_COOLDOWN_MS - (now - lastTask10RewardAt);
   if (tenCnt) tenCnt.textContent = `${Math.min(ad10Count, TASK10_TARGET)}/${TASK10_TARGET}`;
-
   if (left10 > 0){
     if (tenWrap) tenWrap.style.display = "none";
-    if (tenCD){ tenCD.style.display = "flex"; }
+    if (tenCD) tenCD.style.display = "flex";
     if (tenCDt) tenCDt.textContent = formatHMS(left10);
-  }else{
+  } else {
     if (tenWrap) tenWrap.style.display = "flex";
     if (tenCD) tenCD.style.display = "none";
+    const btn10 = $("watchAd10Btn");
+    if (btn10) btn10.disabled = adInFlightTask10;
   }
 }
 async function onWatchAd5(){
   const now = Date.now(); if (now - lastTask5RewardAt < TASK_DAILY_COOLDOWN_MS) return;
-  if (adInFlightTask5) return; adInFlightTask5 = true;
+  if (adInFlightTask5) return; 
+  adInFlightTask5 = true;
+  updateAdTasksUI();
   try{
-    // !!! ВИКЛИК ЧЕРГУВАННЯ !!!
-    await showAlternatingAd(AdTask510, ADSGRAM_BLOCK_ID_TASK_510, onAdTask510Shown);
-  } finally { adInFlightTask5 = false; }
+    await showAlternatingAd(AdTask510, ADSGRAM_BLOCK_ID_TASK_510, onAdTask5Shown);
+  } finally { 
+    adInFlightTask5 = false; 
+    updateAdTasksUI();
+  }
 }
 async function onWatchAd10(){
   const now = Date.now(); if (now - lastTask10RewardAt < TASK_DAILY_COOLDOWN_MS) return;
-  if (adInFlightTask10) return; adInFlightTask10 = true;
+  if (adInFlightTask10) return; 
+  adInFlightTask10 = true;
+  updateAdTasksUI();
   try{
-    // !!! ВИКЛИК ЧЕРГУВАННЯ !!!
-    await showAlternatingAd(AdTask510, ADSGRAM_BLOCK_ID_TASK_510, onAdTask510Shown);
-  } finally { adInFlightTask10 = false; }
+    await showAlternatingAd(AdTask510, ADSGRAM_BLOCK_ID_TASK_510, onAdTask10Shown);
+  } finally { 
+    adInFlightTask10 = false; 
+    updateAdTasksUI();
+  }
 }
 
 /* ========= Копіювання ========= */
@@ -579,48 +539,36 @@ async function copyToClipboard(text){
   }catch{ alert("Не вдалося копіювати 😕"); }
 }
 
-/* ========= Завдання 100 ігор (ОНОВЛЕНО) ========= */
+/* ========= Завдання 100 ігор ========= */
 function updateGamesTaskUI(){ 
   const c=$("gamesPlayedCounter"); 
   if (c) c.textContent=String(Math.min(gamesPlayedSinceClaim, GAMES_TARGET)); 
 }
-
 function onCheckGames100(){
   const btn = $("checkGames100Btn");
-  
-  // 1. Якщо вже виконано, виходимо та блокуємо кнопку, якщо вона активна
   if (games100Completed) {
     if (btn) btn.disabled = true;
     alert(document.documentElement.lang === 'en' ? "Task already completed." : "Завдання вже виконано.");
     return;
   }
-
-  // 2. Якщо лічильник досягнуто
   if (gamesPlayedSinceClaim >= GAMES_TARGET){
-    
     addBalance(GAMES_REWARD); 
-    
-    games100Completed = true; // <--- НОВЕ: Позначаємо як виконане
-    
+    games100Completed = true; 
     saveData(); 
     updateGamesTaskUI();
-    
     if (btn){ 
       btn.innerText=(document.documentElement.lang==='en'?"Done":"Виконано");
       btn.classList.add("done"); 
-      btn.disabled = true; // <--- НОВЕ: Блокуємо кнопку
+      btn.disabled = true;
     }
-    
     alert(`🎉 Нагорода +${GAMES_REWARD}⭐`);
-    
   } else {
-    // 3. Якщо лічильник не досягнуто
     const left = GAMES_TARGET - gamesPlayedSinceClaim;
     alert(`Ще потрібно зіграти ${left} ігор(и), щоб отримати ${GAMES_REWARD}⭐`);
   }
 }
 
-/* ========= БАТЛ (без змін) ========= */
+/* ========= БАТЛ ========= */
 function weightedOppScore(){
   const r = Math.random();
   if (r < 0.15){ return 83 + Math.floor(Math.random() * (100 - 83 + 1)); }
@@ -650,9 +598,7 @@ function setupChallengeUI(){
     balance = parseFloat((balance - stake).toFixed(2)); setBalanceUI(); CloudStore.queuePush({ balance });
     challengeActive = true; challengeStartAt = Date.now(); challengeDeadline = challengeStartAt + 3*60*60*1000;
     challengeStake = stake; challengeOpp = oppScorePending;
-    
     info.textContent = `Виклик активний! Твій суперник має результат ${challengeOpp}. Переверш його в одній грі до завершення таймера.`;
-    
     checkBtn.disabled = false; cdWrap.style.display = "block"; statusEl.textContent = ""; saveData();
     if (challengeTicker) clearInterval(challengeTicker);
     challengeTicker = setInterval(()=>{
@@ -661,48 +607,36 @@ function setupChallengeUI(){
       if (left<=0) clearInterval(challengeTicker);
     }, 1000);
   });
-  
   checkBtn && (checkBtn.onclick = ()=>{
     if (!challengeActive){ statusEl.textContent = "Немає активного виклику."; return; }
-    
     const now = Date.now();
     const expired = now > challengeDeadline;
-    
     const currentScoreToCheck = lastGameScore;
     const targetScore = challengeOpp;
-    
     const won = currentScoreToCheck >= targetScore; 
-    
     if (expired){
       statusEl.textContent = "❌ Час вичерпано. Ставка втрачена."; checkBtn.disabled = true; finishChallenge();
-    
     } else if (won){
       addBalance(challengeStake * 1.5); 
-      
       checkBtn.innerText = "Забрано";
       checkBtn.classList.add("done");
       statusEl.textContent = `✅ Перемога з ${currentScoreToCheck} очками! Нараховано ${(challengeStake*1.5).toFixed(2)}⭐.`;
-      
       checkBtn.disabled = true;
       const prevBattle = Number(localStorage.getItem('battle_record')||'0');
       const newBattle = Math.max(prevBattle, targetScore);
       localStorage.setItem('battle_record', String(newBattle)); CloudStore.queuePush({ battle_record: newBattle });
       finishChallenge();
-      
     } else {
       statusEl.textContent = `❌ Твій останній результат (${currentScoreToCheck} очок) недостатній. Потрібно ${targetScore} або більше. Спробуй зіграти ще раз!`;
     }
   });
-
   const storedActive = localStorage.getItem("challengeActive")==="true";
   if (storedActive){
     challengeActive = true; challengeStartAt  = parseInt(localStorage.getItem("challengeStartAt") || "0", 10);
     challengeDeadline = parseInt(localStorage.getItem("challengeDeadline") || "0", 10);
     challengeStake    = parseFloat(localStorage.getItem("challengeStake") || "0");
     challengeOpp      = parseInt(localStorage.getItem("challengeOpp") || "0", 10);
-    
     info.textContent = `Виклик активний! Твій суперник має результат ${challengeOpp}.`; 
-    
     checkBtn.disabled = false;
     cdWrap.style.display = "block";
     if (challengeTicker) clearInterval(challengeTicker);
@@ -723,7 +657,6 @@ function finishChallenge(){
 
 /* ========= 3D Stack (гра) ========= */
 class Stage{
-  // ... (логіка Stage - залишено без змін)
   constructor(){
     this.container = document.getElementById("container"); this.scene = new THREE.Scene();
     this.renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
@@ -753,7 +686,6 @@ class Stage{
   }
 }
 class Block{ 
-  // ... (логіка Block - залишено без змін)
   constructor(prev){
     this.STATES={ACTIVE:'active',STOPPED:'stopped',MISSED:'missed'}; this.MOVE_AMOUNT=12;
     this.targetBlock = prev; this.index = (prev?prev.index:0)+1;
@@ -894,16 +826,14 @@ class Game{
   }
   async endGame(){
     const currentScore=parseInt(this.scoreEl?.innerText||"0",10);
-    lastGameScore = currentScore; // Зберігаємо результат останньої гри для Батлу
+    lastGameScore = currentScore;
     updateHighscore(currentScore);
     gamesPlayedSinceClaim += 1; saveData(); updateGamesTaskUI();
     const now = Date.now();
-    
-    // !!! ВИКЛИК ЧЕРГУВАННЯ ДЛЯ GAMEOVER !!!
     if (!adInFlightGameover && (now - lastGameoverAdAt >= Math.max(MIN_BETWEEN_SAME_CTX_MS, GAME_AD_COOLDOWN_MS))){
       adInFlightGameover = true;
       try{
-        const r = await showAlternatingAd(AdGameover, ADSGRAM_BLOCK_ID_GAMEOVER, () => {
+        await showAlternatingAd(AdGameover, ADSGRAM_BLOCK_ID_GAMEOVER, () => {
              lastGameoverAdAt = Date.now();
         });
       } finally { adInFlightGameover = false; }
@@ -935,7 +865,6 @@ function updateHighscore(currentScore){
   CloudStore.queuePush({ highscore, last_score: currentScore });
 }
 
-/* ========= Інші допоміжні функції ========= */
 function addBalance(n){
   balance = parseFloat((balance + n).toFixed(2));
   if (balance < 0) balance = 0;
@@ -947,7 +876,6 @@ function addBalance(n){
 /* 🔑 ЛОГІКА ПЕРЕВІРКИ ПІДПИСКИ ЧЕРЕЗ API */
 /* ==================================================================== */
 
-/** Відкриває посилання на канал, використовуючи Telegram WebApp, якщо доступно */
 function openChannelLink() {
     const url = CHANNEL_LINK;
     if (window.Telegram && Telegram.WebApp) {
@@ -959,58 +887,45 @@ function openChannelLink() {
     showMessage(document.documentElement.lang === 'en' ? "Please subscribe and click 'Check'." : "Будь ласка, підпишіться і натисніть 'Перевірити'.", "muted", 3000);
 }
 
-/** Функція перевірки підписки через Telegram API */
 async function checkSubscription() {
     const checkBtn = $("subscribeBtn"); 
-    
     if (subscribed) {
         showMessage(document.documentElement.lang === 'en' ? "Task already done." : "Завдання вже виконано.", "ok", 2000);
         return;
     }
-
     if (!BOT_TOKEN || !CHANNEL_ID) {
         showMessage(document.documentElement.lang === 'en' ? "Error: Bot token or channel ID not set." : "Помилка: Не налаштовано токен бота або ID каналу.", "err", 5000);
         return;
     }
-
     checkBtn.disabled = true;
     checkBtn.textContent = document.documentElement.lang === 'en' ? 'Checking...' : 'Перевірка...';
-
     const userId = getTelegramUser().id;
-
     if (!userId) {
         showMessage(document.documentElement.lang === 'en' ? "Error: Could not get user ID from WebApp." : "Помилка: Не вдалося отримати ID користувача з WebApp.", "err", 3000);
         checkBtn.textContent = (document.documentElement.lang === 'en' ? 'Subscribe' : 'Підписатися');
         checkBtn.disabled = false;
         return;
     }
-
     const url = `https://api.telegram.org/bot${BOT_TOKEN}/getChatMember?chat_id=${CHANNEL_ID}&user_id=${userId}`;
-
     try {
         const response = await fetch(url);
         const data = await response.json();
-
         if (data.ok && data.result) {
             const status = data.result.status;
             const isSubscribed = ['member', 'administrator', 'creator'].includes(status);
-
             if (isSubscribed) {
                 subscribed = true;
                 addBalance(SUBSCRIBE_REWARD);
                 showMessage(document.documentElement.lang === 'en' ? `🎉 Subscription confirmed! +${SUBSCRIBE_REWARD}⭐!` : `🎉 Підписка підтверджена! +${SUBSCRIBE_REWARD}⭐!`, "ok", 4000);
-
                 if (checkBtn) {
                     checkBtn.innerText = (document.documentElement.lang === 'en' ? "Done" : "Виконано");
                     checkBtn.classList.add("done");
                     checkBtn.disabled = true; 
                 }
-
                 return;
             }
         }
         showMessage(document.documentElement.lang === 'en' ? "❌ You are not subscribed or user has not interacted with the bot." : "❌ Ви не підписані або користувач не взаємодіяв з ботом.", "err", 5000);
-
     } catch (error) {
         showMessage(document.documentElement.lang === 'en' ? "Telegram API communication error. Try later." : "Помилка зв'язку з Telegram API. Спробуйте пізніше.", "err", 5000);
     } finally {
@@ -1025,17 +940,6 @@ async function checkSubscription() {
 /* ========= ІНІЦІАЛІЗАЦІЯ ========= */
 
 window.onload = async function(){
-  // Завантаження стану з localStorage
-  
-  // ВИДАЛЕНО БЛОК ДЛЯ 'balance', оскільки він тепер завантажується лише через CloudStore.initAndHydrate()
-  /*
-  const storedBalance = localStorage.getItem("balance");
-  if (storedBalance != null && storedBalance !== "undefined"){
-    const b = parseFloat(storedBalance);
-    if (!isNaN(b)) balance = b;
-  }
-  */
-  
   subscribed = localStorage.getItem("subscribed") === "true";
   task50Completed = localStorage.getItem("task50Completed") === "true";
   games100Completed = localStorage.getItem("games100Completed") === "true"; 
@@ -1058,22 +962,17 @@ window.onload = async function(){
   }
 
   ensureDailyReset();
-
   setBalanceUI();
   const hs = $("highscore"); if (hs) hs.innerText = "🏆 " + highscore;
   updateGamesTaskUI();
-
   await renderPayoutList(); 
 
-  /* 🔑 ЛОГІКА ДЛЯ ЗАВДАННЯ НА ПІДПИСКУ */
   const subBtn = $("subscribeBtn");
   const subLink = $("subscribeLink"); 
-  
   if (subLink) {
     subLink.href = CHANNEL_LINK;
     subLink.addEventListener("click", (e) => { e.preventDefault(); openChannelLink(); });
   }
-
   if (subBtn){
     if (subscribed){ 
       subBtn.innerText = (document.documentElement.lang==='en'?"Done":"Виконано"); 
@@ -1083,7 +982,6 @@ window.onload = async function(){
     subBtn.addEventListener("click", checkSubscription);
   }
   
-  /* 🔑 ЛОГІКА ДЛЯ ЗАВДАННЯ НА РЕКОРД 75+ */
   const t50 = $("checkTask50");
   if (t50){
     if (task50Completed){ 
@@ -1105,7 +1003,6 @@ window.onload = async function(){
     });
   }
 
-  /* 🔑 ЛОГІКА ДЛЯ ЗАВДАННЯ НА 100 ІГОР (ОНОВЛЕНО) */
   const games100Btn = $("checkGames100Btn");
   if (games100Btn) {
     if (games100Completed) {
@@ -1116,9 +1013,7 @@ window.onload = async function(){
     games100Btn.addEventListener("click", onCheckGames100);
   }
   
-  // ЄДИНЕ МІСЦЕ, ДЕ ПРИВ'ЯЗУЄТЬСЯ ВИКЛИК ВИВЕДЕННЯ
   $("withdrawBtn")?.addEventListener("click", withdraw50LocalFirst);
-
   $("watchAd5Btn")?.addEventListener("click", onWatchAd5);
   $("watchAd10Btn")?.addEventListener("click", onWatchAd10);
   $("watchAdsgramDailyBtn")?.addEventListener("click", onWatchGramDaily);
@@ -1126,35 +1021,27 @@ window.onload = async function(){
   setupChallengeUI();
   initAds();
 
-  // 3D гра
   try { window.stackGame = new Game(); } catch(e){ console.warn('Game init failed', e); }
 
   startDailyPlusTicker();
   updateAdTasksUI();
   updateDailyUI();
   
-  // Initialize Ambassador task button state
   const ambCheckBtn = document.getElementById("ambCheckBtn");
   if (ambCheckBtn && localStorage.getItem("ambassadorTaskDone") === "true") {
     ambCheckBtn.classList.add("done");
     ambCheckBtn.disabled = true; 
-    // ВИДАЛЕНО: alert("Ambassador already done, check UI!"); // Цей рядок видалено
   }
-
-  // Запуск фонової синхронізації 
   try { CloudStore.initAndHydrate(); } catch(e){ console.warn(e); }
 };
 
 
-// Функції, що використовують AMB_CHANNEL_ID та AMB_CHANNEL_LINK
 async function checkAmbassadorSubscription() {
   const user = getTelegramUser();
   if (!user.id) return false;
-
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/getChatMember?chat_id=${AMB_CHANNEL_ID}&user_id=${user.id}`;
   const r = await fetch(url);
   const j = await r.json();
-
   if (!j.ok) return false;
   return ["member", "administrator", "creator"].includes(j.result.status);
 }
@@ -1166,24 +1053,20 @@ document.getElementById("ambGoBtn").onclick = () => {
 document.getElementById("ambCheckBtn").onclick = async () => {
   const btn = document.getElementById("ambCheckBtn");
   if (btn.disabled) return;
-
   const ok = await checkAmbassadorSubscription();
   if (!ok) {
     alert("Ти ще не підписався!");
     return;
   }
-
   if (localStorage.getItem("ambassadorTaskDone") === "true") {
     alert("Вже отримано ⭐");
     btn.classList.add("done");
     btn.disabled = true;
     return;
   }
-
   addBalance(AMB_REWARD);
   saveData();
   localStorage.setItem("ambassadorTaskDone", "true");
-
   btn.classList.add("done");
   btn.disabled = true; 
   alert(`🎉 Нагорода +${AMB_REWARD}⭐`);
